@@ -208,9 +208,13 @@ class HomeController extends Controller
         }
 
         $common_settings = ! empty(session('business.common_settings')) ? session('business.common_settings') : [];
+        $month_start = \Carbon::now()->startOfMonth()->format('Y-m-d');
+        $month_end = \Carbon::now()->endOfMonth()->format('Y-m-d');
+        $monthly_sell_details = $this->transactionUtil->getSellTotals($business_id, $month_start, $month_end);
+        $monthly_total_sell = ! empty($monthly_sell_details['total_sell_inc_tax']) ? $monthly_sell_details['total_sell_inc_tax'] : 0;
 
 
-        return view('home.index', compact('sells_chart_1', 'sells_chart_2', 'widgets', 'all_locations', 'common_settings', 'is_admin'));
+        return view('home.index', compact('sells_chart_1', 'sells_chart_2', 'widgets', 'all_locations', 'common_settings', 'is_admin', 'monthly_total_sell'));
     }
 
     /**
@@ -232,6 +236,9 @@ class HomeController extends Controller
             $purchase_details = $this->transactionUtil->getPurchaseTotals($business_id, $start, $end, $location_id, $created_by);
 
             $sell_details = $this->transactionUtil->getSellTotals($business_id, $start, $end, $location_id, $created_by);
+            $month_start = \Carbon::now()->startOfMonth()->format('Y-m-d');
+            $month_end = \Carbon::now()->endOfMonth()->format('Y-m-d');
+            $monthly_sell_details = $this->transactionUtil->getSellTotals($business_id, $month_start, $month_end, $location_id, $created_by);
 
             $total_ledger_discount = $this->transactionUtil->getTotalLedgerDiscount($business_id, $start, $end);
 
@@ -263,6 +270,7 @@ class HomeController extends Controller
             $output['total_sell_return_paid'] = $this->transactionUtil->getTotalSellReturnPaid($business_id, $start, $end, $location_id);
 
             $output['total_sell'] = $total_sell_inc_tax;
+            $output['monthly_total_sell'] = ! empty($monthly_sell_details['total_sell_inc_tax']) ? $monthly_sell_details['total_sell_inc_tax'] : 0;
             $output['total_sell_return'] = $total_sell_return_inc_tax;
 
             $output['invoice_due'] = $sell_details['invoice_due'] - $total_ledger_discount['total_sell_discount'];

@@ -189,6 +189,35 @@ php artisan optimize:clear
 
 No migration is needed.
 
+### 7. Monthly Total Sales Card on Home Dashboard
+
+Purpose: Show total sales for the current month on the Home dashboard without requiring the user to filter by month.
+
+Files changed:
+
+- `app/Http/Controllers/HomeController.php`
+- `resources/views/home/index.blade.php`
+- `public/js/home.js`
+- `lang/en/home.php`
+
+What changed:
+
+- Added `monthly_total_sell` to the Home dashboard totals response.
+- The value is calculated from the first day of the current month to the last day of the current month.
+- Added a new `Monthly Total Sales` card on the dashboard.
+- The card is populated automatically when the Home page loads.
+- The card also renders a server-side fallback value so it does not stay blank before JavaScript updates it.
+- The card respects the selected dashboard location, if a location is selected.
+- The card does not depend on the dashboard date filter.
+
+Server action:
+
+```bash
+php artisan optimize:clear
+```
+
+No migration is needed.
+
 ### Recommended Online Deployment Steps
 
 1. Upload all changed controller files.
