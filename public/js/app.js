@@ -1345,13 +1345,15 @@ $(document).ready(function() {
                 },
                 submitHandler: function(form) {
                     e.preventDefault();
-                    var data = $(form).serialize();
+                    var data = new FormData(form);
 
                     $.ajax({
                         method: 'POST',
                         url: $(form).attr('action'),
                         dataType: 'json',
                         data: data,
+                        processData: false,
+                        contentType: false,
                         beforeSend: function(xhr) {
                             __disable_submit_button($(form).find('button[type="submit"]'));
                         },

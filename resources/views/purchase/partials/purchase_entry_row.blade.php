@@ -172,6 +172,9 @@
                 {{ number_format($variation->sell_price_inc_tax, $currency_precision, $currency_details->decimal_separator, $currency_details->thousand_separator)}}
             @endif
         </td>
+        <td>
+            {!! Form::text('purchases[' . $row_count . '][lot_sell_price_inc_tax]', !empty($imported_data['lot_sell_price_inc_tax']) ? $imported_data['lot_sell_price_inc_tax'] : null, ['class' => 'form-control input-sm input_number lot_sell_price_inc_tax', 'placeholder' => number_format($variation->sell_price_inc_tax, $currency_precision, $currency_details->decimal_separator, $currency_details->thousand_separator)]); !!}
+        </td>
         @if(session('business.enable_lot_number'))
             @php
                 $lot_number = !empty($imported_data['lot_number']) ? $imported_data['lot_number'] : null;

@@ -181,6 +181,9 @@ function update_statistics(start, end) {
     $('.purchase_due').html(loader);
     $('.total_sell').html(loader);
     $('.monthly_total_sell').html(loader);
+    $('.custom_pay_1_total').html(loader);
+    $('.cash_payment_total').html(loader);
+    $('.bank_balance').html(loader);
     $('.invoice_due').html(loader);
     $('.total_expense').html(loader);
     $('.total_purchase_return').html(loader);
@@ -199,6 +202,9 @@ function update_statistics(start, end) {
             //sell details
             $('.total_sell').html(__currency_trans_from_en(data.total_sell, true));
             $('.monthly_total_sell').html(__currency_trans_from_en(data.monthly_total_sell || 0, true));
+            $('.custom_pay_1_total').html(__currency_trans_from_en(data.custom_pay_1_total || 0, true));
+            $('.cash_payment_total').html(__currency_trans_from_en(data.cash_payment_total || 0, true));
+            $('.bank_balance').html(__currency_trans_from_en(data.bank_balance || 0, true));
             $('.invoice_due').html(__currency_trans_from_en(data.invoice_due, true));
             //expense details
             $('.total_expense').html(__currency_trans_from_en(data.total_expense, true));

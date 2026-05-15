@@ -191,7 +191,7 @@ No migration is needed.
 
 ### 7. Monthly Total Sales Card on Home Dashboard
 
-Purpose: Show total sales for the current month on the Home dashboard without requiring the user to filter by month.
+Purpose: Show extra dashboard analytics on the Home dashboard without requiring users to open reports.
 
 Files changed:
 
@@ -204,11 +204,15 @@ What changed:
 
 - Added `monthly_total_sell` to the Home dashboard totals response.
 - The value is calculated from the first day of the current month to the last day of the current month.
-- Added a new `Monthly Total Sales` card on the dashboard.
+- Added a new `Monthly Total Sales` card as the first dashboard card, followed by `Total Sales`.
 - The card is populated automatically when the Home page loads.
 - The card also renders a server-side fallback value so it does not stay blank before JavaScript updates it.
 - The card respects the selected dashboard location, if a location is selected.
 - The card does not depend on the dashboard date filter.
+- Added `M-PESA Payment` card using `custom_pay_1` totals for the selected dashboard date/location.
+- Added `Cash Payment` card using `cash` payment totals for the selected dashboard date/location.
+- Added `Bank Balance` card using current payment account balances.
+- The new M-PESA, Cash, and Bank Balance cards render fallback values and refresh through `public/js/home.js`.
 
 Server action:
 
@@ -292,6 +296,133 @@ php artisan optimize:clear
 ```
 
 No migration is needed.
+
+### 10. Lot-Based Selling Price For POS
+
+Purpose: Keep the normal product selling price unchanged, but allow a new stock lot to carry its own selling price. POS uses the old/default product price until the cashier selects a lot with a lot selling price.
+
+Files added:
+
+- `database/migrations/2026_05_15_000002_add_lot_sell_price_to_purchase_lines.php`
+
+Files changed:
+
+- `app/Utils/ProductUtil.php`
+- `app/Utils/TransactionUtil.php`
+- `app/Http/Controllers/OpeningStockController.php`
+- `resources/views/purchase/create.blade.php`
+- `resources/views/purchase/partials/purchase_entry_row.blade.php`
+- `resources/views/purchase/partials/edit_purchase_entry_row.blade.php`
+- `resources/views/opening_stock/form-part.blade.php`
+- `resources/views/sale_pos/product_row.blade.php`
+- `public/js/pos.js`
+- `lang/en/lang_v1.php`
+- `readme.md`
+
+What changed:
+
+- Added `lot_sell_price_inc_tax` to `purchase_lines`.
+- Added a `Lot selling price` input on purchase rows and opening stock rows.
+- Lot selling price is saved per purchase/opening-stock lot.
+- POS lot dropdown now carries the lot selling price.
+- POS keeps the default product price when no lot is selected.
+- When a lot with `Lot selling price` is selected, POS changes that sale row price to the lot price.
+- POS reads the lot price from a browser-safe `data-lot-sell-price-inc-tax` attribute and reapplies it if the unit is changed.
+
+Server action:
+
+```bash
+php artisan migrate
+php artisan optimize:clear
+```
+
+Usage:
+
+1. Keep the product selling price as the old/default price.
+2. When receiving new stock, enter the new price in `Lot selling price`.
+3. In POS, sell without selecting a lot to use the default price.
+4. Select the specific lot to use that lot's selling price.
+
+### 11. M-PESA Cash Flow Treatment
+
+Purpose: Treat M-PESA as money received in cash flow, but keep it separate from physical cash/register drawer totals.
+
+Files changed:
+
+- `app/Utils/Util.php`
+- `resources/views/cash_register/payment_details.blade.php`
+- `lang/en/lang_v1.php`
+- `readme.md`
+
+What changed:
+
+- `custom_pay_1` now defaults to `M-PESA` when no custom label is configured.
+- Cash register summaries show physical cash as `Expected cash in drawer`.
+- Total received money is labelled `Total collections`, so M-PESA is not confused with physical cash.
+- M-PESA remains part of cash flow as an inflow, but it is displayed as its own payment method.
+
+Recommended setup:
+
+1. Go to each business location payment account settings.
+2. Map `M-PESA` / `custom_pay_1` to an M-PESA or mobile money account.
+3. Keep `Cash` mapped to the physical cash account only.
+4. Run `php artisan optimize:clear` after uploading these files.
+
+### 12. Login Page Side Image
+
+Purpose: Keep the existing login fields but display a left-side image panel like the supplied reference.
+
+Files added:
+
+- `public/img/login-side.jpg`
+- `database/migrations/2026_05_15_000003_add_login_image_to_business_locations.php`
+
+Files changed:
+
+- `app/Http/Controllers/BusinessLocationController.php`
+- `resources/views/business_location/create.blade.php`
+- `resources/views/business_location/edit.blade.php`
+- `resources/views/layouts/auth2.blade.php`
+- `resources/views/auth/login.blade.php`
+- `public/js/app.js`
+- `lang/en/lang_v1.php`
+- `readme.md`
+
+What changed:
+
+- Added a body class hook to the auth layout.
+- Changed the login page to a two-column layout on desktop.
+- Left side displays `public/img/login-side.jpg` as a floating rounded image card with layered shadows.
+- Text on the login image now appears only when the current domain matches a Business Location `Website`; it displays that Business Location name only.
+- Business Location create/edit now includes a `Sign in page image` upload field.
+- If a matched Business Location has its own uploaded sign-in image, login uses that image instead of the default `public/img/login-side.jpg`.
+- Business Location modal submit now supports file upload.
+- Updated `public/img/login-side.jpg` using the supplied Sysnettechs POS image.
+- Right side keeps the current login form, language selector, and original blue gradient background.
+- On tablet/mobile, the image panel is hidden and the login form remains full width.
+
+How to change the image:
+
+1. Upload your preferred image as `public/img/login-side.jpg`.
+2. Keep the same file name to avoid editing code.
+3. Use a wide image, ideally 1200px or wider.
+4. Run `php artisan optimize:clear`.
+5. Hard-refresh the browser if the old image is cached.
+
+How to show the business location name on the image:
+
+1. Open the Business Location.
+2. Set the `Website` field to the domain/subdomain used by that client, for example `shop.co.ke` or `shop.sysnettechs.co.ke`.
+3. When that domain opens the login page, the image text will show only that Business Location name.
+
+How to let each location upload its own image:
+
+1. Run `php artisan migrate`.
+2. Open Business Settings > Business Locations.
+3. Edit the location.
+4. Upload an image in `Sign in page image`.
+5. Save the location.
+6. Make sure the location `Website` matches the login domain/subdomain.
 
 ### Recommended Online Deployment Steps
 

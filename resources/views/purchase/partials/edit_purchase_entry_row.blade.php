@@ -26,6 +26,7 @@
                 </th>
                 @if(empty($is_purchase_order))
                     <th>@lang( 'purchase.unit_selling_price') <small>(@lang('product.inc_of_tax'))</small></th>
+                    <th>@lang('lang_v1.lot_selling_price') <small>(@lang('product.inc_of_tax'))</small></th>
                     @if(session('business.enable_lot_number'))
                         <th>
                             @lang('lang_v1.lot_number')
@@ -190,6 +191,9 @@
                     {{number_format($sp, $currency_precision, $currency_details->decimal_separator, $currency_details->thousand_separator)}}
                 @endif
 
+            </td>
+            <td>
+                {!! Form::text('purchases[' . $loop->index . '][lot_sell_price_inc_tax]', !empty($purchase_line->lot_sell_price_inc_tax) ? number_format($purchase_line->lot_sell_price_inc_tax, $currency_precision, $currency_details->decimal_separator, $currency_details->thousand_separator) : null, ['class' => 'form-control input-sm input_number lot_sell_price_inc_tax', 'placeholder' => number_format($sp, $currency_precision, $currency_details->decimal_separator, $currency_details->thousand_separator)]); !!}
             </td>
             @if(session('business.enable_lot_number'))
                 <td>

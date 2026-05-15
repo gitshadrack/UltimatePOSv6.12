@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Account;
 use App\BusinessLocation;
 use App\Charts\CommonChart;
 use App\Currency;
@@ -212,9 +213,13 @@ class HomeController extends Controller
         $month_end = \Carbon::now()->endOfMonth()->format('Y-m-d');
         $monthly_sell_details = $this->transactionUtil->getSellTotals($business_id, $month_start, $month_end);
         $monthly_total_sell = ! empty($monthly_sell_details['total_sell_inc_tax']) ? $monthly_sell_details['total_sell_inc_tax'] : 0;
+        $today = \Carbon::now()->format('Y-m-d');
+        $cash_payment_total = $this->getPaymentMethodTotal($business_id, $today, $today, null, 'cash');
+        $custom_pay_1_total = $this->getPaymentMethodTotal($business_id, $today, $today, null, 'custom_pay_1');
+        $bank_balance = $this->getBankBalance($business_id);
 
 
-        return view('home.index', compact('sells_chart_1', 'sells_chart_2', 'widgets', 'all_locations', 'common_settings', 'is_admin', 'monthly_total_sell'));
+        return view('home.index', compact('sells_chart_1', 'sells_chart_2', 'widgets', 'all_locations', 'common_settings', 'is_admin', 'monthly_total_sell', 'cash_payment_total', 'custom_pay_1_total', 'bank_balance'));
     }
 
     /**
@@ -271,6 +276,9 @@ class HomeController extends Controller
 
             $output['total_sell'] = $total_sell_inc_tax;
             $output['monthly_total_sell'] = ! empty($monthly_sell_details['total_sell_inc_tax']) ? $monthly_sell_details['total_sell_inc_tax'] : 0;
+            $output['cash_payment_total'] = $this->getPaymentMethodTotal($business_id, $start, $end, $location_id, 'cash', $created_by);
+            $output['custom_pay_1_total'] = $this->getPaymentMethodTotal($business_id, $start, $end, $location_id, 'custom_pay_1', $created_by);
+            $output['bank_balance'] = $this->getBankBalance($business_id, $location_id);
             $output['total_sell_return'] = $total_sell_return_inc_tax;
 
             $output['invoice_due'] = $sell_details['invoice_due'] - $total_ledger_discount['total_sell_discount'];
@@ -281,6 +289,79 @@ class HomeController extends Controller
 
             return $output;
         }
+    }
+
+    /**
+     * Returns total sell payments received by payment method for dashboard cards.
+     */
+    private function getPaymentMethodTotal($business_id, $start, $end, $location_id, $method, $created_by = null)
+    {
+        $query = DB::table('transaction_payments as tp')
+            ->join('transactions as t', 'tp.transaction_id', '=', 't.id')
+            ->where('tp.business_id', $business_id)
+            ->where('t.business_id', $business_id)
+            ->where('t.type', 'sell')
+            ->where('t.status', 'final')
+            ->where('tp.method', $method);
+
+        if (! empty($start) && ! empty($end)) {
+            $query->whereDate('t.transaction_date', '>=', $start)
+                ->whereDate('t.transaction_date', '<=', $end);
+        }
+
+        if (! empty($location_id)) {
+            $query->where('t.location_id', $location_id);
+        }
+
+        if (! empty($created_by)) {
+            $query->where('t.created_by', $created_by);
+        }
+
+        $permitted_locations = auth()->user()->permitted_locations();
+        if ($permitted_locations != 'all') {
+            $query->whereIn('t.location_id', $permitted_locations);
+        }
+
+        return $query->select(DB::raw("SUM(IF(tp.is_return = 1, -1 * tp.amount, tp.amount)) as total"))
+            ->value('total') ?? 0;
+    }
+
+    /**
+     * Returns current balance for payment accounts shown on the dashboard.
+     */
+    private function getBankBalance($business_id, $location_id = null)
+    {
+        $query = Account::leftJoin('account_transactions as AT', function ($join) {
+                $join->on('AT.account_id', '=', 'accounts.id')
+                    ->whereNull('AT.deleted_at');
+            })
+            ->where('accounts.business_id', $business_id)
+            ->where('accounts.is_closed', 0);
+
+        if (! empty($location_id)) {
+            $location = BusinessLocation::where('business_id', $business_id)
+                ->where('id', $location_id)
+                ->first();
+
+            $account_ids = [];
+            if (! empty($location->default_payment_accounts)) {
+                $default_payment_accounts = json_decode($location->default_payment_accounts, true);
+                foreach ($default_payment_accounts as $account) {
+                    if (! empty($account['is_enabled']) && ! empty($account['account'])) {
+                        $account_ids[] = $account['account'];
+                    }
+                }
+            }
+
+            if (empty($account_ids)) {
+                return 0;
+            }
+
+            $query->whereIn('accounts.id', array_unique($account_ids));
+        }
+
+        return $query->select(DB::raw("SUM(IF(AT.type='credit', AT.amount, -1 * AT.amount)) as balance"))
+            ->value('balance') ?? 0;
     }
 
     /**

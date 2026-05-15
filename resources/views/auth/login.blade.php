@@ -1,5 +1,6 @@
 @extends('layouts.auth2')
 @section('title', __('lang_v1.login'))
+@section('body_class', 'login-split-page')
 @inject('request', 'Illuminate\Http\Request')
 @section('content')
     @php
@@ -26,10 +27,177 @@
                 $username = $demo_types[$_GET['demo_type']];
             }
         }
+
+        $login_location_name = null;
+        $login_image_url = asset('img/login-side.jpg');
+        try {
+            $current_host = strtolower($request->getHost());
+            $location_query = \App\BusinessLocation::active()
+                ->whereNotNull('website');
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('business_locations', 'login_image')) {
+                $location_query->select('name', 'website', 'login_image');
+            } else {
+                $location_query->select('name', 'website');
+            }
+
+            $locations = $location_query->get();
+
+            foreach ($locations as $location) {
+                $location_host = parse_url($location->website, PHP_URL_HOST);
+                $location_host = !empty($location_host) ? $location_host : $location->website;
+                $location_host = strtolower(preg_replace('/^www\./', '', trim($location_host, " \t\n\r\0\x0B/")));
+                $normalized_host = strtolower(preg_replace('/^www\./', '', $current_host));
+
+                if (!empty($location_host) && $location_host === $normalized_host) {
+                    $login_location_name = $location->name;
+                    if (!empty($location->login_image) && file_exists(public_path('uploads/location_login_images/' . $location->login_image))) {
+                        $login_image_url = asset('uploads/location_login_images/' . $location->login_image);
+                    }
+                    break;
+                }
+            }
+        } catch (\Exception $e) {
+            $login_location_name = null;
+        }
     @endphp
-    <div class="row">
-        <div class="col-md-4">
-        @if (config('app.env') == 'demo')
+    <style>
+        .login-split-page html,
+        .login-split-page {
+            min-height: 100%;
+        }
+
+        .login-split-page .container-fluid,
+        .login-split-page .eq-height-row,
+        .login-split-page .right-col {
+            min-height: 100vh;
+        }
+
+        .login-split-page .container-fluid {
+            padding: 0;
+        }
+
+        .login-split-page .right-col {
+            padding: 0 !important;
+            background: linear-gradient(to right, #6366f1, #3b82f6);
+        }
+
+        .auth-split-shell {
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .auth-image-panel {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: #fff;
+            padding: 56px;
+            background:
+                radial-gradient(circle at 20% 18%, rgba(255, 255, 255, 0.28), transparent 30%),
+                linear-gradient(135deg, #1d4ed8 0%, #2563eb 48%, #4338ca 100%);
+        }
+
+        .auth-floating-image-card {
+            position: relative;
+            width: min(78%, 620px);
+            aspect-ratio: 4 / 5;
+            border-radius: 28px;
+            overflow: hidden;
+            box-shadow: 0 34px 70px rgba(15, 23, 42, 0.42), 0 12px 24px rgba(15, 23, 42, 0.28);
+            transform: translateY(-10px);
+            isolation: isolate;
+        }
+
+        .auth-floating-image-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.58));
+        }
+
+        .auth-floating-image-card::after {
+            content: "";
+            position: absolute;
+            inset: 14px;
+            z-index: 2;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            border-radius: 20px;
+            pointer-events: none;
+        }
+
+        .auth-floating-image-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .auth-image-caption {
+            position: absolute;
+            left: 30px;
+            right: 30px;
+            bottom: 42px;
+            z-index: 3;
+        }
+
+        .auth-image-title {
+            font-size: 30px;
+            font-weight: 800;
+            line-height: 1.2;
+            text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+        }
+
+        .auth-image-subtitle {
+            margin-top: 12px;
+            font-size: 24px;
+            font-weight: 800;
+            color: #2f83ff;
+            letter-spacing: 0.03em;
+        }
+
+        .auth-form-panel {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 90px 24px 40px;
+            background: linear-gradient(to right, #6366f1, #3b82f6);
+        }
+
+        .auth-form-panel .login-card-wrap {
+            width: 100%;
+            max-width: 430px;
+        }
+
+        .login-split-page .tw-absolute.tw-top-2,
+        .login-split-page .tw-absolute.tw-top-5 {
+            z-index: 5;
+        }
+
+        @media (max-width: 991px) {
+            .auth-form-panel {
+                padding-top: 110px;
+            }
+        }
+    </style>
+    <div class="row auth-split-shell">
+        <div class="col-md-6 hidden-sm hidden-xs auth-image-panel">
+            <div class="auth-floating-image-card">
+                <img src="{{ $login_image_url }}" alt="Login visual">
+                @if(!empty($login_location_name))
+                <div class="auth-image-caption">
+                    <div class="auth-image-title">{{ $login_location_name }}</div>
+                </div>
+                @endif
+            </div>
+        </div>
+        <div class="col-md-6 col-sm-12 col-xs-12 auth-form-panel">
+            <div class="login-card-wrap">
+                @if (config('app.env') == 'demo')
         
                 @component('components.widget', [
                     'class' => 'box-primary',
@@ -103,9 +271,7 @@
             
             
         
-    @endif
-        </div>
-        <div class="col-md-4">
+                @endif
             <div
                 class="tw-p-5 md:tw-p-6 tw-mb-4 tw-rounded-2xl tw-transition-all tw-duration-200 tw-bg-white tw-shadow-sm tw-ring-1 tw-ring-gray-200">
                 <div class="tw-flex tw-flex-col tw-gap-4 tw-dw-rounded-box tw-dw-p-6 tw-dw-max-w-md">
@@ -215,7 +381,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4"></div>
+        </div>
     </div>
 
 @stop

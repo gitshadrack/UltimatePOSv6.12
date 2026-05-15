@@ -482,6 +482,30 @@ $(document).ready(function() {
         pos_total_row();
     });
 
+    function apply_lot_selling_price(lot_select) {
+        var tr = lot_select.closest('tr');
+        var multiplier = 1;
+        if (tr.find('select.sub_unit').length > 0) {
+            multiplier = parseFloat(tr.find('select.sub_unit').find(':selected').data('multiplier')) || 1;
+        }
+
+        var selected_option = lot_select.find(':selected');
+        var lot_sell_price = selected_option.attr('data-lot-sell-price-inc-tax');
+        var price_input = tr.find('input.pos_unit_price_inc_tax');
+
+        if (lot_sell_price !== undefined && lot_sell_price !== '') {
+            __write_number(price_input, parseFloat(lot_sell_price) * multiplier);
+            price_input.trigger('change');
+            return;
+        }
+
+        var default_unit_price = tr.find('input.default_unit_price_inc_tax').val();
+        if (default_unit_price !== undefined && default_unit_price !== '') {
+            __write_number(price_input, parseFloat(default_unit_price) * multiplier);
+            price_input.trigger('change');
+        }
+    }
+
     //Change max quantity rule if lot number changes
     $('table#pos_table tbody').on('change', 'select.lot_number', function() {
         var qty_element = $(this)
@@ -542,6 +566,7 @@ $(document).ready(function() {
                 },
             });
         }
+        apply_lot_selling_price($(this));
         qty_element.trigger('change');
     });
 
@@ -1515,6 +1540,9 @@ $(document).ready(function() {
         __write_number(tr.find('input.pos_cost_price_inc_tax'), unit_cost);
 
         sp_element.change();
+        if (tr.find('select.lot_number').length > 0) {
+            apply_lot_selling_price(tr.find('select.lot_number'));
+        }
 
         var qty_element = tr.find('input.pos_quantity');
         var base_max_avlbl = qty_element.data('qty_available');

@@ -68,11 +68,13 @@
 				$tax_id = null;
 				$unit_price_inc_tax = $product->default_sell_price;
 			}
+			$default_unit_price_inc_tax = $unit_price_inc_tax;
 
 			if(!empty($so_line) && $action !== 'edit') {
 				$tax_id = $so_line->tax_id;
 				$item_tax = $so_line->item_tax;
 				$unit_price_inc_tax = $so_line->unit_price_inc_tax;
+				$default_unit_price_inc_tax = $unit_price_inc_tax;
 			}
 
 			$discount_type = !empty($product->line_discount_type) ? $product->line_discount_type : 'fixed';
@@ -174,6 +176,9 @@
 
 							$max_qty_rule = $lot_number->qty_available;
 							$max_qty_msg = __('lang_v1.quantity_error_msg_in_lot', ['qty'=> $lot_number->qty_formated, 'unit' => $product->unit  ]);
+							if(empty($product->transaction_sell_lines_id) && !empty($lot_number->lot_sell_price_inc_tax)){
+								$unit_price_inc_tax = $lot_number->lot_sell_price_inc_tax * $multiplier;
+							}
 						}
 
 						$expiry_text = '';
@@ -189,9 +194,12 @@
 
 							$max_qty_rule = $lot_number->qty_available;
 							$max_qty_msg = __('lang_v1.quantity_error_msg_in_lot', ['qty'=> $lot_number->qty_formated, 'unit' => $product->unit  ]);
+							if(empty($product->transaction_sell_lines_id) && !empty($lot_number->lot_sell_price_inc_tax)){
+								$unit_price_inc_tax = $lot_number->lot_sell_price_inc_tax * $multiplier;
+							}
 						}
 					@endphp
-					<option value="{{$lot_number->purchase_line_id}}" data-qty_available="{{$lot_number->qty_available}}" data-msg-max="@lang('lang_v1.quantity_error_msg_in_lot', ['qty'=> $lot_number->qty_formated, 'unit' => $product->unit  ])" {{$selected}}>@if(!empty($lot_number->lot_number) && $lot_enabled == 1){{$lot_number->lot_number}} @endif @if($lot_enabled == 1 && $exp_enabled == 1) - @endif @if($exp_enabled == 1 && !empty($lot_number->exp_date)) @lang('product.exp_date'): {{@format_date($lot_number->exp_date)}} @endif {{$expiry_text}}</option>
+					<option value="{{$lot_number->purchase_line_id}}" data-qty_available="{{$lot_number->qty_available}}" data-msg-max="@lang('lang_v1.quantity_error_msg_in_lot', ['qty'=> $lot_number->qty_formated, 'unit' => $product->unit  ])" data-lot-sell-price-inc-tax="{{!empty($lot_number->lot_sell_price_inc_tax) ? $lot_number->lot_sell_price_inc_tax : ''}}" {{$selected}}>@if(!empty($lot_number->lot_number) && $lot_enabled == 1){{$lot_number->lot_number}} @endif @if($lot_enabled == 1 && $exp_enabled == 1) - @endif @if($exp_enabled == 1 && !empty($lot_number->exp_date)) @lang('product.exp_date'): {{@format_date($lot_number->exp_date)}} @endif {{$expiry_text}}</option>
 				@endforeach
 			</select>
 		@endif
@@ -304,6 +312,7 @@
 		<input type="hidden" class="base_unit_multiplier" name="products[{{$row_count}}][base_unit_multiplier]" value="{{$multiplier}}">
 
 		<input type="hidden" class="hidden_base_unit_sell_price" value="{{$product->default_sell_price / $multiplier}}">
+		<input type="hidden" class="default_unit_price_inc_tax" value="{{$default_unit_price_inc_tax}}">
 		<input type="hidden" class="hidden_base_unit_cost_price_inc_tax" value="{{!empty($product->dpp_inc_tax) ? $product->dpp_inc_tax : 0}}">
 		<input type="hidden" class="hidden_base_unit_min_price_inc_tax" value="{{$min_price_inc_tax / $multiplier}}">
 		

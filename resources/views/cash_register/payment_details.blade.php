@@ -219,7 +219,7 @@
       </tr>
       <tr class="success">
         <th>
-          @lang('lang_v1.total_payment')
+          @lang('lang_v1.expected_cash_in_drawer')
         </th>
         <td>
           <b><span class="display_currency" data-currency_symbol="true">{{ $register_details->cash_in_hand + $register_details->total_cash - $register_details->total_cash_refund }}</span></b>
@@ -252,7 +252,7 @@
     </table>
     <hr>
     <span>
-        @lang('sale.total') = 
+        @lang('lang_v1.total_collections') =
         @format_currency($register_details->cash_in_hand) (@lang('messages.opening')) + 
         @format_currency($register_details->total_sale + $register_details->total_refund) (@lang('business.sale')) - 
         @format_currency($register_details->total_refund) (@lang('lang_v1.refund')) - 

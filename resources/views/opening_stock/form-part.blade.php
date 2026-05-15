@@ -14,6 +14,7 @@
 									<th>@lang( 'product.product_name' )</th>
 									<th>@lang( 'lang_v1.quantity_left' )</th>
 									<th>@lang( 'purchase.unit_cost_before_tax' )</th>
+									<th>@lang('lang_v1.lot_selling_price') <small>(@lang('product.inc_of_tax'))</small></th>
 									@if($enable_expiry == 1 && $product->enable_stock == 1)
 										<th>Exp. Date</th>
 									@endif
@@ -35,6 +36,7 @@
 		@php
 			$purchases[$key][$variation->id][] = ['quantity' => 0, 
 			'purchase_price' => $variation->default_purchase_price,
+			'lot_sell_price_inc_tax' => null,
 			'purchase_line_id' => null,
 			'lot_number' => null,
 			'transaction_date' => null,
@@ -52,6 +54,7 @@
 	$qty = $var['quantity'];
 
 	$purcahse_price = $var['purchase_price'];
+	$lot_sell_price_inc_tax = !empty($var['lot_sell_price_inc_tax']) ? $var['lot_sell_price_inc_tax'] : null;
 
 	$row_total = $qty * $purcahse_price;
 
@@ -85,6 +88,9 @@
 	</td>
 <td>
 	{!! Form::text('stocks[' . $key . '][' . $variation->id . '][' . $sub_key . '][purchase_price]', @num_format($purcahse_price) , ['class' => 'form-control input-sm input_number unit_price', 'required']); !!}
+</td>
+<td>
+	{!! Form::text('stocks[' . $key . '][' . $variation->id . '][' . $sub_key . '][lot_sell_price_inc_tax]', !empty($lot_sell_price_inc_tax) ? @num_format($lot_sell_price_inc_tax) : null, ['class' => 'form-control input-sm input_number', 'placeholder' => @num_format($variation->sell_price_inc_tax)]); !!}
 </td>
 
 @if($enable_expiry == 1 && $product->enable_stock == 1)
@@ -127,6 +133,9 @@
 	<td>
 		<input class="form-control input-sm input_number unit_price" required="" name="stocks[{{$key}}][{{$variation->id}}][__subkey__][purchase_price]" type="text" value="{{@num_format($purcahse_price)}}">
 	</td>
+	<td>
+		<input class="form-control input-sm input_number" name="stocks[{{$key}}][{{$variation->id}}][__subkey__][lot_sell_price_inc_tax]" type="text" placeholder="{{@num_format($variation->sell_price_inc_tax)}}">
+	</td>
 
 	@if($enable_expiry == 1 && $product->enable_stock == 1)
 	<td>
@@ -164,7 +173,7 @@
 								</tbody>
 								<tfoot>
 								<tr>
-									<td colspan="@if($enable_expiry == 1 && $product->enable_stock == 1 && $enable_lot == 1) 5 @elseif(($enable_expiry == 1 && $product->enable_stock == 1) || $enable_lot == 1) @else 3 @endif"></td>
+									<td colspan="@if($enable_expiry == 1 && $product->enable_stock == 1 && $enable_lot == 1) 6 @elseif(($enable_expiry == 1 && $product->enable_stock == 1) || $enable_lot == 1) 5 @else 4 @endif"></td>
 									<td><strong>@lang( 'lang_v1.total_amount_exc_tax' ): </strong> <span id="total_subtotal">{{@num_format($subtotal)}}</span>
 									<input type="hidden" id="total_subtotal_hidden" value=0>
 									</td>

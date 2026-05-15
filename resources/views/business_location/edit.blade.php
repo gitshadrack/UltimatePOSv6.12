@@ -1,7 +1,7 @@
 <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content">
 
-        {!! Form::open(['url' => action([\App\Http\Controllers\BusinessLocationController::class, 'update'], [$location->id]), 'method' => 'PUT', 'id' => 'business_location_add_form' ]) !!}
+        {!! Form::open(['url' => action([\App\Http\Controllers\BusinessLocationController::class, 'update'], [$location->id]), 'method' => 'PUT', 'id' => 'business_location_add_form', 'files' => true ]) !!}
 
         {!! Form::hidden('hidden_id', $location->id, ['id' => 'hidden_id']); !!}
         <div class="modal-header">
@@ -80,6 +80,19 @@
                     <div class="form-group">
                         {!! Form::label('website', __( 'lang_v1.website' ) . ':') !!}
                         {!! Form::text('website', $location->website, ['class' => 'form-control', 'placeholder' => __( 'lang_v1.website')]); !!}
+                    </div>
+                </div>
+                <div class="clearfix"></div>
+                <div class="col-sm-6">
+                    <div class="form-group">
+                        {!! Form::label('login_image', __( 'lang_v1.sign_in_page_image' ) . ':') !!}
+                        {!! Form::file('login_image', ['accept' => 'image/*']); !!}
+                        <p class="help-block">@lang('lang_v1.sign_in_page_image_help')</p>
+                        @if(!empty($location->login_image) && file_exists(public_path('uploads/location_login_images/' . $location->login_image)))
+                            <div class="m-t-10">
+                                <img src="{{ asset('uploads/location_login_images/' . $location->login_image) }}" alt="@lang('lang_v1.sign_in_page_image')" style="max-width: 180px; border-radius: 6px;">
+                            </div>
+                        @endif
                     </div>
                 </div>
                 <div class="clearfix"></div>

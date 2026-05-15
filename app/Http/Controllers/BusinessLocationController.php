@@ -169,6 +169,10 @@ class BusinessLocationController extends Controller
                 'invoice_layout_id', 'mobile', 'alternate_number', 'email', 'website', 'custom_field1', 'custom_field2', 'custom_field3', 'custom_field4', 'location_id', 'selling_price_group_id', 'default_payment_accounts', 'featured_products', 'sale_invoice_layout_id', 'sale_invoice_scheme_id']);
 
             $input['business_id'] = $business_id;
+            $login_image = $this->commonUtil->uploadFile($request, 'login_image', 'location_login_images', 'image');
+            if (! empty($login_image)) {
+                $input['login_image'] = $login_image;
+            }
 
             $input['default_payment_accounts'] = ! empty($input['default_payment_accounts']) ? json_encode($input['default_payment_accounts']) : null;
 
@@ -273,6 +277,10 @@ class BusinessLocationController extends Controller
                 'invoice_layout_id', 'mobile', 'alternate_number', 'email', 'website', 'custom_field1', 'custom_field2', 'custom_field3', 'custom_field4', 'location_id', 'selling_price_group_id', 'default_payment_accounts', 'featured_products', 'sale_invoice_layout_id', 'sale_invoice_scheme_id' ]);
 
             $business_id = $request->session()->get('user.business_id');
+            $login_image = $this->commonUtil->uploadFile($request, 'login_image', 'location_login_images', 'image');
+            if (! empty($login_image)) {
+                $input['login_image'] = $login_image;
+            }
 
             $input['default_payment_accounts'] = ! empty($input['default_payment_accounts']) ? json_encode($input['default_payment_accounts']) : null;
 

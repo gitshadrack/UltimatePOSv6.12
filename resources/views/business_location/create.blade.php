@@ -1,7 +1,7 @@
 <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content">
 
-        {!! Form::open(['url' => action([\App\Http\Controllers\BusinessLocationController::class, 'store']), 'method' => 'post', 'id' => 'business_location_add_form' ]) !!}
+        {!! Form::open(['url' => action([\App\Http\Controllers\BusinessLocationController::class, 'store']), 'method' => 'post', 'id' => 'business_location_add_form', 'files' => true ]) !!}
 
         <div class="modal-header">
             <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
@@ -79,6 +79,14 @@
                     <div class="form-group">
                         {!! Form::label('website', __( 'lang_v1.website' ) . ':') !!}
                         {!! Form::text('website', null, ['class' => 'form-control', 'placeholder' => __( 'lang_v1.website')]); !!}
+                    </div>
+                </div>
+                <div class="clearfix"></div>
+                <div class="col-sm-6">
+                    <div class="form-group">
+                        {!! Form::label('login_image', __( 'lang_v1.sign_in_page_image' ) . ':') !!}
+                        {!! Form::file('login_image', ['accept' => 'image/*']); !!}
+                        <p class="help-block">@lang('lang_v1.sign_in_page_image_help')</p>
                     </div>
                 </div>
                 <div class="clearfix"></div>

@@ -78,6 +78,7 @@ class OpeningStockController extends Controller
                     //Show only remaining quantity for editing opening stock.
                     $purchase_lines[$purchase_line->variation_id][$k]['quantity'] = $purchase_line->quantity_remaining;
                     $purchase_lines[$purchase_line->variation_id][$k]['purchase_price'] = $purchase_line->purchase_price;
+                    $purchase_lines[$purchase_line->variation_id][$k]['lot_sell_price_inc_tax'] = $purchase_line->lot_sell_price_inc_tax;
                     $purchase_lines[$purchase_line->variation_id][$k]['purchase_line_id'] = $purchase_line->id;
                     $purchase_lines[$purchase_line->variation_id][$k]['exp_date'] = $purchase_line->exp_date;
                     $purchase_lines[$purchase_line->variation_id][$k]['lot_number'] = $purchase_line->lot_number;
@@ -182,6 +183,7 @@ class OpeningStockController extends Controller
                                 $purchase_price = $this->productUtil->num_uf(trim($pl['purchase_price']));
                                 $item_tax = $this->productUtil->calc_percentage($purchase_price, $tax_percent);
                                 $purchase_price_inc_tax = $purchase_price + $item_tax;
+                                $lot_sell_price_inc_tax = ! empty($pl['lot_sell_price_inc_tax']) ? $this->productUtil->num_uf(trim($pl['lot_sell_price_inc_tax'])) : null;
                                 $qty_remaining = $this->productUtil->num_uf(trim($pl['quantity']));
                                 $secondary_unit_quantity = isset($pl['secondary_unit_quantity']) ? $this->productUtil->num_uf(trim($pl['secondary_unit_quantity'])) : 0;
 
@@ -229,6 +231,7 @@ class OpeningStockController extends Controller
                                     $purchase_line->pp_without_discount = $purchase_price;
                                     $purchase_line->purchase_price = $purchase_price;
                                     $purchase_line->purchase_price_inc_tax = $purchase_price_inc_tax;
+                                    $purchase_line->lot_sell_price_inc_tax = $lot_sell_price_inc_tax;
                                     $purchase_line->exp_date = $exp_date;
                                     $purchase_line->lot_number = $lot_number;
                                     $purchase_line->secondary_unit_quantity = $secondary_unit_quantity;
