@@ -36,10 +36,39 @@
                 \Illuminate\Support\Facades\Schema::hasColumn('business', 'login_image')
             ) {
                 $normalize_domain = function ($domain) {
-                    $domain_host = parse_url($domain, PHP_URL_HOST);
-                    $domain = !empty($domain_host) ? $domain_host : $domain;
+                    $domain = trim((string) $domain);
+                    if ($domain === '') {
+                        return null;
+                    }
 
-                    return strtolower(preg_replace('/^www\./', '', trim($domain, " \t\n\r\0\x0B/")));
+                    $parseable_domain = preg_match('/^[a-z][a-z0-9+\-.]*:\/\//i', $domain)
+                        ? $domain
+                        : 'http://' . ltrim($domain, '/');
+                    $domain_host = parse_url($parseable_domain, PHP_URL_HOST);
+                    $domain = !empty($domain_host) ? $domain_host : explode('/', $domain)[0];
+                    $domain = preg_replace('/:\d+$/', '', $domain);
+
+                    return strtolower(preg_replace('/^www\./', '', trim($domain, " \t\n\r\0\x0B./")));
+                };
+
+                $get_subdomain_alias = function ($domain) {
+                    $domain_parts = explode('.', $domain);
+
+                    return count($domain_parts) > 2 ? $domain_parts[0] : null;
+                };
+
+                $tenant_domain_matches = function ($tenant_domain, $request_domain) use ($normalize_domain, $get_subdomain_alias) {
+                    $tenant_domain = $normalize_domain($tenant_domain);
+                    if (empty($tenant_domain)) {
+                        return false;
+                    }
+
+                    if ($tenant_domain === $request_domain) {
+                        return true;
+                    }
+
+                    return strpos($tenant_domain, '.') === false &&
+                        $tenant_domain === $get_subdomain_alias($request_domain);
                 };
 
                 $normalized_host = $normalize_domain($request->getHost());
@@ -48,7 +77,7 @@
                     ->get();
 
                 foreach ($businesses as $business) {
-                    if ($normalize_domain($business->tenant_domain) === $normalized_host) {
+                    if ($tenant_domain_matches($business->tenant_domain, $normalized_host)) {
                         $login_business_name = $business->name;
                         if (!empty($business->login_image) && file_exists(public_path('uploads/business_login_images/' . $business->login_image))) {
                             $login_image_url = asset('uploads/business_login_images/' . $business->login_image);

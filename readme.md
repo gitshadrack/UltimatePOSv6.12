@@ -402,6 +402,7 @@ What changed:
 - Superadmin can set the tenant domain and sign-in image while creating a business.
 - Business Settings can set or update the tenant domain and sign-in image for an existing business.
 - Text on the login image now appears only when the current domain matches a Business `Tenant domain`; it displays that Business name only.
+- Tenant matching accepts full domains, URL-style values, and short subdomain aliases. For example, `peak.pos-system.co.ke`, `https://peak.pos-system.co.ke/login`, and `peak` can all match the `peak.pos-system.co.ke` login host.
 - If the matched Business has its own uploaded sign-in image, login uses that image instead of the default `public/img/login-side.jpg`.
 - Business Location create/edit now includes a `Sign in page image` upload field.
 - Business Location modal submit now supports file upload.
@@ -415,7 +416,7 @@ How to set tenant-specific login branding:
 
 1. Run `php artisan migrate`.
 2. Open Business Settings > Business for an existing tenant, or create a business from Superadmin.
-3. Set `Tenant domain` to the exact client domain or subdomain, for example `shop.co.ke` or `shop.sysnettechs.co.ke`.
+3. Set `Tenant domain` to the exact client domain/subdomain, for example `shop.co.ke` or `shop.sysnettechs.co.ke`, or to the short subdomain alias, for example `peak` for `peak.pos-system.co.ke`.
 4. Upload the tenant `Sign in page image`.
 5. Make sure the domain points to the same Ultimate POS installation.
 6. Open the login page using that domain. If the domain matches, the login page shows that business name and image.
@@ -425,6 +426,7 @@ Fallback behavior:
 1. If the domain does not match any Business `Tenant domain`, login uses `public/img/login-side.jpg`.
 2. If the domain matches a tenant but no tenant image is uploaded, login still uses `public/img/login-side.jpg`.
 3. The business name only appears when the domain matches a tenant.
+4. A short alias only matches the first subdomain segment, so `peak` matches `peak.pos-system.co.ke` but not `other.pos-system.co.ke`.
 
 How to change the default fallback image:
 
@@ -517,7 +519,7 @@ How to update tenant branding from Superadmin:
 1. Log in as Superadmin.
 2. Open Superadmin > Business.
 3. Click `Edit` for the target business.
-4. Set `Tenant domain`, for example `shop.co.ke`.
+4. Set `Tenant domain`, for example `shop.co.ke`, `shop.sysnettechs.co.ke`, or short alias `peak` for `peak.pos-system.co.ke`.
 5. Upload a `Sign in page image` if needed.
 6. Save the form.
 7. Open the login page through the tenant domain to confirm the tenant-specific image appears.

@@ -1597,6 +1597,6 @@ return [
     'previous_balance_due_help' => 'Shows customer balance before this sale (excludes current sale due).',
     'show_previous_balance_due' => 'Show previous balance due',
     'tenant_domain' => 'Tenant domain',
-    'tenant_domain_help' => 'Domain or subdomain used by this business, for example shop.co.ke or shop.sysnettechs.co.ke.',
+    'tenant_domain_help' => 'Domain or subdomain used by this business, for example peak, shop.co.ke, or shop.sysnettechs.co.ke.',
 
 ];
