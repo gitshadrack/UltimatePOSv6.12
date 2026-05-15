@@ -391,14 +391,16 @@ Files changed:
 What changed:
 
 - Added a body class hook to the auth layout.
-- Changed the login page to a two-column layout on desktop.
-- Left side displays `public/img/login-side.jpg` as a floating rounded image card with layered shadows.
+- Changed the login page to a two-column layout on desktop, with a wider login section than image section.
+- Left side displays the sign-in image fitted to its full section.
 - Text on the login image now appears only when the current domain matches a Business Location `Website`; it displays that Business Location name only.
 - Business Location create/edit now includes a `Sign in page image` upload field.
 - If a matched Business Location has its own uploaded sign-in image, login uses that image instead of the default `public/img/login-side.jpg`.
 - Business Location modal submit now supports file upload.
 - Updated `public/img/login-side.jpg` using the supplied Sysnettechs POS image.
 - Right side keeps the current login form, language selector, and original blue gradient background.
+- Login card is wider on desktop and uses responsive padding for mobile.
+- Desktop login page height is locked to the viewport to avoid page scrolling; mobile can still scroll when needed.
 - On tablet/mobile, the image panel is hidden and the login form remains full width.
 
 How to change the image:

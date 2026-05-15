@@ -65,6 +65,7 @@
         .login-split-page html,
         .login-split-page {
             min-height: 100%;
+            overflow-x: hidden;
         }
 
         .login-split-page .container-fluid,
@@ -94,20 +95,18 @@
             justify-content: center;
             text-align: center;
             color: #fff;
-            padding: 56px;
-            background:
-                radial-gradient(circle at 20% 18%, rgba(255, 255, 255, 0.28), transparent 30%),
-                linear-gradient(135deg, #1d4ed8 0%, #2563eb 48%, #4338ca 100%);
+            padding: 0;
+            background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 48%, #4338ca 100%);
         }
 
         .auth-floating-image-card {
             position: relative;
-            width: min(78%, 620px);
-            aspect-ratio: 4 / 5;
-            border-radius: 28px;
+            width: 100%;
+            min-height: 100vh;
+            border-radius: 0;
             overflow: hidden;
-            box-shadow: 0 34px 70px rgba(15, 23, 42, 0.42), 0 12px 24px rgba(15, 23, 42, 0.28);
-            transform: translateY(-10px);
+            box-shadow: none;
+            transform: none;
             isolation: isolate;
         }
 
@@ -120,13 +119,7 @@
         }
 
         .auth-floating-image-card::after {
-            content: "";
-            position: absolute;
-            inset: 14px;
-            z-index: 2;
-            border: 1px solid rgba(255, 255, 255, 0.22);
-            border-radius: 20px;
-            pointer-events: none;
+            display: none;
         }
 
         .auth-floating-image-card img {
@@ -170,7 +163,16 @@
 
         .auth-form-panel .login-card-wrap {
             width: 100%;
-            max-width: 430px;
+            max-width: 560px;
+        }
+
+        .login-card {
+            width: 100%;
+        }
+
+        .login-card-inner {
+            max-width: none;
+            padding: 34px;
         }
 
         .login-split-page .tw-absolute.tw-top-2,
@@ -182,10 +184,42 @@
             .auth-form-panel {
                 padding-top: 110px;
             }
+
+            .auth-form-panel .login-card-wrap {
+                max-width: 520px;
+            }
+        }
+
+        @media (max-width: 575px) {
+            .auth-form-panel {
+                padding: 96px 14px 28px;
+            }
+
+            .login-card-inner {
+                padding: 22px;
+            }
+        }
+
+        @media (min-width: 992px) {
+            .login-split-page {
+                height: 100vh;
+                overflow: hidden;
+            }
+
+            .login-split-page .container-fluid,
+            .login-split-page .eq-height-row,
+            .login-split-page .right-col,
+            .auth-split-shell,
+            .auth-image-panel,
+            .auth-form-panel,
+            .auth-floating-image-card {
+                height: 100vh;
+                min-height: 100vh;
+            }
         }
     </style>
     <div class="row auth-split-shell">
-        <div class="col-md-6 hidden-sm hidden-xs auth-image-panel">
+        <div class="col-md-5 hidden-sm hidden-xs auth-image-panel">
             <div class="auth-floating-image-card">
                 <img src="{{ $login_image_url }}" alt="Login visual">
                 @if(!empty($login_location_name))
@@ -195,7 +229,7 @@
                 @endif
             </div>
         </div>
-        <div class="col-md-6 col-sm-12 col-xs-12 auth-form-panel">
+        <div class="col-md-7 col-sm-12 col-xs-12 auth-form-panel">
             <div class="login-card-wrap">
                 @if (config('app.env') == 'demo')
         
@@ -273,8 +307,8 @@
         
                 @endif
             <div
-                class="tw-p-5 md:tw-p-6 tw-mb-4 tw-rounded-2xl tw-transition-all tw-duration-200 tw-bg-white tw-shadow-sm tw-ring-1 tw-ring-gray-200">
-                <div class="tw-flex tw-flex-col tw-gap-4 tw-dw-rounded-box tw-dw-p-6 tw-dw-max-w-md">
+                class="login-card tw-p-5 md:tw-p-6 tw-mb-4 tw-rounded-2xl tw-transition-all tw-duration-200 tw-bg-white tw-shadow-sm tw-ring-1 tw-ring-gray-200">
+                <div class="login-card-inner tw-flex tw-flex-col tw-gap-4 tw-dw-rounded-box">
                     <div class="tw-flex tw-items-center tw-flex-col">
                         <h1 class="tw-text-lg md:tw-text-xl tw-font-semibold tw-text-[#1e1e1e]">
                             @lang('lang_v1.welcome_back')
