@@ -42,7 +42,9 @@ class PricingController extends Controller
             }
         }
 
+        $intervals = ['days' => __('lang_v1.days'), 'months' => __('lang_v1.months'), 'years' => __('lang_v1.years')];
+
         return view('superadmin::pricing.index')
-            ->with(compact('packages', 'permission_formatted'));
+            ->with(compact('packages', 'permission_formatted', 'intervals'));
     }
 }

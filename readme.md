@@ -477,6 +477,59 @@ php artisan optimize:clear
 
 No migration is needed.
 
+### 14. Public Index Cards and Superadmin Business Branding Edit
+
+Purpose: Improve the public index page and let Superadmin update tenant branding fields after a business has already been created.
+
+Files added:
+
+- `Modules/Superadmin/Resources/views/business/edit.blade.php`
+
+Files changed:
+
+- `routes/web.php`
+- `resources/views/welcome.blade.php`
+- `Modules/Superadmin/Http/Controllers/BusinessController.php`
+- `Modules/Superadmin/Resources/views/business/show.blade.php`
+- `Modules/Superadmin/Http/Controllers/PricingController.php`
+- `.env`
+
+What changed:
+
+- Public `/` index now shows business-type cards using the original Bootstrap/AdminLTE card structure.
+- Added cards for Pharmacy, Electronics, Supermarket, Restaurant, Fashion, and Hardware.
+- Each public card links to business registration.
+- Public pricing was hidden from the index page.
+- The root route was simplified so it no longer loads pricing package data for the index page.
+- Superadmin > Business list now includes an `Edit` action for each business.
+- Superadmin business detail page now includes an `Edit` button.
+- Added a Superadmin business edit page for updating:
+  - Business name
+  - Tenant domain
+  - Business logo
+  - Sign in page image
+- Superadmin business detail page now displays the tenant domain and sign-in page image when present.
+- Superadmin business update saves uploaded images to the existing `business_logos` and `business_login_images` upload folders.
+- Registration was enabled in local `.env` and `APP_URL` was pointed to the local `CodeBaseV7/public` URL during local setup.
+
+How to update tenant branding from Superadmin:
+
+1. Log in as Superadmin.
+2. Open Superadmin > Business.
+3. Click `Edit` for the target business.
+4. Set `Tenant domain`, for example `shop.co.ke`.
+5. Upload a `Sign in page image` if needed.
+6. Save the form.
+7. Open the login page through the tenant domain to confirm the tenant-specific image appears.
+
+Server action:
+
+```bash
+php artisan optimize:clear
+```
+
+No migration is needed if the tenant branding migration from section 12 has already been run.
+
 ### Recommended Online Deployment Steps
 
 1. Upload all changed controller files.

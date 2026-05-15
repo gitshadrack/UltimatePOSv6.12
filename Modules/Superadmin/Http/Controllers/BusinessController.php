@@ -125,6 +125,9 @@ class BusinessController extends BaseController
                     $html = '<a href="'.
                             action([\Modules\Superadmin\Http\Controllers\BusinessController::class, 'show'], [$row->id]).'"
                                 class=" tw-m-0.5 tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline  tw-dw-btn-info">'.__('superadmin::lang.manage').'</a>
+                            <a href="'.
+                            action([\Modules\Superadmin\Http\Controllers\BusinessController::class, 'edit'], [$row->id]).'"
+                                class=" tw-m-0.5 tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline  tw-dw-btn-primary">'.__('messages.edit').'</a>
                             <button type="button" class=" tw-m-0.5 tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline  tw-dw-btn-info btn-modal" data-href="'.action([\Modules\Superadmin\Http\Controllers\SuperadminSubscriptionsController::class, 'create'], ['business_id' => $row->id]).'" data-container=".view_modal">'
                                   .__('superadmin::lang.add_subscription').'</button>';
 
@@ -601,9 +604,16 @@ class BusinessController extends BaseController
      *
      * @return Response
      */
-    public function edit()
+    public function edit($id)
     {
-        return view('superadmin::edit');
+        if (! auth()->user()->can('superadmin')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business = Business::findOrFail($id);
+
+        return view('superadmin::business.edit')
+            ->with(compact('business'));
     }
 
     /**
@@ -612,8 +622,57 @@ class BusinessController extends BaseController
      * @param  Request  $request
      * @return Response
      */
-    public function update(Request $request)
+    public function update(Request $request, $id)
     {
+        if (! auth()->user()->can('superadmin')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'name' => 'required|max:255',
+            'tenant_domain' => 'nullable|max:255',
+            'business_logo' => 'nullable|image|max:5000',
+            'login_image' => 'nullable|image|max:5000',
+        ]);
+
+        try {
+            $notAllowed = $this->businessUtil->notAllowedInDemo();
+            if (! empty($notAllowed)) {
+                return $notAllowed;
+            }
+
+            $business = Business::findOrFail($id);
+            $business_details = $request->only(['name', 'tenant_domain']);
+
+            $logo_name = $this->businessUtil->uploadFile($request, 'business_logo', 'business_logos', 'image');
+            if (! empty($logo_name)) {
+                $business_details['logo'] = $logo_name;
+            }
+
+            $login_image = $this->businessUtil->uploadFile($request, 'login_image', 'business_login_images', 'image');
+            if (! empty($login_image)) {
+                $business_details['login_image'] = $login_image;
+            }
+
+            $business->fill($business_details);
+            $business->save();
+
+            return redirect()
+                ->action([\Modules\Superadmin\Http\Controllers\BusinessController::class, 'show'], [$business->id])
+                ->with('status', [
+                    'success' => 1,
+                    'msg' => __('lang_v1.success'),
+                ]);
+        } catch (\Exception $e) {
+            \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
+
+            return back()
+                ->with('status', [
+                    'success' => 0,
+                    'msg' => __('messages.something_went_wrong'),
+                ])
+                ->withInput();
+        }
     }
 
     /**

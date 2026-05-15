@@ -16,6 +16,13 @@
 
     <!-- Main content -->
     <section class="content">
+        <div class="clearfix" style="margin-bottom: 15px;">
+            <a href="{{ action([\Modules\Superadmin\Http\Controllers\BusinessController::class, 'edit'], [$business->id]) }}"
+                class="tw-dw-btn tw-dw-btn-primary pull-right">
+                <i class="fa fa-edit"></i> @lang('messages.edit')
+            </a>
+        </div>
+
         <div
             class=" tw-transition-all lg:tw-col-span-1 tw-duration-200 tw-bg-white tw-shadow-sm tw-rounded-xl tw-ring-1 hover:tw-shadow-md hover:tw-translate-y-0.5 tw-ring-gray-200">
             <div class="tw-p-4 sm:tw-p-5">
@@ -38,6 +45,12 @@
                                         @lang('business.currency')</strong>
                                     <p class="text-muted">
                                         {{ $business->currency->currency }}
+                                    </p>
+
+                                    <strong><i class="fa fa-globe margin-r-5"></i>
+                                        @lang('lang_v1.tenant_domain')</strong>
+                                    <p class="text-muted">
+                                        {{ $business->tenant_domain }}
                                     </p>
 
                                     <strong><i class="fa fa-file-text-o margin-r-5"></i>
@@ -126,6 +139,15 @@
                                         <img class="img-responsive"
                                             src="{{ url('uploads/business_logos/' . $business->logo) }}"
                                             alt="Business Logo">
+                                    @endif
+
+                                    @if (!empty($business->login_image))
+                                        <hr>
+                                        <strong><i class="fa fa-image margin-r-5"></i>
+                                            @lang('lang_v1.sign_in_page_image')</strong>
+                                        <img class="img-responsive"
+                                            src="{{ url('uploads/business_login_images/' . $business->login_image) }}"
+                                            alt="@lang('lang_v1.sign_in_page_image')">
                                     @endif
                                 </div>
                             </div>
