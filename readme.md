@@ -403,6 +403,8 @@ What changed:
 - Business Settings can set or update the tenant domain and sign-in image for an existing business.
 - Text on the login image now appears only when the current domain matches a Business `Tenant domain`; it displays that Business name only.
 - Tenant matching accepts full domains, URL-style values, and short subdomain aliases. For example, `peak.pos-system.co.ke`, `https://peak.pos-system.co.ke/login`, and `peak` can all match the `peak.pos-system.co.ke` login host.
+- Tenant login image resolution accepts a saved filename, a public path such as `uploads/business_login_images/file.jpg`, a storage path such as `storage/business_login_images/file.jpg`, or a full image URL.
+- Tenant login images are served through `/tenant-login-image/{filename}` so images stored in either public uploads or Laravel storage can load on the login page.
 - If the matched Business has its own uploaded sign-in image, login uses that image instead of the default `public/img/login-side.jpg`.
 - Business Location create/edit now includes a `Sign in page image` upload field.
 - Business Location modal submit now supports file upload.

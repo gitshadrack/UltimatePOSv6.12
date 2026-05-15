@@ -45,6 +45,37 @@ class BusinessController extends Controller
     protected $mailDrivers;
 
     /**
+     * Serves tenant login images from public uploads or Laravel storage.
+     *
+     * @param  string  $filename
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    public function tenantLoginImage($filename)
+    {
+        $filename = basename((string) $filename);
+        if (! preg_match('/\.(jpe?g|png|gif|webp)$/i', $filename)) {
+            abort(404);
+        }
+
+        $image_paths = [
+            public_path('uploads/business_login_images/'.$filename),
+            public_path('storage/business_login_images/'.$filename),
+            storage_path('app/public/business_login_images/'.$filename),
+            storage_path('app/business_login_images/'.$filename),
+        ];
+
+        foreach ($image_paths as $image_path) {
+            if (is_file($image_path)) {
+                return response()->file($image_path, [
+                    'Cache-Control' => 'public, max-age=86400',
+                ]);
+            }
+        }
+
+        abort(404);
+    }
+
+    /**
      * Constructor
      *
      * @param  ProductUtils  $product

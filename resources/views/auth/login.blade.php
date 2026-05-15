@@ -59,7 +59,7 @@
 
                 $tenant_domain_matches = function ($tenant_domain, $request_domain) use ($normalize_domain, $get_subdomain_alias) {
                     $tenant_domain = $normalize_domain($tenant_domain);
-                    if (empty($tenant_domain)) {
+                    if (empty($tenant_domain) || empty($request_domain)) {
                         return false;
                     }
 
@@ -71,6 +71,48 @@
                         $tenant_domain === $get_subdomain_alias($request_domain);
                 };
 
+                $resolve_login_image_url = function ($login_image) {
+                    $login_image = trim((string) $login_image);
+                    if ($login_image === '') {
+                        return null;
+                    }
+
+                    if (filter_var($login_image, FILTER_VALIDATE_URL)) {
+                        return $login_image;
+                    }
+
+                    $login_image = str_replace('\\', '/', ltrim($login_image, '/'));
+                    $login_image_filename = basename(parse_url($login_image, PHP_URL_PATH) ?: $login_image);
+                    if ($login_image_filename === '') {
+                        return null;
+                    }
+
+                    $image_candidates = [
+                        $login_image,
+                        'uploads/business_login_images/' . $login_image_filename,
+                        'storage/business_login_images/' . $login_image_filename,
+                    ];
+
+                    foreach (array_unique($image_candidates) as $image_candidate) {
+                        if (file_exists(public_path($image_candidate))) {
+                            return route('tenant-login-image', ['filename' => $login_image_filename]);
+                        }
+                    }
+
+                    $storage_image_candidates = [
+                        storage_path('app/public/business_login_images/' . $login_image_filename),
+                        storage_path('app/business_login_images/' . $login_image_filename),
+                    ];
+
+                    foreach ($storage_image_candidates as $storage_image_candidate) {
+                        if (file_exists($storage_image_candidate)) {
+                            return route('tenant-login-image', ['filename' => $login_image_filename]);
+                        }
+                    }
+
+                    return null;
+                };
+
                 $normalized_host = $normalize_domain($request->getHost());
                 $businesses = \App\Business::whereNotNull('tenant_domain')
                     ->select('name', 'tenant_domain', 'login_image')
@@ -79,8 +121,9 @@
                 foreach ($businesses as $business) {
                     if ($tenant_domain_matches($business->tenant_domain, $normalized_host)) {
                         $login_business_name = $business->name;
-                        if (!empty($business->login_image) && file_exists(public_path('uploads/business_login_images/' . $business->login_image))) {
-                            $login_image_url = asset('uploads/business_login_images/' . $business->login_image);
+                        $business_login_image_url = $resolve_login_image_url($business->login_image);
+                        if (!empty($business_login_image_url)) {
+                            $login_image_url = $business_login_image_url;
                         }
                         break;
                     }
