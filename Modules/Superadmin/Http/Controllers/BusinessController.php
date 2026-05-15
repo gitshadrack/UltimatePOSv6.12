@@ -274,7 +274,7 @@ class BusinessController extends BaseController
 
             $user = User::create_user($owner_details);
 
-            $business_details = $request->only(['name', 'start_date', 'currency_id', 'tax_label_1', 'tax_number_1', 'tax_label_2', 'tax_number_2', 'time_zone', 'accounting_method', 'fy_start_month']);
+            $business_details = $request->only(['name', 'tenant_domain', 'start_date', 'currency_id', 'tax_label_1', 'tax_number_1', 'tax_label_2', 'tax_number_2', 'time_zone', 'accounting_method', 'fy_start_month']);
 
             $business_location = $request->only(['name', 'country', 'state', 'city', 'zip_code', 'landmark', 'website', 'mobile', 'alternate_number']);
 
@@ -288,6 +288,11 @@ class BusinessController extends BaseController
             $logo_name = $this->businessUtil->uploadFile($request, 'business_logo', 'business_logos', 'image');
             if (! empty($logo_name)) {
                 $business_details['logo'] = $logo_name;
+            }
+
+            $login_image = $this->businessUtil->uploadFile($request, 'login_image', 'business_login_images', 'image');
+            if (! empty($login_image)) {
+                $business_details['login_image'] = $login_image;
             }
 
             //default enabled modules

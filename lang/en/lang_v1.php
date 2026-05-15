@@ -316,7 +316,7 @@ return [
     'custom_field' => 'Custom Field :number',
     'website' => 'Website',
     'sign_in_page_image' => 'Sign in page image',
-    'sign_in_page_image_help' => 'Upload the image shown on the left side of the sign in page for this location/domain.',
+    'sign_in_page_image_help' => 'This image is used on the login page when the current domain matches this tenant.',
     'total_credit_amt' => 'Total Credit Amount',
     'unit_sell_price' => 'Unit Sell Price',
     'prefixes' => 'Prefixes',
@@ -1596,5 +1596,7 @@ return [
     'previous_balance_due' => 'Previous balance due',
     'previous_balance_due_help' => 'Shows customer balance before this sale (excludes current sale due).',
     'show_previous_balance_due' => 'Show previous balance due',
+    'tenant_domain' => 'Tenant domain',
+    'tenant_domain_help' => 'Domain or subdomain used by this business, for example shop.co.ke or shop.sysnettechs.co.ke.',
 
 ];

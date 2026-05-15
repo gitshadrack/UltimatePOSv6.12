@@ -28,37 +28,37 @@
             }
         }
 
-        $login_location_name = null;
+        $login_business_name = null;
         $login_image_url = asset('img/login-side.jpg');
         try {
-            $current_host = strtolower($request->getHost());
-            $location_query = \App\BusinessLocation::active()
-                ->whereNotNull('website');
+            if (
+                \Illuminate\Support\Facades\Schema::hasColumn('business', 'tenant_domain') &&
+                \Illuminate\Support\Facades\Schema::hasColumn('business', 'login_image')
+            ) {
+                $normalize_domain = function ($domain) {
+                    $domain_host = parse_url($domain, PHP_URL_HOST);
+                    $domain = !empty($domain_host) ? $domain_host : $domain;
 
-            if (\Illuminate\Support\Facades\Schema::hasColumn('business_locations', 'login_image')) {
-                $location_query->select('name', 'website', 'login_image');
-            } else {
-                $location_query->select('name', 'website');
-            }
+                    return strtolower(preg_replace('/^www\./', '', trim($domain, " \t\n\r\0\x0B/")));
+                };
 
-            $locations = $location_query->get();
+                $normalized_host = $normalize_domain($request->getHost());
+                $businesses = \App\Business::whereNotNull('tenant_domain')
+                    ->select('name', 'tenant_domain', 'login_image')
+                    ->get();
 
-            foreach ($locations as $location) {
-                $location_host = parse_url($location->website, PHP_URL_HOST);
-                $location_host = !empty($location_host) ? $location_host : $location->website;
-                $location_host = strtolower(preg_replace('/^www\./', '', trim($location_host, " \t\n\r\0\x0B/")));
-                $normalized_host = strtolower(preg_replace('/^www\./', '', $current_host));
-
-                if (!empty($location_host) && $location_host === $normalized_host) {
-                    $login_location_name = $location->name;
-                    if (!empty($location->login_image) && file_exists(public_path('uploads/location_login_images/' . $location->login_image))) {
-                        $login_image_url = asset('uploads/location_login_images/' . $location->login_image);
+                foreach ($businesses as $business) {
+                    if ($normalize_domain($business->tenant_domain) === $normalized_host) {
+                        $login_business_name = $business->name;
+                        if (!empty($business->login_image) && file_exists(public_path('uploads/business_login_images/' . $business->login_image))) {
+                            $login_image_url = asset('uploads/business_login_images/' . $business->login_image);
+                        }
+                        break;
                     }
-                    break;
                 }
             }
         } catch (\Exception $e) {
-            $login_location_name = null;
+            $login_business_name = null;
         }
     @endphp
     <style>
@@ -222,9 +222,9 @@
         <div class="col-md-5 hidden-sm hidden-xs auth-image-panel">
             <div class="auth-floating-image-card">
                 <img src="{{ $login_image_url }}" alt="Login visual">
-                @if(!empty($login_location_name))
+                @if(!empty($login_business_name))
                 <div class="auth-image-caption">
-                    <div class="auth-image-title">{{ $login_location_name }}</div>
+                    <div class="auth-image-title">{{ $login_business_name }}</div>
                 </div>
                 @endif
             </div>

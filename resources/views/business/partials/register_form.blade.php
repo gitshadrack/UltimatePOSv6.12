@@ -46,6 +46,28 @@
         {!! Form::file('business_logo', ['accept' => 'image/*']); !!}
     </div>
 </div>
+@if(!empty($is_admin))
+<div class="col-md-6">
+    <div class="form-group">
+        {!! Form::label('tenant_domain', __('lang_v1.tenant_domain') . ':') !!}
+        <div class="input-group">
+            <span class="input-group-addon">
+                <i class="fa fa-globe"></i>
+            </span>
+            {!! Form::text('tenant_domain', null, ['class' => 'form-control','placeholder' => 'shop.co.ke']); !!}
+        </div>
+        <p class="help-block"><i>@lang('lang_v1.tenant_domain_help')</i></p>
+    </div>
+</div>
+<div class="clearfix"></div>
+<div class="col-md-6">
+    <div class="form-group">
+        {!! Form::label('login_image', __('lang_v1.sign_in_page_image') . ':') !!}
+        {!! Form::file('login_image', ['accept' => 'image/*']); !!}
+        <p class="help-block"><i>@lang('lang_v1.sign_in_page_image_help')</i></p>
+    </div>
+</div>
+@endif
 <div class="col-md-6">
     <div class="form-group">
         {!! Form::label('website', __('lang_v1.website') . ':') !!}

@@ -67,6 +67,31 @@
                     <p class="help-block"><i> @lang('business.logo_help')</i></p>
             </div>
         </div>
+        <div class="col-sm-4">
+            <div class="form-group">
+                {!! Form::label('tenant_domain', __('lang_v1.tenant_domain') . ':') !!}
+                <div class="input-group">
+                    <span class="input-group-addon">
+                        <i class="fa fa-globe"></i>
+                    </span>
+                    {!! Form::text('tenant_domain', $business->tenant_domain, ['class' => 'form-control', 'placeholder' => 'shop.co.ke']); !!}
+                </div>
+                <p class="help-block"><i>@lang('lang_v1.tenant_domain_help')</i></p>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="form-group">
+                {!! Form::label('login_image', __('lang_v1.sign_in_page_image') . ':') !!}
+                {!! Form::file('login_image', ['accept' => 'image/*']); !!}
+                <p class="help-block"><i>@lang('lang_v1.sign_in_page_image_help')</i></p>
+                @if(!empty($business->login_image) && file_exists(public_path('uploads/business_login_images/' . $business->login_image)))
+                    <div class="m-t-10">
+                        <img src="{{ asset('uploads/business_login_images/' . $business->login_image) }}" alt="@lang('lang_v1.sign_in_page_image')" style="max-width: 180px; border-radius: 6px;">
+                    </div>
+                @endif
+            </div>
+        </div>
+        <div class="clearfix"></div>
         <div class="col-md-4">
             <div class="form-group">
                 {!! Form::label('fy_start_month', __('business.fy_start_month') . ':') !!} @show_tooltip(__('tooltip.fy_start_month'))

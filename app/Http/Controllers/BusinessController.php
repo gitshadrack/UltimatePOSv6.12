@@ -186,7 +186,7 @@ class BusinessController extends Controller
 
             $user = User::create_user($owner_details);
 
-            $business_details = $request->only(['name', 'start_date', 'currency_id', 'time_zone',
+            $business_details = $request->only(['name', 'tenant_domain', 'start_date', 'currency_id', 'time_zone',
                 'fy_start_month', 'accounting_method', 'tax_label_1', 'tax_number_1',
                 'tax_label_2', 'tax_number_2', ]);
 
@@ -203,6 +203,11 @@ class BusinessController extends Controller
             $logo_name = $this->businessUtil->uploadFile($request, 'business_logo', 'business_logos', 'image');
             if (! empty($logo_name)) {
                 $business_details['logo'] = $logo_name;
+            }
+
+            $login_image = $this->businessUtil->uploadFile($request, 'login_image', 'business_login_images', 'image');
+            if (! empty($login_image)) {
+                $business_details['login_image'] = $login_image;
             }
 
             //default enabled modules
@@ -368,7 +373,7 @@ class BusinessController extends Controller
                 return $notAllowed;
             }
 
-            $business_details = $request->only(['name', 'start_date', 'currency_id', 'tax_label_1', 'tax_number_1', 'tax_label_2', 'tax_number_2', 'default_profit_percent', 'default_sales_tax', 'default_sales_discount', 'sell_price_tax', 'sku_prefix', 'time_zone', 'fy_start_month', 'accounting_method', 'transaction_edit_days', 'sales_cmsn_agnt', 'item_addition_method', 'currency_symbol_placement', 'on_product_expiry',
+            $business_details = $request->only(['name', 'tenant_domain', 'start_date', 'currency_id', 'tax_label_1', 'tax_number_1', 'tax_label_2', 'tax_number_2', 'default_profit_percent', 'default_sales_tax', 'default_sales_discount', 'sell_price_tax', 'sku_prefix', 'time_zone', 'fy_start_month', 'accounting_method', 'transaction_edit_days', 'sales_cmsn_agnt', 'item_addition_method', 'currency_symbol_placement', 'on_product_expiry',
                 'stop_selling_before', 'default_unit', 'expiry_type', 'date_format',
                 'time_format', 'ref_no_prefixes', 'theme_color', 'email_settings',
                 'sms_settings', 'rp_name', 'amount_for_unit_rp',
@@ -427,6 +432,11 @@ class BusinessController extends Controller
                 $business_details['logo'] = $logo_name;
             }
 
+            $login_image = $this->businessUtil->uploadFile($request, 'login_image', 'business_login_images', 'image');
+            if (! empty($login_image)) {
+                $business_details['login_image'] = $login_image;
+            }
+
             $checkboxes = ['enable_editing_product_from_purchase',
                 'enable_inline_tax',
                 'enable_brand', 'enable_category', 'enable_sub_category', 'enable_price_tax', 'enable_purchase_status',
@@ -443,6 +453,12 @@ class BusinessController extends Controller
                 $business->logo = $business_details['logo'];
             } else {
                 unset($business_details['logo']);
+            }
+
+            if (! empty($business_details['login_image'])) {
+                $business->login_image = $business_details['login_image'];
+            } else {
+                unset($business_details['login_image']);
             }
 
             //System settings

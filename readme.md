@@ -370,15 +370,20 @@ Recommended setup:
 
 ### 12. Login Page Side Image
 
-Purpose: Keep the existing login fields but display a left-side image panel like the supplied reference.
+Purpose: Keep the existing login fields but display a left-side image panel like the supplied reference, with tenant-specific branding based on the domain used to open the login page.
 
 Files added:
 
 - `public/img/login-side.jpg`
 - `database/migrations/2026_05_15_000003_add_login_image_to_business_locations.php`
+- `database/migrations/2026_05_15_000004_add_tenant_domain_and_login_image_to_business.php`
 
 Files changed:
 
+- `app/Http/Controllers/BusinessController.php`
+- `Modules/Superadmin/Http/Controllers/BusinessController.php`
+- `resources/views/business/partials/register_form.blade.php`
+- `resources/views/business/partials/settings_business.blade.php`
 - `app/Http/Controllers/BusinessLocationController.php`
 - `resources/views/business_location/create.blade.php`
 - `resources/views/business_location/edit.blade.php`
@@ -393,9 +398,12 @@ What changed:
 - Added a body class hook to the auth layout.
 - Changed the login page to a two-column layout on desktop, with a wider login section than image section.
 - Left side displays the sign-in image fitted to its full section.
-- Text on the login image now appears only when the current domain matches a Business Location `Website`; it displays that Business Location name only.
+- Added business-level `Tenant domain` and `Sign in page image` fields.
+- Superadmin can set the tenant domain and sign-in image while creating a business.
+- Business Settings can set or update the tenant domain and sign-in image for an existing business.
+- Text on the login image now appears only when the current domain matches a Business `Tenant domain`; it displays that Business name only.
+- If the matched Business has its own uploaded sign-in image, login uses that image instead of the default `public/img/login-side.jpg`.
 - Business Location create/edit now includes a `Sign in page image` upload field.
-- If a matched Business Location has its own uploaded sign-in image, login uses that image instead of the default `public/img/login-side.jpg`.
 - Business Location modal submit now supports file upload.
 - Updated `public/img/login-side.jpg` using the supplied Sysnettechs POS image.
 - Right side keeps the current login form, language selector, and original blue gradient background.
@@ -403,7 +411,22 @@ What changed:
 - Desktop login page height is locked to the viewport to avoid page scrolling; mobile can still scroll when needed.
 - On tablet/mobile, the image panel is hidden and the login form remains full width.
 
-How to change the image:
+How to set tenant-specific login branding:
+
+1. Run `php artisan migrate`.
+2. Open Business Settings > Business for an existing tenant, or create a business from Superadmin.
+3. Set `Tenant domain` to the exact client domain or subdomain, for example `shop.co.ke` or `shop.sysnettechs.co.ke`.
+4. Upload the tenant `Sign in page image`.
+5. Make sure the domain points to the same Ultimate POS installation.
+6. Open the login page using that domain. If the domain matches, the login page shows that business name and image.
+
+Fallback behavior:
+
+1. If the domain does not match any Business `Tenant domain`, login uses `public/img/login-side.jpg`.
+2. If the domain matches a tenant but no tenant image is uploaded, login still uses `public/img/login-side.jpg`.
+3. The business name only appears when the domain matches a tenant.
+
+How to change the default fallback image:
 
 1. Upload your preferred image as `public/img/login-side.jpg`.
 2. Keep the same file name to avoid editing code.
@@ -411,20 +434,14 @@ How to change the image:
 4. Run `php artisan optimize:clear`.
 5. Hard-refresh the browser if the old image is cached.
 
-How to show the business location name on the image:
-
-1. Open the Business Location.
-2. Set the `Website` field to the domain/subdomain used by that client, for example `shop.co.ke` or `shop.sysnettechs.co.ke`.
-3. When that domain opens the login page, the image text will show only that Business Location name.
-
-How to let each location upload its own image:
+Previous location-level image option:
 
 1. Run `php artisan migrate`.
 2. Open Business Settings > Business Locations.
 3. Edit the location.
 4. Upload an image in `Sign in page image`.
 5. Save the location.
-6. Make sure the location `Website` matches the login domain/subdomain.
+6. This remains available for records, but the login page now uses Business `Tenant domain` for tenant branding.
 
 ### Recommended Online Deployment Steps
 
@@ -434,7 +451,7 @@ How to let each location upload its own image:
 4. Upload changed `routes/web.php`.
 5. Upload new migration files.
 6. Back up the live database from cPanel or phpMyAdmin.
-7. Run migrations only if uploading features that added permissions.
+7. Run migrations if uploading features that added permissions or database columns.
 
 For all changes:
 
@@ -451,4 +468,4 @@ php artisan optimize:clear
 
 ### Migration Safety Note
 
-The added migrations only create permissions. They should not delete existing sales, products, customers, stock, or payment data. Always back up the live database before running migrations.
+The added migrations create permissions and small nullable columns, such as tenant login branding fields. They should not delete existing sales, products, customers, stock, or payment data. Always back up the live database before running migrations.
