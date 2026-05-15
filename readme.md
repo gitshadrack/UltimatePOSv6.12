@@ -251,6 +251,48 @@ php artisan optimize:clear
 
 After migration, edit the role and enable `Import sales` only for users who should import sales.
 
+### 9. Basic PWA Installation Support
+
+Purpose: Make the POS installable as a basic Progressive Web App using the Sysnettechs Solutions logo.
+
+Files added:
+
+- `public/manifest.json`
+- `public/service-worker.js`
+- `resources/views/layouts/partials/pwa.blade.php`
+- `public/pwa/sysnettechs-logo.png`
+- `public/pwa/icon-192.png`
+- `public/pwa/icon-512.png`
+
+Files changed:
+
+- `resources/views/layouts/app.blade.php`
+- `resources/views/layouts/auth.blade.php`
+- `resources/views/layouts/auth2.blade.php`
+- `resources/views/layouts/restaurant.blade.php`
+- `readme.md`
+
+What changed:
+
+- Added web app manifest for `Sysnettechs Solutions POS`.
+- Added install icons generated from the supplied Sysnettechs Solutions logo.
+- Added service worker registration to the main app, auth, and restaurant layouts.
+- Added a basic service worker that caches static assets only.
+- The PWA is installable on supported browsers when served over HTTPS or localhost.
+
+Important limitation:
+
+- This is a basic installable PWA. It does not make sales, stock, payments, or reports work offline.
+- Offline POS sales would require a separate offline queue and sync feature to protect stock and payment accuracy.
+
+Server action:
+
+```bash
+php artisan optimize:clear
+```
+
+No migration is needed.
+
 ### Recommended Online Deployment Steps
 
 1. Upload all changed controller files.

@@ -26,6 +26,7 @@
         name="viewport">
     <!-- CSRF Token -->
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    @include('layouts.partials.pwa')
     
     <title>@yield('title') - {{ Session::get('business.name') }}</title>
 
