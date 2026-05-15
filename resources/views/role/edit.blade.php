@@ -742,6 +742,14 @@
                           </label>
                         </div>
                     </div>
+                    <div class="col-md-12">
+                        <div class="checkbox">
+                          <label>
+                            {!! Form::checkbox('permissions[]', 'import_sales', in_array('import_sales', $role_permissions), 
+                            [ 'class' => 'input-icheck']); !!} {{ __( 'role.import_sales' ) }}
+                          </label>
+                        </div>
+                    </div>
                 @endif
                 <div class="col-md-12">
                     <div class="checkbox">

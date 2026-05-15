@@ -739,11 +739,19 @@
                       </label>
                     </div>
                 </div>
-                <div class="col-md-12">
+              <div class="col-md-12">
                 <div class="checkbox">
                   <label>
                     {!! Form::checkbox('permissions[]', 'sell.create', false, 
                     [ 'class' => 'input-icheck']); !!} {{ __( 'role.sell.create' ) }}
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-12">
+                <div class="checkbox">
+                  <label>
+                    {!! Form::checkbox('permissions[]', 'import_sales', false, 
+                    [ 'class' => 'input-icheck']); !!} {{ __( 'role.import_sales' ) }}
                   </label>
                 </div>
               </div>

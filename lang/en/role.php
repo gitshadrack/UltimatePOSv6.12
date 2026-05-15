@@ -65,6 +65,7 @@ return [
 
     'sell.view' => 'View POS sell',
     'sell.create' => 'Add POS sell',
+    'import_sales' => 'Import sales',
     'sell.update' => 'Edit POS sell',
     'sell.delete' => 'Delete POS sell',
 

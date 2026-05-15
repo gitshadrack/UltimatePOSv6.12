@@ -397,7 +397,7 @@ class AdminSidebarMenu
                             );
                         }
 
-                        if (auth()->user()->can('sell.create')) {
+                        if ($is_admin || auth()->user()->can('import_sales')) {
                             $sub->url(
                                 action([\App\Http\Controllers\ImportSalesController::class, 'index']),
                                 __('lang_v1.import_sales'),

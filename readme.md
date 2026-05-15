@@ -218,6 +218,39 @@ php artisan optimize:clear
 
 No migration is needed.
 
+### 8. Separate Import Sales Permission
+
+Purpose: Allow users to access POS sales without allowing them to import sales.
+
+Files changed:
+
+- `app/Http/Controllers/ImportSalesController.php`
+- `app/Http/Middleware/AdminSidebarMenu.php`
+- `resources/views/role/create.blade.php`
+- `resources/views/role/edit.blade.php`
+- `lang/en/role.php`
+
+Migration added:
+
+- `database/migrations/2026_05_15_000001_add_import_sales_permission.php`
+
+What changed:
+
+- Added a new permission named `import_sales`.
+- Added `Import sales` checkbox to role create/edit screens.
+- Import Sales menu now appears only for admins or users with `import_sales`.
+- Import Sales pages/actions now require `import_sales`.
+- POS access can remain enabled using `sell.create` without giving import access.
+
+Server action:
+
+```bash
+php artisan migrate
+php artisan optimize:clear
+```
+
+After migration, edit the role and enable `Import sales` only for users who should import sales.
+
 ### Recommended Online Deployment Steps
 
 1. Upload all changed controller files.

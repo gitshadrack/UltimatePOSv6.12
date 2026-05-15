@@ -56,7 +56,7 @@ class ImportSalesController extends Controller
      */
     public function index()
     {
-        if (! auth()->user()->can('sell.create')) {
+        if (! auth()->user()->can('import_sales')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -89,7 +89,7 @@ class ImportSalesController extends Controller
      */
     public function preview(Request $request)
     {
-        if (! auth()->user()->can('sell.create')) {
+        if (! auth()->user()->can('import_sales')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -162,7 +162,7 @@ class ImportSalesController extends Controller
      */
     public function import(Request $request)
     {
-        if (! auth()->user()->can('sell.create')) {
+        if (! auth()->user()->can('import_sales')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -551,7 +551,7 @@ class ImportSalesController extends Controller
      */
     public function revertSaleImport($batch)
     {
-        if (! auth()->user()->can('sell.delete')) {
+        if (! auth()->user()->can('import_sales')) {
             abort(403, 'Unauthorized action.');
         }
 
