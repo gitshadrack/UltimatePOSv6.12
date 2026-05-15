@@ -443,6 +443,40 @@ Previous location-level image option:
 5. Save the location.
 6. This remains available for records, but the login page now uses Business `Tenant domain` for tenant branding.
 
+### 13. Superadmin Business Data Initialization
+
+Purpose: Let Superadmin initialize a tenant without deleting the business, so products and prices remain but sales/stock/report transaction data is cleared.
+
+Files added:
+
+- `Modules/Superadmin/Resources/views/business/initialize_data.blade.php`
+
+Files changed:
+
+- `Modules/Superadmin/Routes/web.php`
+- `Modules/Superadmin/Http/Controllers/BusinessController.php`
+- `Modules/Superadmin/Resources/lang/en/lang.php`
+- `readme.md`
+
+What changed:
+
+- Added an `Initialize Data` action beside each business in Superadmin > Business.
+- Added a confirmation page with optional Business Location selection.
+- Superadmin must enter their password and type `RESET`.
+- If no location is selected, all locations under the business are initialized.
+- If a location is selected, only that location scope is initialized.
+- Deletes transactions, payments, account transactions, cash register history, transaction media, and sale/purchase/stock lines linked to the selected scope.
+- Sets current stock quantity to zero in `variation_location_details` for products belonging to that business and selected location scope.
+- Keeps products, variations, selling prices, categories, brands, units, users, roles, business locations, tenant domain, login image, and business settings.
+
+Server action:
+
+```bash
+php artisan optimize:clear
+```
+
+No migration is needed.
+
 ### Recommended Online Deployment Steps
 
 1. Upload all changed controller files.

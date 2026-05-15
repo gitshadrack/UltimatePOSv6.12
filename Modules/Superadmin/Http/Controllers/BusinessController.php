@@ -3,6 +3,7 @@
 namespace Modules\Superadmin\Http\Controllers;
 
 use App\Business;
+use App\BusinessLocation;
 use App\Product;
 use App\Transaction;
 use App\User;
@@ -14,6 +15,7 @@ use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Modules\Superadmin\Entities\Package;
 use Modules\Superadmin\Notifications\PasswordUpdateNotification;
 use Spatie\Permission\Models\Permission;
@@ -135,6 +137,10 @@ class BusinessController extends BaseController
                                     class="tw-m-0.5 tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline  tw-dw-btn-accent link_confirmation">'.__('lang_v1.activate').'
                                 </a>';
                     }
+
+                    $html .= ' <a href="'.action([\Modules\Superadmin\Http\Controllers\BusinessController::class, 'initializeDataForm'], [$row->id]).'"
+                                class="tw-m-0.5 tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-warning">'.__('superadmin::lang.initialize_business_data').'
+                            </a>';
 
                     if (request()->session()->get('user.business_id') != $row->id) {
                         $html .= ' <a href="'.action([\Modules\Superadmin\Http\Controllers\BusinessController::class, 'destroy'], [$row->id]).'"
@@ -345,6 +351,227 @@ class BusinessController extends BaseController
             ];
 
             return back()->with('status', $output)->withInput();
+        }
+    }
+
+    /**
+     * Show business data initialization form.
+     *
+     * @param  int  $id
+     * @return Response
+     */
+    public function initializeDataForm($id)
+    {
+        if (! auth()->user()->can('superadmin')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business = Business::findOrFail($id);
+        $locations = BusinessLocation::where('business_id', $id)
+            ->pluck('name', 'id');
+
+        return view('superadmin::business.initialize_data')
+            ->with(compact('business', 'locations'));
+    }
+
+    /**
+     * Delete operational sales/stock data for a business while preserving products and prices.
+     *
+     * @param  Request  $request
+     * @param  int  $id
+     * @return Response
+     */
+    public function initializeData(Request $request, $id)
+    {
+        if (! auth()->user()->can('superadmin')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'location_id' => 'nullable|integer',
+            'admin_password' => 'required',
+            'confirm_text' => 'required|in:RESET',
+        ]);
+
+        if (! Hash::check($request->input('admin_password'), auth()->user()->password)) {
+            return back()
+                ->withInput($request->except('admin_password'))
+                ->with('status', [
+                    'success' => 0,
+                    'msg' => __('superadmin::lang.invalid_admin_password'),
+                ]);
+        }
+
+        $business = Business::findOrFail($id);
+        $location_id = $request->input('location_id');
+
+        if (! empty($location_id)) {
+            $location_exists = BusinessLocation::where('business_id', $business->id)
+                ->where('id', $location_id)
+                ->exists();
+
+            if (! $location_exists) {
+                abort(403, 'Unauthorized action.');
+            }
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $transaction_query = Transaction::where('business_id', $business->id);
+            if (! empty($location_id)) {
+                $transaction_query->where('location_id', $location_id);
+            }
+
+            $transaction_ids = $transaction_query->pluck('id')->toArray();
+            $transaction_count = count($transaction_ids);
+            $payment_ids = [];
+
+            if (! empty($transaction_ids)) {
+                $payment_ids = DB::table('transaction_payments')
+                    ->whereIn('transaction_id', $transaction_ids)
+                    ->pluck('id')
+                    ->toArray();
+
+                if (! empty($payment_ids) && Schema::hasColumn('transaction_payments', 'parent_id')) {
+                    $child_payment_ids = DB::table('transaction_payments')
+                        ->whereIn('parent_id', $payment_ids)
+                        ->pluck('id')
+                        ->toArray();
+
+                    $payment_ids = array_values(array_unique(array_merge($payment_ids, $child_payment_ids)));
+                }
+
+                $sell_line_ids = DB::table('transaction_sell_lines')
+                    ->whereIn('transaction_id', $transaction_ids)
+                    ->pluck('id')
+                    ->toArray();
+
+                $purchase_line_ids = DB::table('purchase_lines')
+                    ->whereIn('transaction_id', $transaction_ids)
+                    ->pluck('id')
+                    ->toArray();
+
+                $stock_adjustment_line_ids = DB::table('stock_adjustment_lines')
+                    ->whereIn('transaction_id', $transaction_ids)
+                    ->pluck('id')
+                    ->toArray();
+
+                if (! empty($sell_line_ids) || ! empty($purchase_line_ids) || ! empty($stock_adjustment_line_ids)) {
+                    DB::table('transaction_sell_lines_purchase_lines')
+                        ->where(function ($query) use ($sell_line_ids, $purchase_line_ids, $stock_adjustment_line_ids) {
+                            if (! empty($sell_line_ids)) {
+                                $query->orWhereIn('sell_line_id', $sell_line_ids);
+                            }
+
+                            if (! empty($purchase_line_ids)) {
+                                $query->orWhereIn('purchase_line_id', $purchase_line_ids);
+                            }
+
+                            if (! empty($stock_adjustment_line_ids)) {
+                                $query->orWhereIn('stock_adjustment_line_id', $stock_adjustment_line_ids);
+                            }
+                        })
+                        ->delete();
+                }
+
+                if (Schema::hasTable('cash_denominations') && ! empty($payment_ids)) {
+                    DB::table('cash_denominations')
+                        ->where('business_id', $business->id)
+                        ->where('model_type', \App\TransactionPayment::class)
+                        ->whereIn('model_id', $payment_ids)
+                        ->delete();
+                }
+
+                if (Schema::hasTable('account_transactions')) {
+                    DB::table('account_transactions')
+                        ->where(function ($query) use ($transaction_ids, $payment_ids) {
+                            $query->whereIn('transaction_id', $transaction_ids);
+
+                            if (! empty($payment_ids)) {
+                                $query->orWhereIn('transaction_payment_id', $payment_ids);
+                            }
+                        })
+                        ->delete();
+                }
+
+                if (Schema::hasTable('media')) {
+                    DB::table('media')
+                        ->where('business_id', $business->id)
+                        ->where('model_type', \App\Transaction::class)
+                        ->whereIn('model_id', $transaction_ids)
+                        ->delete();
+                }
+
+                DB::table('cash_register_transactions')
+                    ->whereIn('transaction_id', $transaction_ids)
+                    ->delete();
+
+                if (! empty($payment_ids)) {
+                    DB::table('transaction_payments')
+                        ->whereIn('id', $payment_ids)
+                        ->delete();
+                }
+
+                Transaction::whereIn('id', $transaction_ids)->delete();
+            }
+
+            $register_ids = [];
+            if (empty($location_id) || Schema::hasColumn('cash_registers', 'location_id')) {
+                $register_query = DB::table('cash_registers')->where('business_id', $business->id);
+                if (! empty($location_id)) {
+                    $register_query->where('location_id', $location_id);
+                }
+
+                $register_ids = $register_query->pluck('id')->toArray();
+            }
+
+            $register_count = count($register_ids);
+
+            if (! empty($register_ids)) {
+                DB::table('cash_register_transactions')
+                    ->whereIn('cash_register_id', $register_ids)
+                    ->delete();
+
+                DB::table('cash_registers')
+                    ->whereIn('id', $register_ids)
+                    ->delete();
+            }
+
+            $location_ids = ! empty($location_id)
+                ? [$location_id]
+                : BusinessLocation::where('business_id', $business->id)->pluck('id')->toArray();
+
+            $product_ids = Product::where('business_id', $business->id)->pluck('id')->toArray();
+            $stock_rows_count = 0;
+            if (! empty($product_ids) && ! empty($location_ids)) {
+                $stock_rows_count = VariationLocationDetails::whereIn('product_id', $product_ids)
+                    ->whereIn('location_id', $location_ids)
+                    ->update(['qty_available' => 0]);
+            }
+
+            DB::commit();
+
+            return redirect()
+                ->action([\Modules\Superadmin\Http\Controllers\BusinessController::class, 'index'])
+                ->with('status', [
+                    'success' => 1,
+                    'msg' => __('superadmin::lang.business_data_initialized_successfully', [
+                        'transactions' => $transaction_count,
+                        'registers' => $register_count,
+                        'stock_rows' => $stock_rows_count,
+                    ]),
+                ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
+
+            return back()
+                ->withInput($request->except('admin_password'))
+                ->with('status', [
+                    'success' => 0,
+                    'msg' => __('messages.something_went_wrong'),
+                ]);
         }
     }
 
