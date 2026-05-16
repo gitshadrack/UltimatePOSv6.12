@@ -7,7 +7,7 @@
 
     <div class="modal-body">
       @include('cash_register.payment_details')
-      @if(!empty($mpesa_verification) && $mpesa_verification->total != 0)
+      @if(!empty($register_details->total_mpesa) && $register_details->total_mpesa != 0)
         <hr>
         <div class="row">
           <div class="col-md-8 col-sm-12">
@@ -16,19 +16,19 @@
               <tbody>
                 <tr>
                   <th>@lang('lang_v1.total_mpesa')</th>
-                  <td><span class="display_currency" data-currency_symbol="true">{{ $mpesa_verification->total }}</span></td>
+                  <td><span class="display_currency" data-currency_symbol="true">{{ $register_details->total_mpesa }}</span></td>
                 </tr>
                 <tr>
-                  <th>@lang('lang_v1.verified')</th>
-                  <td><span class="display_currency" data-currency_symbol="true">{{ $mpesa_verification->verified }}</span></td>
+                  <th>@lang('lang_v1.verified_match')</th>
+                  <td><span class="display_currency" data-currency_symbol="true">{{ $register_details->verified_mpesa }}</span></td>
                 </tr>
                 <tr>
-                  <th>@lang('lang_v1.pending')</th>
-                  <td><span class="display_currency" data-currency_symbol="true">{{ $mpesa_verification->pending }}</span></td>
+                  <th>@lang('lang_v1.pending_verification')</th>
+                  <td><span class="display_currency" data-currency_symbol="true">{{ $register_details->pending_mpesa }}</span></td>
                 </tr>
                 <tr>
-                  <th>@lang('lang_v1.rejected')</th>
-                  <td><span class="display_currency" data-currency_symbol="true">{{ $mpesa_verification->rejected }}</span></td>
+                  <th>@lang('lang_v1.rejected_msg')</th>
+                  <td><span class="display_currency" data-currency_symbol="true">{{ $register_details->rejected_mpesa }}</span></td>
                 </tr>
               </tbody>
             </table>

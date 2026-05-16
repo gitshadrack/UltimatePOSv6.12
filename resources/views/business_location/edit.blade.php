@@ -26,6 +26,17 @@
                 </div>
                 <div class="col-sm-6">
                     <div class="form-group">
+                        <div class="checkbox">
+                            <label>
+                                {!! Form::checkbox('enable_mpesa_verification', 1, !empty($location->enable_mpesa_verification) ? true : false, ['class' => 'input-icheck']); !!}
+                                <strong>Enable Manual M-PESA Verification</strong>
+                            </label>
+                            <p class="help-block">If enabled, cash M-PESA payments will remain pending until approved by an admin from the reports dashboard.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="form-group">
                         {!! Form::label('landmark', __( 'business.landmark' ) . ':') !!}
                         {!! Form::text('landmark', $location->landmark, ['class' => 'form-control', 'placeholder' => __( 'business.landmark' ) ]); !!}
                     </div>

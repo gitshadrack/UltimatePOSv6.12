@@ -769,7 +769,7 @@ class TransactionUtil extends Util
 
                     for ($i = 1; $i < 8; $i++) {
                         if ($payment['method'] == 'custom_pay_'.$i) {
-                            $payment_data['transaction_no'] = $payment["transaction_no_{$i}"];
+                            $payment_data['transaction_no'] = strtoupper(trim((string) ($payment["transaction_no_{$i}"] ?? '')));
                         }
                     }
 
@@ -779,13 +779,13 @@ class TransactionUtil extends Util
                         $denominations[$payment_ref_no] = $payment['denominations'];
                     }
 
-                    $account_transactions[$c] = [];
+                    if (! $this->shouldSkipMpesaAccountPosting($payment_data, $transaction->location_id)) {
+                        //create account transaction
+                        $payment_data['transaction_type'] = $transaction->type;
+                        $account_transactions[$c] = $payment_data;
 
-                    //create account transaction
-                    $payment_data['transaction_type'] = $transaction->type;
-                    $account_transactions[$c] = $payment_data;
-
-                    $c++;
+                        $c++;
+                    }
                 }
             }
         }
@@ -839,7 +839,7 @@ class TransactionUtil extends Util
 
         for ($i = 1; $i < 8; $i++) {
             if ($payment['method'] == 'custom_pay_'.$i) {
-                $payment['transaction_no'] = $payment["transaction_no_{$i}"];
+                $payment['transaction_no'] = strtoupper(trim((string) ($payment["transaction_no_{$i}"] ?? '')));
             }
             unset($payment["transaction_no_{$i}"]);
         }
@@ -864,6 +864,18 @@ class TransactionUtil extends Util
 
         $transaction_type = ! empty($transaction->type) ? $transaction->type : null;
 
+        if ($payment['method'] == 'custom_pay_1') {
+            $mpesa_payment_changed = $tp->method != 'custom_pay_1'
+                || (float) $tp->amount != (float) $payment['amount']
+                || (string) $tp->transaction_no != (string) ($payment['transaction_no'] ?? '');
+
+            if ($mpesa_payment_changed) {
+                $payment['mpesa_verification_status'] = 'pending';
+                $payment['mpesa_verified_by'] = null;
+                $payment['mpesa_verified_at'] = null;
+            }
+        }
+
         $tp->update($payment);
 
         if (! empty($denominations)) {
@@ -874,6 +886,29 @@ class TransactionUtil extends Util
         event(new TransactionPaymentUpdated($tp, $transaction->type));
 
         return true;
+    }
+
+    /**
+     * Keep unverified M-Pesa collections out of account_transactions.
+     *
+     * @param  array  $payment_data
+     * @return bool
+     */
+    private function shouldSkipMpesaAccountPosting($payment_data, $location_id = null)
+    {
+        if (($payment_data['method'] ?? null) != 'custom_pay_1'
+            || ($payment_data['mpesa_verification_status'] ?? 'pending') == 'verified') {
+            return false;
+        }
+
+        $location_id = $location_id ?? ($payment_data['location_id'] ?? null);
+        if (empty($location_id)) {
+            return false;
+        }
+
+        return BusinessLocation::where('id', $location_id)
+            ->where('enable_mpesa_verification', 1)
+            ->exists();
     }
 
     /**
@@ -6086,7 +6121,7 @@ class TransactionUtil extends Util
 
         for ($i = 1; $i < 8; $i++) {
             if ($inputs['method'] == 'custom_pay_'.$i) {
-                $inputs['transaction_no'] = $request->input("transaction_no_{$i}");
+                $inputs['transaction_no'] = strtoupper(trim((string) $request->input("transaction_no_{$i}")));
             }
         }
 
@@ -6134,7 +6169,9 @@ class TransactionUtil extends Util
 
         $inputs['transaction_type'] = $due_payment_type;
 
-        event(new TransactionPaymentAdded($parent_payment, $inputs));
+        if (! $this->shouldSkipMpesaAccountPosting($inputs)) {
+            event(new TransactionPaymentAdded($parent_payment, $inputs));
+        }
 
         //Distribute above payment among unpaid transactions
         if (! $is_reverse) {

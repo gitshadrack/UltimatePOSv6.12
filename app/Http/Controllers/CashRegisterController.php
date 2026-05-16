@@ -199,13 +199,14 @@ class CashRegisterController extends Controller
         $is_types_of_service_enabled = $this->moduleUtil->isModuleEnabled('types_of_service');
 
         $details = $this->cashRegisterUtil->getRegisterTransactionDetails($user_id, $open_time, $close_time, $is_types_of_service_enabled);
+        $mpesa_verification = $this->cashRegisterUtil->getRegisterMpesaVerificationSummary($register_details);
 
         $payment_types = $this->cashRegisterUtil->payment_types($register_details->location_id, true, $business_id);
 
         $pos_settings = ! empty(request()->session()->get('business.pos_settings')) ? json_decode(request()->session()->get('business.pos_settings'), true) : [];
 
         return view('cash_register.close_register_modal')
-                    ->with(compact('register_details', 'details', 'payment_types', 'pos_settings'));
+                    ->with(compact('register_details', 'details', 'payment_types', 'pos_settings', 'mpesa_verification'));
     }
 
     /**

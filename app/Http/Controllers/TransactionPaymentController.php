@@ -82,11 +82,11 @@ class TransactionPaymentController extends Controller
                 $inputs['payment_for'] = $transaction->contact_id;
 
                 if ($inputs['method'] == 'custom_pay_1') {
-                    $inputs['transaction_no'] = $request->input('transaction_no_1');
+                    $inputs['transaction_no'] = strtoupper(trim((string) $request->input('transaction_no_1')));
                 } elseif ($inputs['method'] == 'custom_pay_2') {
-                    $inputs['transaction_no'] = $request->input('transaction_no_2');
+                    $inputs['transaction_no'] = strtoupper(trim((string) $request->input('transaction_no_2')));
                 } elseif ($inputs['method'] == 'custom_pay_3') {
-                    $inputs['transaction_no'] = $request->input('transaction_no_3');
+                    $inputs['transaction_no'] = strtoupper(trim((string) $request->input('transaction_no_3')));
                 }
 
                 if (! empty($request->input('account_id')) && $inputs['method'] != 'advance') {
@@ -245,11 +245,11 @@ class TransactionPaymentController extends Controller
             $inputs['amount'] = $this->transactionUtil->num_uf($inputs['amount']);
 
             if ($inputs['method'] == 'custom_pay_1') {
-                $inputs['transaction_no'] = $request->input('transaction_no_1');
+                $inputs['transaction_no'] = strtoupper(trim((string) $request->input('transaction_no_1')));
             } elseif ($inputs['method'] == 'custom_pay_2') {
-                $inputs['transaction_no'] = $request->input('transaction_no_2');
+                $inputs['transaction_no'] = strtoupper(trim((string) $request->input('transaction_no_2')));
             } elseif ($inputs['method'] == 'custom_pay_3') {
-                $inputs['transaction_no'] = $request->input('transaction_no_3');
+                $inputs['transaction_no'] = strtoupper(trim((string) $request->input('transaction_no_3')));
             }
 
             if (! empty($request->input('account_id'))) {
@@ -282,6 +282,18 @@ class TransactionPaymentController extends Controller
             }
 
             DB::beginTransaction();
+
+            if ($inputs['method'] == 'custom_pay_1') {
+                $mpesa_payment_changed = $payment->method != 'custom_pay_1'
+                    || (float) $payment->amount != (float) $inputs['amount']
+                    || (string) $payment->transaction_no != (string) ($inputs['transaction_no'] ?? '');
+
+                if ($mpesa_payment_changed) {
+                    $inputs['mpesa_verification_status'] = 'pending';
+                    $inputs['mpesa_verified_by'] = null;
+                    $inputs['mpesa_verified_at'] = null;
+                }
+            }
 
             $payment->update($inputs);
 

@@ -12,6 +12,34 @@
     <div class="modal-body">
       @if(auth()->user()->can('view_cash_register'))
         @include('cash_register.payment_details')
+        @if(!empty($register_details->total_mpesa) && $register_details->total_mpesa != 0)
+          <hr>
+          <div class="row">
+            <div class="col-md-8 col-sm-12">
+              <h3>@lang('lang_v1.mpesa_verification')</h3>
+              <table class="table table-slim">
+                <tbody>
+                  <tr>
+                    <th>@lang('lang_v1.total_mpesa')</th>
+                    <td><span class="display_currency" data-currency_symbol="true">{{ $register_details->total_mpesa }}</span></td>
+                  </tr>
+                  <tr>
+                    <th>@lang('lang_v1.verified_match')</th>
+                    <td><span class="display_currency" data-currency_symbol="true">{{ $register_details->verified_mpesa }}</span></td>
+                  </tr>
+                  <tr>
+                    <th>@lang('lang_v1.pending_verification')</th>
+                    <td><span class="display_currency" data-currency_symbol="true">{{ $register_details->pending_mpesa }}</span></td>
+                  </tr>
+                  <tr>
+                    <th>@lang('lang_v1.rejected_msg')</th>
+                    <td><span class="display_currency" data-currency_symbol="true">{{ $register_details->rejected_mpesa }}</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        @endif
         <hr>
       @endif
       <div class="row">

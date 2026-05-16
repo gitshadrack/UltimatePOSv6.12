@@ -167,6 +167,7 @@ class BusinessLocationController extends Controller
 
             $input = $request->only(['name', 'landmark', 'city', 'state', 'country', 'zip_code', 'invoice_scheme_id',
                 'invoice_layout_id', 'mobile', 'alternate_number', 'email', 'website', 'custom_field1', 'custom_field2', 'custom_field3', 'custom_field4', 'location_id', 'selling_price_group_id', 'default_payment_accounts', 'featured_products', 'sale_invoice_layout_id', 'sale_invoice_scheme_id']);
+            $input['enable_mpesa_verification'] = $request->input('enable_mpesa_verification', 0);
 
             $input['business_id'] = $business_id;
             $login_image = $this->commonUtil->uploadFile($request, 'login_image', 'location_login_images', 'image');
@@ -274,7 +275,8 @@ class BusinessLocationController extends Controller
         try {
             $input = $request->only(['name', 'landmark', 'city', 'state', 'country',
                 'zip_code', 'invoice_scheme_id',
-                'invoice_layout_id', 'mobile', 'alternate_number', 'email', 'website', 'custom_field1', 'custom_field2', 'custom_field3', 'custom_field4', 'location_id', 'selling_price_group_id', 'default_payment_accounts', 'featured_products', 'sale_invoice_layout_id', 'sale_invoice_scheme_id' ]);
+                'invoice_layout_id', 'mobile', 'alternate_number', 'email', 'website', 'custom_field1', 'custom_field2', 'custom_field3', 'custom_field4', 'location_id', 'selling_price_group_id', 'default_payment_accounts', 'featured_products', 'sale_invoice_layout_id', 'sale_invoice_scheme_id', 'enable_mpesa_verification' ]);
+            $input['enable_mpesa_verification'] = $request->input('enable_mpesa_verification', 0);
 
             $business_id = $request->session()->get('user.business_id');
             $login_image = $this->commonUtil->uploadFile($request, 'login_image', 'location_login_images', 'image');

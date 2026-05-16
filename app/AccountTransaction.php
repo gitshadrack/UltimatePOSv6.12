@@ -55,6 +55,11 @@ class AccountTransaction extends Model
      */
     public static function createAccountTransaction($data)
     {
+        if (! empty($data['transaction_payment_id'])
+            && self::isUnverifiedMpesaPayment($data['transaction_payment_id'])) {
+            return null;
+        }
+
         $transaction_data = [
             'amount' => $data['amount'],
             'account_id' => $data['account_id'],
@@ -84,8 +89,7 @@ class AccountTransaction extends Model
     public static function updateAccountTransaction($transaction_payment, $transaction_type)
     {
         if (! empty($transaction_payment->account_id)) {
-            if ($transaction_payment->method == 'custom_pay_1'
-                && $transaction_payment->mpesa_verification_status != 'verified') {
+            if (self::isUnverifiedMpesaPayment($transaction_payment)) {
                 AccountTransaction::where('transaction_payment_id', $transaction_payment->id)->delete();
 
                 return true;
@@ -122,6 +126,38 @@ class AccountTransaction extends Model
                 self::createAccountTransaction($accnt_trans_data);
             }
         }
+    }
+
+    /**
+     * M-PESA sale payments must not hit the accounting ledger until verified.
+     *
+     * @param  \App\TransactionPayment|int  $payment
+     * @return bool
+     */
+    public static function isUnverifiedMpesaPayment($payment)
+    {
+        if (! $payment instanceof TransactionPayment) {
+            $payment = TransactionPayment::find($payment);
+        }
+
+        if (empty($payment)
+            || $payment->method != 'custom_pay_1'
+            || $payment->mpesa_verification_status == 'verified') {
+            return false;
+        }
+
+        $transaction = $payment->relationLoaded('transaction') ? $payment->transaction : null;
+        if (empty($transaction) && ! empty($payment->transaction_id)) {
+            $transaction = Transaction::select('id', 'location_id')->find($payment->transaction_id);
+        }
+
+        if (empty($transaction->location_id)) {
+            return false;
+        }
+
+        return BusinessLocation::where('id', $transaction->location_id)
+            ->where('enable_mpesa_verification', 1)
+            ->exists();
     }
 
     public function transfer_transaction()

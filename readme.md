@@ -446,15 +446,25 @@ Files added:
 
 - `database/migrations/2026_05_16_000001_add_mpesa_verification_fields_to_transaction_payments_table.php`
 - `database/migrations/2026_05_16_000002_remove_unverified_mpesa_account_transactions.php`
+- `database/migrations/2026_05_16_000004_add_enable_mpesa_verification_to_business_locations_table.php`
 - `resources/views/report/mpesa_verification.blade.php`
 
 Files changed:
 
+- `app/AccountTransaction.php`
+- `app/BusinessLocation.php`
+- `app/Http/Controllers/BusinessLocationController.php`
 - `app/Http/Controllers/ReportController.php`
 - `app/Http/Controllers/CashRegisterController.php`
 - `app/Http/Middleware/AdminSidebarMenu.php`
+- `app/Listeners/AddAccountTransaction.php`
 - `app/Utils/CashRegisterUtil.php`
+- `app/Utils/TransactionUtil.php`
+- `resources/views/business_location/create.blade.php`
+- `resources/views/business_location/edit.blade.php`
+- `resources/views/cash_register/close_register_modal.blade.php`
 - `resources/views/cash_register/register_details.blade.php`
+- `resources/views/report/mpesa_verification.blade.php`
 - `routes/web.php`
 - `lang/en/lang_v1.php`
 - `readme.md`
@@ -466,18 +476,23 @@ Database fields added to `transaction_payments`:
 - `mpesa_verified_at`
 - `mpesa_verification_note`
 
+Database fields added to `business_locations`:
+
+- `enable_mpesa_verification`: location-level toggle for manual M-Pesa verification.
+
 What changed:
 
 - M-PESA payments continue to be saved as `transaction_payments.method = custom_pay_1`.
-- The cashier-entered M-PESA transaction number continues to be saved in `transaction_payments.transaction_no`.
-- Added `Reports > M-PESA Verification`.
-- The verification screen lists M-PESA sale payments with invoice number, sale date/time, cashier, register, customer, amount, transaction number, status, verifier, and action buttons.
-- Admin can mark each payment as `Verified` or `Rejected`, or add/update a note.
-- The screen supports filters for cashier, location, register, verification status, and date range.
-- Closed/current register details now show an `M-PESA Verification` summary with Total M-PESA, Verified, Pending, and Rejected amounts.
-- M-PESA payments no longer post to linked payment accounts while they are `pending` or `rejected`.
-- The linked payment account is posted only after the M-PESA payment is marked `Verified`.
-- If a verified M-PESA payment is later rejected, its account transaction is removed from account balances.
+- The cashier-entered M-PESA transaction number continues to be saved in `transaction_payments.transaction_no`, but is now normalized with `strtoupper(trim(...))` before saving.
+- Added a Business Location checkbox: `Enable Manual M-PESA Verification`.
+- Added `Reports > M-Pesa Audit Trail`.
+- The audit screen is a pending-only utility dashboard with sale date/invoice, cashier, M-Pesa reference code, KES amount, and fast AJAX `Verify` / `Reject` buttons.
+- The audit screen supports filters for cashier, location, register, and date range.
+- Closed/current register details and the close-register modal now show an `M-Pesa Audit Trail` summary with Total M-PESA, Verified Match, Pending Audit, and Invalid / Missing Message amounts.
+- Register M-Pesa totals are dynamic per location. If the register location has manual verification enabled, totals are split into verified, pending, and rejected via `SUM(CASE WHEN...)` audit queries. If disabled, all `custom_pay_1` collections are treated as verified immediately.
+- M-PESA payments only stay out of linked payment accounts when the transaction location has `enable_mpesa_verification = 1` and the payment is still `pending` or `rejected`.
+- For enabled locations, the linked payment account is posted only after the M-PESA payment is marked `Verified`.
+- If a verified M-PESA payment in an enabled location is later rejected, its account transaction is removed from account balances.
 - Existing unverified M-PESA account transactions are soft-deleted by the cleanup migration.
 - Access uses the existing `register_report.view` permission.
 
@@ -490,19 +505,33 @@ php artisan optimize:clear
 
 Recommended workflow:
 
+1. Open Business Settings > Business Locations.
+2. Edit each store that needs manual matching.
+3. Enable `Enable Manual M-PESA Verification`.
+4. Save the location.
+5. Cashier makes a POS sale in that location.
+6. Cashier selects M-PESA.
+7. Cashier enters the M-PESA transaction/reference code.
+8. Cashier completes the sale and closes the register.
+9. Admin opens `Reports > M-Pesa Audit Trail`.
+10. Admin compares each transaction number and amount against Safaricom/M-PESA messages.
+11. Admin marks each payment as `Verified` or `Rejected`.
+
+For locations where `Enable Manual M-PESA Verification` is disabled:
+
 1. Cashier makes a POS sale.
 2. Cashier selects M-PESA.
 3. Cashier enters the M-PESA transaction number.
-4. Cashier completes the sale and closes the register.
-5. Admin opens `Reports > M-PESA Verification`.
-6. Admin compares each transaction number and amount against Safaricom/M-PESA messages.
-7. Admin marks each payment as `Verified` or `Rejected`, or leaves it `Pending`.
+4. Cashier completes the sale.
+5. M-PESA behaves like the standard `custom_pay_1` workflow and posts normally to the configured payment account.
 
 Verification notes:
 
 - New M-PESA payments default to `pending`.
 - Existing M-PESA rows are backfilled to `pending` by the migration.
-- Pending or rejected M-PESA payments remain visible in payment/register reports, but they do not increase the linked payment account balance.
+- Pending or rejected M-PESA payments remain visible in payment/register reports, but they do not increase the linked payment account balance for locations where manual verification is enabled.
+- Payment account posting is guarded in `TransactionUtil`, `AddAccountTransaction`, and `AccountTransaction` so enabled locations cannot accidentally post unverified M-PESA to `account_transactions`.
+- Disabled locations bypass the audit queue and treat all M-PESA as verified for register/accounting purposes.
 - This is a manual verification workflow. Future automation can import M-PESA statements/SMS/API data and match by transaction number, amount, date/time, till/paybill, and reference.
 
 Previous location-level image option:

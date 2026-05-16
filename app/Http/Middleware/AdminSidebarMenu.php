@@ -757,7 +757,7 @@ class AdminSidebarMenu
                             $sub->url(
                                 action([\App\Http\Controllers\ReportController::class, 'getMpesaVerificationReport']),
                                 __('lang_v1.mpesa_verification'),
-                                ['icon' => '', 'active' => request()->segment(2) == 'mpesa-verification']
+                                ['icon' => 'fas fa-mobile-alt', 'active' => request()->is('reports/mpesa-verification*')]
                             );
                         }
                         if (auth()->user()->can('sales_representative.view')) {

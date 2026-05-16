@@ -1705,11 +1705,17 @@ class ReportController extends Controller
                 ->where('t.type', 'sell')
                 ->where('t.status', 'final')
                 ->where('transaction_payments.method', 'custom_pay_1')
+                ->where('bl.enable_mpesa_verification', 1)
+                ->where(function ($q) {
+                    $q->whereNull('transaction_payments.mpesa_verification_status')
+                        ->orWhere('transaction_payments.mpesa_verification_status', 'pending');
+                })
                 ->select(
                     'transaction_payments.id',
                     'transaction_payments.amount',
                     'transaction_payments.is_return',
                     'transaction_payments.transaction_no',
+                    'transaction_payments.note',
                     'transaction_payments.mpesa_verification_status',
                     'transaction_payments.mpesa_verified_at',
                     'transaction_payments.mpesa_verification_note',
@@ -1749,55 +1755,38 @@ class ReportController extends Controller
                 $query->where('cr.id', $request->get('register_id'));
             }
 
-            if (! empty($request->get('status'))) {
-                $query->where('transaction_payments.mpesa_verification_status', $request->get('status'));
-            }
-
             return Datatables::of($query)
-                ->editColumn('invoice_no', function ($row) {
-                    return '<a data-href="'.action([\App\Http\Controllers\SellController::class, 'show'], [$row->transaction_id]).'" href="#" data-container=".view_modal" class="btn-modal">'.$row->invoice_no.'</a>';
+                ->addColumn('transaction_date_invoice', function ($row) {
+                    $invoice = '<a data-href="'.action([\App\Http\Controllers\SellController::class, 'show'], [$row->transaction_id]).'" href="#" data-container=".view_modal" class="btn-modal">'.$row->invoice_no.'</a>';
+
+                    return $this->productUtil->format_date($row->transaction_date, true).'<br>'.$invoice;
                 })
-                ->editColumn('transaction_date', '{{@format_datetime($transaction_date)}}')
+                ->addColumn('mpesa_reference_code', function ($row) {
+                    return e($row->transaction_no ?: $row->note);
+                })
                 ->editColumn('amount', function ($row) {
                     $amount = $row->is_return ? -1 * $row->amount : $row->amount;
 
                     return '<span class="mpesa_amount" data-orig-value="'.$amount.'">'.$this->transactionUtil->num_f($amount, true).'</span>';
                 })
-                ->editColumn('customer', function ($row) {
-                    return ! empty($row->supplier_business_name) ? $row->supplier_business_name.',<br>'.$row->customer : $row->customer;
-                })
-                ->editColumn('mpesa_verification_status', function ($row) {
-                    $status = $row->mpesa_verification_status ?: 'pending';
-                    $class = $status == 'verified' ? 'success' : ($status == 'rejected' ? 'danger' : 'warning');
-
-                    return '<span class="label label-'.$class.'">'.__('lang_v1.'.$status).'</span>';
-                })
-                ->editColumn('mpesa_verified_at', function ($row) {
-                    return ! empty($row->mpesa_verified_at) ? $this->productUtil->format_date($row->mpesa_verified_at, true) : '';
-                })
-                ->addColumn('verified_by', function ($row) {
-                    return trim($row->verifier_name);
-                })
                 ->addColumn('action', function ($row) {
-                    $note = e($row->mpesa_verification_note);
                     $url = action([\App\Http\Controllers\ReportController::class, 'updateMpesaVerification'], [$row->id]);
 
-                    return '<div class="input-group input-group-sm" style="min-width: 320px;">
-                            <input type="text" class="form-control mpesa-verification-note" value="'.$note.'" placeholder="'.__('lang_v1.note').'">
-                            <span class="input-group-btn">
-                                <button type="button" class="btn btn-success btn-sm update-mpesa-verification" data-url="'.$url.'" data-status="verified">'.__('lang_v1.verify').'</button>
-                                <button type="button" class="btn btn-danger btn-sm update-mpesa-verification" data-url="'.$url.'" data-status="rejected">'.__('lang_v1.reject').'</button>
-                                <button type="button" class="btn btn-default btn-sm update-mpesa-verification" data-url="'.$url.'" data-status="">'.__('lang_v1.add_note').'</button>
-                            </span>
+                    return '<div class="btn-group btn-group-sm mpesa-fast-actions" role="group">
+                            <button type="button" class="btn btn-success update-mpesa-verification" data-url="'.$url.'" data-status="verified">'.__('lang_v1.verify').'</button>
+                            <button type="button" class="btn btn-danger update-mpesa-verification" data-url="'.$url.'" data-status="rejected">'.__('lang_v1.reject').'</button>
                         </div>';
                 })
                 ->filterColumn('cashier_name', function ($query, $keyword) {
                     $query->whereRaw("CONCAT(COALESCE(cashier.surname, ''), ' ', COALESCE(cashier.first_name, ''), ' ', COALESCE(cashier.last_name, '')) like ?", ["%{$keyword}%"]);
                 })
-                ->filterColumn('verified_by', function ($query, $keyword) {
-                    $query->whereRaw("CONCAT(COALESCE(verifier.surname, ''), ' ', COALESCE(verifier.first_name, ''), ' ', COALESCE(verifier.last_name, '')) like ?", ["%{$keyword}%"]);
+                ->filterColumn('mpesa_reference_code', function ($query, $keyword) {
+                    $query->where(function ($q) use ($keyword) {
+                        $q->where('transaction_payments.transaction_no', 'like', "%{$keyword}%")
+                            ->orWhere('transaction_payments.note', 'like', "%{$keyword}%");
+                    });
                 })
-                ->rawColumns(['invoice_no', 'amount', 'customer', 'mpesa_verification_status', 'action'])
+                ->rawColumns(['transaction_date_invoice', 'amount', 'action'])
                 ->make(true);
         }
 
@@ -1831,26 +1820,28 @@ class ReportController extends Controller
         }
 
         $request->validate([
-            'status' => 'nullable|in:pending,verified,rejected',
+            'status' => 'required|in:verified,rejected',
             'note' => 'nullable|string',
         ]);
 
         try {
             $business_id = $request->session()->get('user.business_id');
             $payment = TransactionPayment::join('transactions as t', 'transaction_payments.transaction_id', '=', 't.id')
+                ->join('business_locations as bl', 't.location_id', '=', 'bl.id')
                 ->where('transaction_payments.id', $id)
                 ->where('transaction_payments.method', 'custom_pay_1')
                 ->where('t.business_id', $business_id)
+                ->where('bl.enable_mpesa_verification', 1)
                 ->select('transaction_payments.*')
                 ->firstOrFail();
 
-            if ($request->filled('status')) {
-                $payment->mpesa_verification_status = $request->input('status');
-                $payment->mpesa_verified_by = auth()->id();
-                $payment->mpesa_verified_at = \Carbon::now();
-            }
+            $payment->mpesa_verification_status = $request->input('status');
+            $payment->mpesa_verified_by = auth()->id();
+            $payment->mpesa_verified_at = \Carbon::now();
 
-            $payment->mpesa_verification_note = $request->input('note');
+            if ($request->has('note')) {
+                $payment->mpesa_verification_note = $request->input('note');
+            }
             $payment->save();
 
             if ($this->moduleUtil->isModuleEnabled('account', $business_id)) {
@@ -1869,7 +1860,7 @@ class ReportController extends Controller
             $output = ['success' => false, 'msg' => __('messages.something_went_wrong')];
         }
 
-        return $output;
+        return response()->json($output);
     }
 
     /**

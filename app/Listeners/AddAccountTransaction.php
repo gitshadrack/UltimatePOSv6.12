@@ -44,8 +44,7 @@ class AddAccountTransaction
 
         // //Create new account transaction
         if (! empty($event->formInput['account_id']) && $event->transactionPayment->method != 'advance') {
-            if ($event->transactionPayment->method == 'custom_pay_1'
-                && $event->transactionPayment->mpesa_verification_status != 'verified') {
+            if (AccountTransaction::isUnverifiedMpesaPayment($event->transactionPayment)) {
                 return true;
             }
 

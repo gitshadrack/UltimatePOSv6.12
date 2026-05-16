@@ -298,7 +298,7 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::get('/reports/stock-adjustment-report', [ReportController::class, 'getStockAdjustmentReport']);
     Route::get('/reports/register-report', [ReportController::class, 'getRegisterReport']);
     Route::get('/reports/mpesa-verification', [ReportController::class, 'getMpesaVerificationReport']);
-    Route::post('/reports/mpesa-verification/{id}', [ReportController::class, 'updateMpesaVerification']);
+    Route::post('/reports/mpesa-verification/{id}', [ReportController::class, 'updateMpesaVerification'])->name('reports.mpesa-verification.update');
     Route::get('/reports/sales-representative-report', [ReportController::class, 'getSalesRepresentativeReport']);
     Route::get('/reports/sales-representative-total-expense', [ReportController::class, 'getSalesRepresentativeTotalExpense']);
     Route::get('/reports/sales-representative-total-sell', [ReportController::class, 'getSalesRepresentativeTotalSell']);

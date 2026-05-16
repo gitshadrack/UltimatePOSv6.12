@@ -276,7 +276,11 @@ class CashRegisterUtil extends Util
             DB::raw("SUM(IF(pay_method='other', IF(transaction_type='expense', amount, 0), 0)) as total_other_expense"),
             DB::raw("SUM(IF(pay_method='advance', IF(transaction_type='sell', amount, 0), 0)) as total_advance"),
             DB::raw("SUM(IF(pay_method='advance', IF(transaction_type='expense', amount, 0), 0)) as total_advance_expense"),
-            DB::raw("SUM(IF(pay_method='custom_pay_1', IF(transaction_type='sell', amount, 0), 0)) as total_custom_pay_1"),
+            DB::raw("0 as total_custom_pay_1"),
+            DB::raw("0 as total_mpesa"),
+            DB::raw("0 as verified_mpesa"),
+            DB::raw("0 as pending_mpesa"),
+            DB::raw("0 as rejected_mpesa"),
             DB::raw("SUM(IF(pay_method='custom_pay_2', IF(transaction_type='sell', amount, 0), 0)) as total_custom_pay_2"),
             DB::raw("SUM(IF(pay_method='custom_pay_3', IF(transaction_type='sell', amount, 0), 0)) as total_custom_pay_3"),
             DB::raw("SUM(IF(pay_method='custom_pay_4', IF(transaction_type='sell', amount, 0), 0)) as total_custom_pay_4"),
@@ -310,6 +314,8 @@ class CashRegisterUtil extends Util
             'u.email',
             'bl.name as location_name'
         )->first();
+
+        $this->setRegisterMpesaVerificationTotals($register_details);
 
         return $register_details;
     }
@@ -410,20 +416,121 @@ class CashRegisterUtil extends Util
      */
     public function getRegisterMpesaVerificationSummary($register_details)
     {
+        if (! isset($register_details->total_mpesa)
+            || ! isset($register_details->verified_mpesa)
+            || ! isset($register_details->pending_mpesa)
+            || ! isset($register_details->rejected_mpesa)) {
+            $this->setRegisterMpesaVerificationTotals($register_details);
+        }
+
+        return (object) [
+            'total' => $register_details->total_mpesa,
+            'verified' => $register_details->verified_mpesa,
+            'pending' => $register_details->pending_mpesa,
+            'rejected' => $register_details->rejected_mpesa,
+        ];
+    }
+
+    /**
+     * Adds verified/pending/rejected M-PESA totals to register details.
+     *
+     * @param  object|null  $register_details
+     * @return void
+     */
+    private function setRegisterMpesaVerificationTotals($register_details)
+    {
+        if (empty($register_details)) {
+            return;
+        }
+
+        $location = DB::table('business_locations')
+            ->join('cash_registers', 'business_locations.id', '=', 'cash_registers.location_id')
+            ->where('cash_registers.id', $register_details->id)
+            ->select('business_locations.enable_mpesa_verification')
+            ->first();
+
+        if (! empty($location->enable_mpesa_verification)) {
+            $mpesa_totals = $this->getAuditedMpesaTotals($register_details->id);
+        } else {
+            $mpesa_totals = $this->getStandardPlainTotals($register_details->id);
+        }
+
+        $register_details->total_mpesa = $mpesa_totals->total ?? 0;
+        $register_details->verified_mpesa = $mpesa_totals->verified ?? 0;
+        $register_details->pending_mpesa = $mpesa_totals->pending ?? 0;
+        $register_details->rejected_mpesa = $mpesa_totals->rejected ?? 0;
+
+        $register_details->total_custom_pay_1 = $register_details->total_mpesa;
+    }
+
+    /**
+     * Returns M-PESA totals with verification status breakdown.
+     *
+     * @param  int  $register_id
+     * @return object
+     */
+    private function getAuditedMpesaTotals($register_id)
+    {
+        $register = CashRegister::find($register_id);
+
+        if (empty($register)) {
+            return $this->emptyMpesaTotals();
+        }
+
+        $close_time = ! empty($register->closed_at)
+            ? $register->closed_at
+            : \Carbon::now()->toDateTimeString();
+
         return TransactionPayment::join('transactions as t', 'transaction_payments.transaction_id', '=', 't.id')
-            ->where('t.business_id', $register_details->business_id)
-            ->where('t.created_by', $register_details->user_id)
-            ->whereBetween('t.created_at', [$register_details->open_time, $register_details->closed_at ?? \Carbon::now()->toDateTimeString()])
+            ->where('t.business_id', $register->business_id)
+            ->where('t.created_by', $register->user_id)
+            ->whereBetween('t.created_at', [$register->created_at, $close_time])
             ->where('t.type', 'sell')
             ->where('t.status', 'final')
             ->where('transaction_payments.method', 'custom_pay_1')
             ->select(
-                DB::raw("COALESCE(SUM(IF(transaction_payments.is_return = 1, -1 * transaction_payments.amount, transaction_payments.amount)), 0) as total"),
-                DB::raw("COALESCE(SUM(IF(transaction_payments.mpesa_verification_status = 'verified', IF(transaction_payments.is_return = 1, -1 * transaction_payments.amount, transaction_payments.amount), 0)), 0) as verified"),
-                DB::raw("COALESCE(SUM(IF(transaction_payments.mpesa_verification_status = 'rejected', IF(transaction_payments.is_return = 1, -1 * transaction_payments.amount, transaction_payments.amount), 0)), 0) as rejected"),
-                DB::raw("COALESCE(SUM(IF(transaction_payments.mpesa_verification_status = 'pending' OR transaction_payments.mpesa_verification_status IS NULL, IF(transaction_payments.is_return = 1, -1 * transaction_payments.amount, transaction_payments.amount), 0)), 0) as pending")
+                DB::raw("COALESCE(SUM(CASE WHEN transaction_payments.method = 'custom_pay_1' THEN CASE WHEN transaction_payments.is_return = 1 THEN -1 * transaction_payments.amount ELSE transaction_payments.amount END ELSE 0 END), 0) as total"),
+                DB::raw("COALESCE(SUM(CASE WHEN transaction_payments.mpesa_verification_status = 'verified' THEN CASE WHEN transaction_payments.is_return = 1 THEN -1 * transaction_payments.amount ELSE transaction_payments.amount END ELSE 0 END), 0) as verified"),
+                DB::raw("COALESCE(SUM(CASE WHEN transaction_payments.mpesa_verification_status = 'pending' OR transaction_payments.mpesa_verification_status IS NULL THEN CASE WHEN transaction_payments.is_return = 1 THEN -1 * transaction_payments.amount ELSE transaction_payments.amount END ELSE 0 END), 0) as pending"),
+                DB::raw("COALESCE(SUM(CASE WHEN transaction_payments.mpesa_verification_status = 'rejected' THEN CASE WHEN transaction_payments.is_return = 1 THEN -1 * transaction_payments.amount ELSE transaction_payments.amount END ELSE 0 END), 0) as rejected")
             )
             ->first();
+    }
+
+    /**
+     * Returns plain M-PESA totals for locations without manual verification.
+     *
+     * @param  int  $register_id
+     * @return object
+     */
+    private function getStandardPlainTotals($register_id)
+    {
+        $total = CashRegisterTransaction::where('cash_register_id', $register_id)
+            ->where('pay_method', 'custom_pay_1')
+            ->select(DB::raw("COALESCE(SUM(CASE WHEN transaction_type = 'sell' THEN amount WHEN transaction_type = 'refund' THEN -1 * amount ELSE 0 END), 0) as total"))
+            ->value('total');
+
+        return (object) [
+            'total' => $total ?? 0,
+            'verified' => $total ?? 0,
+            'pending' => 0,
+            'rejected' => 0,
+        ];
+    }
+
+    /**
+     * Empty M-PESA totals fallback.
+     *
+     * @return object
+     */
+    private function emptyMpesaTotals()
+    {
+        return (object) [
+            'total' => 0,
+            'verified' => 0,
+            'pending' => 0,
+            'rejected' => 0,
+        ];
     }
 
     /**

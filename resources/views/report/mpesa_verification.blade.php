@@ -32,12 +32,6 @@
                     </div>
                     <div class="col-md-3">
                         <div class="form-group">
-                            {!! Form::label('mpesa_status', __('sale.status') . ':') !!}
-                            {!! Form::select('mpesa_status', ['pending' => __('lang_v1.pending'), 'verified' => __('lang_v1.verified'), 'rejected' => __('lang_v1.rejected')], null, ['class' => 'form-control select2', 'style' => 'width:100%', 'placeholder' => __('report.all')]); !!}
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="form-group">
                             {!! Form::label('mpesa_verification_date_range', __('report.date_range') . ':') !!}
                             {!! Form::text('mpesa_verification_date_range', null, ['placeholder' => __('lang_v1.select_a_date_range'), 'class' => 'form-control', 'id' => 'mpesa_verification_date_range', 'readonly']); !!}
                         </div>
@@ -53,24 +47,18 @@
                     <table class="table table-bordered table-striped" id="mpesa_verification_table">
                         <thead>
                             <tr>
-                                <th>@lang('sale.invoice_no')</th>
-                                <th>@lang('lang_v1.date')</th>
+                                <th>@lang('lang_v1.date') / @lang('sale.invoice_no')</th>
                                 <th>@lang('report.user')</th>
-                                <th>@lang('cash_register.cash_register')</th>
-                                <th>@lang('contact.customer')</th>
-                                <th>@lang('sale.amount')</th>
-                                <th>@lang('lang_v1.mpesa_transaction_no')</th>
-                                <th>@lang('sale.status')</th>
-                                <th>@lang('lang_v1.verified_by')</th>
-                                <th>@lang('lang_v1.verified_at')</th>
+                                <th>M-PESA Reference Code</th>
+                                <th>@lang('sale.amount') (KES)</th>
                                 <th>@lang('messages.action')</th>
                             </tr>
                         </thead>
                         <tfoot>
                             <tr class="bg-gray font-17 footer-total text-center">
-                                <td colspan="5"><strong>@lang('sale.total'):</strong></td>
+                                <td colspan="3"><strong>@lang('sale.total'):</strong></td>
                                 <td><span class="display_currency" id="footer_mpesa_total" data-currency_symbol="true"></span></td>
-                                <td colspan="5"></td>
+                                <td></td>
                             </tr>
                         </tfoot>
                     </table>
@@ -128,20 +116,13 @@
                     d.user_id = $('#mpesa_user_id').val();
                     d.location_id = $('#mpesa_location_id').val();
                     d.register_id = $('#mpesa_register_id').val();
-                    d.status = $('#mpesa_status').val();
                 },
             },
             columns: [
-                { data: 'invoice_no', name: 't.invoice_no' },
-                { data: 'transaction_date', name: 't.transaction_date' },
+                { data: 'transaction_date_invoice', name: 't.transaction_date' },
                 { data: 'cashier_name', name: 'cashier_name' },
-                { data: 'register_id', name: 'cr.id', searchable: false },
-                { data: 'customer', name: 'c.name' },
+                { data: 'mpesa_reference_code', name: 'transaction_payments.transaction_no' },
                 { data: 'amount', name: 'transaction_payments.amount', searchable: false },
-                { data: 'transaction_no', name: 'transaction_payments.transaction_no' },
-                { data: 'mpesa_verification_status', name: 'transaction_payments.mpesa_verification_status' },
-                { data: 'verified_by', name: 'verified_by' },
-                { data: 'mpesa_verified_at', name: 'transaction_payments.mpesa_verified_at' },
                 { data: 'action', name: 'action', orderable: false, searchable: false },
             ],
             footerCallback: function (row, data) {
@@ -153,21 +134,22 @@
             },
         });
 
-        $('#mpesa_user_id, #mpesa_location_id, #mpesa_register_id, #mpesa_status').change(function () {
+        $('#mpesa_user_id, #mpesa_location_id, #mpesa_register_id').change(function () {
             mpesa_verification_table.ajax.reload();
         });
 
         $(document).on('click', '.update-mpesa-verification', function () {
             var btn = $(this);
-            var wrapper = btn.closest('.input-group');
 
             $.ajax({
                 method: 'POST',
                 url: btn.data('url'),
                 data: {
                     status: btn.data('status'),
-                    note: wrapper.find('.mpesa-verification-note').val(),
                     _token: $('meta[name="csrf-token"]').attr('content'),
+                },
+                beforeSend: function () {
+                    btn.closest('.mpesa-fast-actions').find('button').prop('disabled', true);
                 },
                 success: function (result) {
                     if (result.success) {
@@ -175,7 +157,12 @@
                         mpesa_verification_table.ajax.reload(null, false);
                     } else {
                         toastr.error(result.msg);
+                        btn.closest('.mpesa-fast-actions').find('button').prop('disabled', false);
                     }
+                },
+                error: function () {
+                    toastr.error('{{ __('messages.something_went_wrong') }}');
+                    btn.closest('.mpesa-fast-actions').find('button').prop('disabled', false);
                 },
             });
         });
