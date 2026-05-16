@@ -30,6 +30,7 @@ return [
     'contacts' => 'Supplier & Customer Report',
     'contact' => 'Contact',
     'stock_report' => 'Stock Report',
+    'stock_sheet' => 'Stock Sheet',
     'products' => 'Products',
     'current_stock' => 'Current stock',
     'total_unit_sold' => 'Total unit sold',

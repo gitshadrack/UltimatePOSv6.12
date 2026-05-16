@@ -7,6 +7,34 @@
 
     <div class="modal-body">
       @include('cash_register.payment_details')
+      @if(!empty($mpesa_verification) && $mpesa_verification->total != 0)
+        <hr>
+        <div class="row">
+          <div class="col-md-8 col-sm-12">
+            <h3>@lang('lang_v1.mpesa_verification')</h3>
+            <table class="table table-slim">
+              <tbody>
+                <tr>
+                  <th>@lang('lang_v1.total_mpesa')</th>
+                  <td><span class="display_currency" data-currency_symbol="true">{{ $mpesa_verification->total }}</span></td>
+                </tr>
+                <tr>
+                  <th>@lang('lang_v1.verified')</th>
+                  <td><span class="display_currency" data-currency_symbol="true">{{ $mpesa_verification->verified }}</span></td>
+                </tr>
+                <tr>
+                  <th>@lang('lang_v1.pending')</th>
+                  <td><span class="display_currency" data-currency_symbol="true">{{ $mpesa_verification->pending }}</span></td>
+                </tr>
+                <tr>
+                  <th>@lang('lang_v1.rejected')</th>
+                  <td><span class="display_currency" data-currency_symbol="true">{{ $mpesa_verification->rejected }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      @endif
       <hr>
       @if(!empty($register_details->denominations))
         @php

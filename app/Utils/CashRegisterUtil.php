@@ -5,6 +5,7 @@ namespace App\Utils;
 use App\CashRegister;
 use App\CashRegisterTransaction;
 use App\Transaction;
+use App\TransactionPayment;
 use DB;
 
 class CashRegisterUtil extends Util
@@ -399,6 +400,30 @@ class CashRegisterUtil extends Util
             'types_of_service_details' => $types_of_service_details,
             'product_details' => $product_details,
         ];
+    }
+
+    /**
+     * Returns M-PESA verification totals for a register window.
+     *
+     * @param  object  $register_details
+     * @return object
+     */
+    public function getRegisterMpesaVerificationSummary($register_details)
+    {
+        return TransactionPayment::join('transactions as t', 'transaction_payments.transaction_id', '=', 't.id')
+            ->where('t.business_id', $register_details->business_id)
+            ->where('t.created_by', $register_details->user_id)
+            ->whereBetween('t.created_at', [$register_details->open_time, $register_details->closed_at ?? \Carbon::now()->toDateTimeString()])
+            ->where('t.type', 'sell')
+            ->where('t.status', 'final')
+            ->where('transaction_payments.method', 'custom_pay_1')
+            ->select(
+                DB::raw("COALESCE(SUM(IF(transaction_payments.is_return = 1, -1 * transaction_payments.amount, transaction_payments.amount)), 0) as total"),
+                DB::raw("COALESCE(SUM(IF(transaction_payments.mpesa_verification_status = 'verified', IF(transaction_payments.is_return = 1, -1 * transaction_payments.amount, transaction_payments.amount), 0)), 0) as verified"),
+                DB::raw("COALESCE(SUM(IF(transaction_payments.mpesa_verification_status = 'rejected', IF(transaction_payments.is_return = 1, -1 * transaction_payments.amount, transaction_payments.amount), 0)), 0) as rejected"),
+                DB::raw("COALESCE(SUM(IF(transaction_payments.mpesa_verification_status = 'pending' OR transaction_payments.mpesa_verification_status IS NULL, IF(transaction_payments.is_return = 1, -1 * transaction_payments.amount, transaction_payments.amount), 0)), 0) as pending")
+            )
+            ->first();
     }
 
     /**

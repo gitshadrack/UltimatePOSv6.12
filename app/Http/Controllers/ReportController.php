@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Brands;
+use App\AccountTransaction;
 use App\BusinessLocation;
 use App\CashRegister;
 use App\Category;
@@ -76,6 +77,394 @@ class ReportController extends Controller
             'opening_stock_by_sp' => $opening_stock_by_sp,
             'closing_stock_by_sp' => $closing_stock_by_sp,
         ];
+    }
+
+    /**
+     * Kenya tax administration dashboard.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function kenyaTaxDashboard(Request $request)
+    {
+        if (! auth()->user()->can('tax_report.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+        $fy = $this->businessUtil->getCurrentFinancialYear($business_id);
+        $location_id = $request->get('location_id');
+
+        $sell_query = Transaction::where('business_id', $business_id)
+            ->where('type', 'sell')
+            ->where('status', 'final')
+            ->whereDate('transaction_date', '>=', $fy['start'])
+            ->whereDate('transaction_date', '<=', $fy['end']);
+
+        $purchase_query = Transaction::where('business_id', $business_id)
+            ->where('type', 'purchase')
+            ->where('status', 'received')
+            ->whereDate('transaction_date', '>=', $fy['start'])
+            ->whereDate('transaction_date', '<=', $fy['end']);
+
+        if (! empty($location_id)) {
+            $sell_query->where('location_id', $location_id);
+            $purchase_query->where('location_id', $location_id);
+        }
+
+        $permitted_locations = auth()->user()->permitted_locations();
+        if ($permitted_locations != 'all') {
+            $sell_query->whereIn('location_id', $permitted_locations);
+            $purchase_query->whereIn('location_id', $permitted_locations);
+        }
+
+        $summary = [
+            'output_vat' => (clone $sell_query)->sum('tax_amount'),
+            'input_vat' => (clone $purchase_query)->sum('tax_amount'),
+            'gross_sales' => (clone $sell_query)->sum('final_total'),
+            'etims_pending' => (clone $sell_query)->where(function ($q) {
+                $q->whereNull('etims_status')->orWhere('etims_status', 'pending');
+            })->count(),
+            'etims_failed' => (clone $sell_query)->where('etims_status', 'failed')->count(),
+        ];
+        $summary['net_vat'] = $summary['output_vat'] - $summary['input_vat'];
+        $summary['turnover_tax'] = $summary['gross_sales'] * 0.015;
+
+        $business_locations = BusinessLocation::forDropdown($business_id, true);
+
+        return view('tax_admin.dashboard')
+            ->with(compact('summary', 'business_locations', 'fy', 'location_id'));
+    }
+
+    /**
+     * Kenya VAT sales schedule.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function kenyaVatSalesSchedule(Request $request)
+    {
+        if (! auth()->user()->can('tax_report.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+
+        if ($request->ajax()) {
+            $query = Transaction::leftJoin('contacts as c', 'transactions.contact_id', '=', 'c.id')
+                ->leftJoin('business_locations as bl', 'transactions.location_id', '=', 'bl.id')
+                ->where('transactions.business_id', $business_id)
+                ->where('transactions.type', 'sell')
+                ->where('transactions.status', 'final')
+                ->select(
+                    'transactions.id',
+                    'transactions.invoice_no',
+                    'transactions.transaction_date',
+                    'transactions.total_before_tax',
+                    'transactions.tax_amount',
+                    'transactions.final_total',
+                    'transactions.buyer_pin',
+                    'transactions.etims_status',
+                    'c.name as customer',
+                    'c.supplier_business_name',
+                    'c.tax_number',
+                    'bl.name as location_name'
+                );
+
+            $this->applyKenyaTaxFilters($query, $request, 'transactions');
+
+            return Datatables::of($query)
+                ->editColumn('transaction_date', '{{@format_datetime($transaction_date)}}')
+                ->editColumn('customer', '@if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$customer}}')
+                ->addColumn('buyer_pin_display', function ($row) {
+                    return $row->buyer_pin ?: $row->tax_number;
+                })
+                ->editColumn('total_before_tax', function ($row) {
+                    return '<span class="taxable_amount" data-orig-value="'.$row->total_before_tax.'">'.$this->transactionUtil->num_f($row->total_before_tax, true).'</span>';
+                })
+                ->editColumn('tax_amount', function ($row) {
+                    return '<span class="vat_amount" data-orig-value="'.$row->tax_amount.'">'.$this->transactionUtil->num_f($row->tax_amount, true).'</span>';
+                })
+                ->editColumn('final_total', function ($row) {
+                    return '<span class="gross_amount" data-orig-value="'.$row->final_total.'">'.$this->transactionUtil->num_f($row->final_total, true).'</span>';
+                })
+                ->editColumn('etims_status', function ($row) {
+                    return $this->formatEtimsStatus($row->etims_status);
+                })
+                ->rawColumns(['customer', 'total_before_tax', 'tax_amount', 'final_total', 'etims_status'])
+                ->make(true);
+        }
+
+        $business_locations = BusinessLocation::forDropdown($business_id, true);
+
+        return view('tax_admin.vat_sales_schedule')
+            ->with(compact('business_locations'));
+    }
+
+    /**
+     * Kenya VAT purchase schedule.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function kenyaVatPurchaseSchedule(Request $request)
+    {
+        if (! auth()->user()->can('tax_report.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+
+        if ($request->ajax()) {
+            $query = Transaction::leftJoin('contacts as c', 'transactions.contact_id', '=', 'c.id')
+                ->leftJoin('business_locations as bl', 'transactions.location_id', '=', 'bl.id')
+                ->where('transactions.business_id', $business_id)
+                ->where('transactions.type', 'purchase')
+                ->where('transactions.status', 'received')
+                ->select(
+                    'transactions.id',
+                    'transactions.ref_no',
+                    'transactions.transaction_date',
+                    'transactions.total_before_tax',
+                    'transactions.tax_amount',
+                    'transactions.final_total',
+                    'c.name as supplier',
+                    'c.supplier_business_name',
+                    'c.tax_number',
+                    'bl.name as location_name'
+                );
+
+            $this->applyKenyaTaxFilters($query, $request, 'transactions');
+
+            return Datatables::of($query)
+                ->editColumn('transaction_date', '{{@format_datetime($transaction_date)}}')
+                ->editColumn('supplier', '@if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$supplier}}')
+                ->editColumn('total_before_tax', function ($row) {
+                    return '<span class="taxable_amount" data-orig-value="'.$row->total_before_tax.'">'.$this->transactionUtil->num_f($row->total_before_tax, true).'</span>';
+                })
+                ->editColumn('tax_amount', function ($row) {
+                    return '<span class="vat_amount" data-orig-value="'.$row->tax_amount.'">'.$this->transactionUtil->num_f($row->tax_amount, true).'</span>';
+                })
+                ->editColumn('final_total', function ($row) {
+                    return '<span class="gross_amount" data-orig-value="'.$row->final_total.'">'.$this->transactionUtil->num_f($row->final_total, true).'</span>';
+                })
+                ->rawColumns(['supplier', 'total_before_tax', 'tax_amount', 'final_total'])
+                ->make(true);
+        }
+
+        $business_locations = BusinessLocation::forDropdown($business_id, true);
+
+        return view('tax_admin.vat_purchase_schedule')
+            ->with(compact('business_locations'));
+    }
+
+    /**
+     * Kenya turnover tax report.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function kenyaTurnoverTaxReport(Request $request)
+    {
+        if (! auth()->user()->can('tax_report.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+        $fy = $this->businessUtil->getCurrentFinancialYear($business_id);
+        $start_date = $request->get('start_date', $fy['start']);
+        $end_date = $request->get('end_date', $fy['end']);
+        $location_id = $request->get('location_id');
+
+        $query = Transaction::where('business_id', $business_id)
+            ->where('type', 'sell')
+            ->where('status', 'final')
+            ->whereDate('transaction_date', '>=', $start_date)
+            ->whereDate('transaction_date', '<=', $end_date);
+
+        if (! empty($location_id)) {
+            $query->where('location_id', $location_id);
+        }
+
+        $permitted_locations = auth()->user()->permitted_locations();
+        if ($permitted_locations != 'all') {
+            $query->whereIn('location_id', $permitted_locations);
+        }
+
+        $gross_sales = $query->sum('final_total');
+        $turnover_tax = $gross_sales * 0.015;
+        $business_locations = BusinessLocation::forDropdown($business_id, true);
+
+        return view('tax_admin.turnover_tax')
+            ->with(compact('gross_sales', 'turnover_tax', 'business_locations', 'start_date', 'end_date', 'location_id'));
+    }
+
+    /**
+     * Kenya eTIMS tracking.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function kenyaEtimsTracking(Request $request)
+    {
+        if (! auth()->user()->can('tax_report.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+
+        if ($request->ajax()) {
+            $query = Transaction::leftJoin('contacts as c', 'transactions.contact_id', '=', 'c.id')
+                ->leftJoin('business_locations as bl', 'transactions.location_id', '=', 'bl.id')
+                ->where('transactions.business_id', $business_id)
+                ->where('transactions.type', 'sell')
+                ->where('transactions.status', 'final')
+                ->select(
+                    'transactions.id',
+                    'transactions.invoice_no',
+                    'transactions.transaction_date',
+                    'transactions.final_total',
+                    'transactions.buyer_pin',
+                    'transactions.etims_status',
+                    'transactions.etims_invoice_no',
+                    'transactions.etims_control_code',
+                    'transactions.etims_qr_code',
+                    'transactions.etims_submitted_at',
+                    'c.name as customer',
+                    'c.supplier_business_name',
+                    'c.tax_number',
+                    'bl.name as location_name'
+                );
+
+            $this->applyKenyaTaxFilters($query, $request, 'transactions');
+
+            if (! empty($request->get('etims_status'))) {
+                $query->where('transactions.etims_status', $request->get('etims_status'));
+            }
+
+            return Datatables::of($query)
+                ->editColumn('transaction_date', '{{@format_datetime($transaction_date)}}')
+                ->editColumn('customer', '@if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$customer}}')
+                ->editColumn('final_total', function ($row) {
+                    return '<span class="gross_amount" data-orig-value="'.$row->final_total.'">'.$this->transactionUtil->num_f($row->final_total, true).'</span>';
+                })
+                ->editColumn('etims_status', function ($row) {
+                    return $this->formatEtimsStatus($row->etims_status);
+                })
+                ->addColumn('buyer_pin_display', function ($row) {
+                    return $row->buyer_pin ?: $row->tax_number;
+                })
+                ->addColumn('action', function ($row) {
+                    $url = action([\App\Http\Controllers\ReportController::class, 'updateKenyaEtimsTracking'], [$row->id]);
+
+                    return '<div class="input-group input-group-sm" style="min-width: 520px;">
+                        <input type="text" class="form-control etims-buyer-pin" value="'.e($row->buyer_pin ?: $row->tax_number).'" placeholder="'.__('lang_v1.buyer_pin').'">
+                        <input type="text" class="form-control etims-invoice-no" value="'.e($row->etims_invoice_no).'" placeholder="'.__('lang_v1.etims_invoice_no').'">
+                        <input type="text" class="form-control etims-control-code" value="'.e($row->etims_control_code).'" placeholder="'.__('lang_v1.etims_control_code').'">
+                        <select class="form-control etims-status">
+                            '.$this->etimsStatusOptions($row->etims_status).'
+                        </select>
+                        <span class="input-group-btn">
+                            <button type="button" class="btn btn-primary btn-sm update-etims-tracking" data-url="'.$url.'">'.__('messages.update').'</button>
+                        </span>
+                    </div>';
+                })
+                ->rawColumns(['customer', 'final_total', 'etims_status', 'action'])
+                ->make(true);
+        }
+
+        $business_locations = BusinessLocation::forDropdown($business_id, true);
+
+        return view('tax_admin.etims_tracking')
+            ->with(compact('business_locations'));
+    }
+
+    /**
+     * Updates manual eTIMS tracking fields.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function updateKenyaEtimsTracking(Request $request, $id)
+    {
+        if (! auth()->user()->can('tax_report.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'buyer_pin' => 'nullable|string|max:50',
+            'etims_status' => 'required|in:pending,submitted,accepted,failed,cancelled',
+            'etims_invoice_no' => 'nullable|string|max:191',
+            'etims_control_code' => 'nullable|string|max:191',
+            'etims_qr_code' => 'nullable|string',
+            'etims_response' => 'nullable|string',
+        ]);
+
+        try {
+            $business_id = $request->session()->get('user.business_id');
+            $transaction = Transaction::where('business_id', $business_id)
+                ->where('type', 'sell')
+                ->findOrFail($id);
+
+            $transaction->buyer_pin = $request->input('buyer_pin');
+            $transaction->etims_status = $request->input('etims_status');
+            $transaction->etims_invoice_no = $request->input('etims_invoice_no');
+            $transaction->etims_control_code = $request->input('etims_control_code');
+            $transaction->etims_qr_code = $request->input('etims_qr_code');
+            $transaction->etims_response = $request->input('etims_response');
+            $transaction->etims_submitted_at = in_array($transaction->etims_status, ['submitted', 'accepted'])
+                ? \Carbon::now()
+                : $transaction->etims_submitted_at;
+            $transaction->save();
+
+            $output = ['success' => true, 'msg' => __('lang_v1.etims_tracking_updated')];
+        } catch (\Exception $e) {
+            \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
+            $output = ['success' => false, 'msg' => __('messages.something_went_wrong')];
+        }
+
+        return $output;
+    }
+
+    private function applyKenyaTaxFilters($query, Request $request, $table)
+    {
+        $start_date = $request->get('start_date');
+        $end_date = $request->get('end_date');
+        if (! empty($start_date) && ! empty($end_date)) {
+            $query->whereDate($table.'.transaction_date', '>=', $start_date)
+                ->whereDate($table.'.transaction_date', '<=', $end_date);
+        }
+
+        if (! empty($request->get('location_id'))) {
+            $query->where($table.'.location_id', $request->get('location_id'));
+        }
+
+        $permitted_locations = auth()->user()->permitted_locations();
+        if ($permitted_locations != 'all') {
+            $query->whereIn($table.'.location_id', $permitted_locations);
+        }
+    }
+
+    private function formatEtimsStatus($status)
+    {
+        $status = $status ?: 'pending';
+        $class = [
+            'pending' => 'warning',
+            'submitted' => 'info',
+            'accepted' => 'success',
+            'failed' => 'danger',
+            'cancelled' => 'default',
+        ][$status] ?? 'warning';
+
+        return '<span class="label label-'.$class.'">'.__('lang_v1.etims_'.$status).'</span>';
+    }
+
+    private function etimsStatusOptions($selected_status)
+    {
+        $selected_status = $selected_status ?: 'pending';
+        $statuses = ['pending', 'submitted', 'accepted', 'failed', 'cancelled'];
+        $html = '';
+
+        foreach ($statuses as $status) {
+            $selected = $selected_status == $status ? ' selected' : '';
+            $html .= '<option value="'.$status.'"'.$selected.'>'.__('lang_v1.etims_'.$status).'</option>';
+        }
+
+        return $html;
     }
 
     /**
@@ -493,6 +882,71 @@ class ReportController extends Controller
 
         return view('report.stock_report')
             ->with(compact('categories', 'brands', 'units', 'business_locations', 'show_manufacturing_data'));
+    }
+
+    /**
+     * Shows printable/exportable stock counting sheet.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function getStockSheet(Request $request)
+    {
+        if (! auth()->user()->can('stock_report.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+
+        if ($request->ajax()) {
+            $filters = request()->only(['location_id', 'category_id', 'brand_id', 'unit_id']);
+            $filters['active_state'] = 'active';
+
+            $products = $this->productUtil->getProductStockDetails($business_id, $filters, 'datatables');
+
+            return Datatables::of($products)
+                ->editColumn('stock', function ($row) {
+                    if ($row->enable_stock) {
+                        $stock = $row->stock ? (float) $row->stock : 0;
+
+                        return '<span class="current_stock" data-orig-value="'.$stock.'" data-unit="'.$row->unit.'">'.$this->transactionUtil->num_f($stock, false, null, true).' '.$row->unit.'</span>';
+                    }
+
+                    return '--';
+                })
+                ->addColumn('variation', function ($row) {
+                    if ($row->type == 'variable') {
+                        return $row->product_variation.'-'.$row->variation_name;
+                    }
+
+                    return '';
+                })
+                ->addColumn('physical_count', function () {
+                    return '';
+                })
+                ->addColumn('difference', function () {
+                    return '';
+                })
+                ->addColumn('count_note', function () {
+                    return '';
+                })
+                ->filterColumn('variation', function ($query, $keyword) {
+                    $query->whereRaw("CONCAT(COALESCE(pv.name, ''), '-', COALESCE(variations.name, '')) like ?", ["%{$keyword}%"]);
+                })
+                ->removeColumn('enable_stock')
+                ->removeColumn('unit')
+                ->removeColumn('id')
+                ->rawColumns(['stock'])
+                ->make(true);
+        }
+
+        $categories = Category::forDropdown($business_id, 'product');
+        $brands = Brands::forDropdown($business_id);
+        $units = Unit::where('business_id', $business_id)
+            ->pluck('short_name', 'id');
+        $business_locations = BusinessLocation::forDropdown($business_id, true);
+
+        return view('report.stock_sheet')
+            ->with(compact('categories', 'brands', 'units', 'business_locations'));
     }
 
     // // this function copy of above get route becouse of large size parameter 
@@ -1221,6 +1675,201 @@ class ReportController extends Controller
 
         return view('report.register_report')
                     ->with(compact('users', 'payment_types'));
+    }
+
+    /**
+     * Shows M-PESA verification report.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function getMpesaVerificationReport(Request $request)
+    {
+        if (! auth()->user()->can('register_report.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+
+        if ($request->ajax()) {
+            $query = TransactionPayment::join('transactions as t', 'transaction_payments.transaction_id', '=', 't.id')
+                ->leftJoin('contacts as c', 't.contact_id', '=', 'c.id')
+                ->leftJoin('users as cashier', 't.created_by', '=', 'cashier.id')
+                ->leftJoin('business_locations as bl', 't.location_id', '=', 'bl.id')
+                ->leftJoin('cash_registers as cr', function ($join) use ($business_id) {
+                    $join->on('cr.user_id', '=', 't.created_by')
+                        ->where('cr.business_id', $business_id)
+                        ->whereRaw('t.created_at BETWEEN cr.created_at AND COALESCE(cr.closed_at, NOW())');
+                })
+                ->leftJoin('users as verifier', 'transaction_payments.mpesa_verified_by', '=', 'verifier.id')
+                ->where('t.business_id', $business_id)
+                ->where('t.type', 'sell')
+                ->where('t.status', 'final')
+                ->where('transaction_payments.method', 'custom_pay_1')
+                ->select(
+                    'transaction_payments.id',
+                    'transaction_payments.amount',
+                    'transaction_payments.is_return',
+                    'transaction_payments.transaction_no',
+                    'transaction_payments.mpesa_verification_status',
+                    'transaction_payments.mpesa_verified_at',
+                    'transaction_payments.mpesa_verification_note',
+                    't.id as transaction_id',
+                    't.invoice_no',
+                    't.transaction_date',
+                    'c.name as customer',
+                    'c.supplier_business_name',
+                    'bl.name as location_name',
+                    'cr.id as register_id',
+                    DB::raw("CONCAT(COALESCE(cashier.surname, ''), ' ', COALESCE(cashier.first_name, ''), ' ', COALESCE(cashier.last_name, '')) as cashier_name"),
+                    DB::raw("CONCAT(COALESCE(verifier.surname, ''), ' ', COALESCE(verifier.first_name, ''), ' ', COALESCE(verifier.last_name, '')) as verifier_name")
+                )
+                ->groupBy('transaction_payments.id');
+
+            $start_date = $request->get('start_date');
+            $end_date = $request->get('end_date');
+            if (! empty($start_date) && ! empty($end_date)) {
+                $query->whereDate('t.transaction_date', '>=', $start_date)
+                    ->whereDate('t.transaction_date', '<=', $end_date);
+            }
+
+            $permitted_locations = auth()->user()->permitted_locations();
+            if ($permitted_locations != 'all') {
+                $query->whereIn('t.location_id', $permitted_locations);
+            }
+
+            if (! empty($request->get('location_id'))) {
+                $query->where('t.location_id', $request->get('location_id'));
+            }
+
+            if (! empty($request->get('user_id'))) {
+                $query->where('t.created_by', $request->get('user_id'));
+            }
+
+            if (! empty($request->get('register_id'))) {
+                $query->where('cr.id', $request->get('register_id'));
+            }
+
+            if (! empty($request->get('status'))) {
+                $query->where('transaction_payments.mpesa_verification_status', $request->get('status'));
+            }
+
+            return Datatables::of($query)
+                ->editColumn('invoice_no', function ($row) {
+                    return '<a data-href="'.action([\App\Http\Controllers\SellController::class, 'show'], [$row->transaction_id]).'" href="#" data-container=".view_modal" class="btn-modal">'.$row->invoice_no.'</a>';
+                })
+                ->editColumn('transaction_date', '{{@format_datetime($transaction_date)}}')
+                ->editColumn('amount', function ($row) {
+                    $amount = $row->is_return ? -1 * $row->amount : $row->amount;
+
+                    return '<span class="mpesa_amount" data-orig-value="'.$amount.'">'.$this->transactionUtil->num_f($amount, true).'</span>';
+                })
+                ->editColumn('customer', function ($row) {
+                    return ! empty($row->supplier_business_name) ? $row->supplier_business_name.',<br>'.$row->customer : $row->customer;
+                })
+                ->editColumn('mpesa_verification_status', function ($row) {
+                    $status = $row->mpesa_verification_status ?: 'pending';
+                    $class = $status == 'verified' ? 'success' : ($status == 'rejected' ? 'danger' : 'warning');
+
+                    return '<span class="label label-'.$class.'">'.__('lang_v1.'.$status).'</span>';
+                })
+                ->editColumn('mpesa_verified_at', function ($row) {
+                    return ! empty($row->mpesa_verified_at) ? $this->productUtil->format_date($row->mpesa_verified_at, true) : '';
+                })
+                ->addColumn('verified_by', function ($row) {
+                    return trim($row->verifier_name);
+                })
+                ->addColumn('action', function ($row) {
+                    $note = e($row->mpesa_verification_note);
+                    $url = action([\App\Http\Controllers\ReportController::class, 'updateMpesaVerification'], [$row->id]);
+
+                    return '<div class="input-group input-group-sm" style="min-width: 320px;">
+                            <input type="text" class="form-control mpesa-verification-note" value="'.$note.'" placeholder="'.__('lang_v1.note').'">
+                            <span class="input-group-btn">
+                                <button type="button" class="btn btn-success btn-sm update-mpesa-verification" data-url="'.$url.'" data-status="verified">'.__('lang_v1.verify').'</button>
+                                <button type="button" class="btn btn-danger btn-sm update-mpesa-verification" data-url="'.$url.'" data-status="rejected">'.__('lang_v1.reject').'</button>
+                                <button type="button" class="btn btn-default btn-sm update-mpesa-verification" data-url="'.$url.'" data-status="">'.__('lang_v1.add_note').'</button>
+                            </span>
+                        </div>';
+                })
+                ->filterColumn('cashier_name', function ($query, $keyword) {
+                    $query->whereRaw("CONCAT(COALESCE(cashier.surname, ''), ' ', COALESCE(cashier.first_name, ''), ' ', COALESCE(cashier.last_name, '')) like ?", ["%{$keyword}%"]);
+                })
+                ->filterColumn('verified_by', function ($query, $keyword) {
+                    $query->whereRaw("CONCAT(COALESCE(verifier.surname, ''), ' ', COALESCE(verifier.first_name, ''), ' ', COALESCE(verifier.last_name, '')) like ?", ["%{$keyword}%"]);
+                })
+                ->rawColumns(['invoice_no', 'amount', 'customer', 'mpesa_verification_status', 'action'])
+                ->make(true);
+        }
+
+        $users = User::forDropdown($business_id, false);
+        $business_locations = BusinessLocation::forDropdown($business_id, true);
+        $registers = CashRegister::where('cash_registers.business_id', $business_id)
+            ->join('users as u', 'cash_registers.user_id', '=', 'u.id')
+            ->select('cash_registers.id', 'cash_registers.created_at', 'cash_registers.closed_at', DB::raw("CONCAT(COALESCE(u.surname, ''), ' ', COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) as user_name"))
+            ->orderBy('cash_registers.created_at', 'desc')
+            ->limit(200)
+            ->get()
+            ->mapWithKeys(function ($register) {
+                $label = '#'.$register->id.' - '.trim($register->user_name).' - '.$this->productUtil->format_date($register->created_at, true);
+
+                return [$register->id => $label];
+            });
+
+        return view('report.mpesa_verification')
+            ->with(compact('users', 'business_locations', 'registers'));
+    }
+
+    /**
+     * Updates M-PESA verification status/note.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function updateMpesaVerification(Request $request, $id)
+    {
+        if (! auth()->user()->can('register_report.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'status' => 'nullable|in:pending,verified,rejected',
+            'note' => 'nullable|string',
+        ]);
+
+        try {
+            $business_id = $request->session()->get('user.business_id');
+            $payment = TransactionPayment::join('transactions as t', 'transaction_payments.transaction_id', '=', 't.id')
+                ->where('transaction_payments.id', $id)
+                ->where('transaction_payments.method', 'custom_pay_1')
+                ->where('t.business_id', $business_id)
+                ->select('transaction_payments.*')
+                ->firstOrFail();
+
+            if ($request->filled('status')) {
+                $payment->mpesa_verification_status = $request->input('status');
+                $payment->mpesa_verified_by = auth()->id();
+                $payment->mpesa_verified_at = \Carbon::now();
+            }
+
+            $payment->mpesa_verification_note = $request->input('note');
+            $payment->save();
+
+            if ($this->moduleUtil->isModuleEnabled('account', $business_id)) {
+                if ($payment->mpesa_verification_status == 'verified') {
+                    $payment->load('transaction');
+                    $payment_type = ! empty($payment->transaction->type) ? $payment->transaction->type : null;
+                    AccountTransaction::updateAccountTransaction($payment, $payment_type);
+                } else {
+                    AccountTransaction::where('transaction_payment_id', $payment->id)->delete();
+                }
+            }
+
+            $output = ['success' => true, 'msg' => __('lang_v1.mpesa_verification_updated')];
+        } catch (\Exception $e) {
+            \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
+            $output = ['success' => false, 'msg' => __('messages.something_went_wrong')];
+        }
+
+        return $output;
     }
 
     /**

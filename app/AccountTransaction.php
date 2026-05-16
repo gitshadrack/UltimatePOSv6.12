@@ -84,6 +84,13 @@ class AccountTransaction extends Model
     public static function updateAccountTransaction($transaction_payment, $transaction_type)
     {
         if (! empty($transaction_payment->account_id)) {
+            if ($transaction_payment->method == 'custom_pay_1'
+                && $transaction_payment->mpesa_verification_status != 'verified') {
+                AccountTransaction::where('transaction_payment_id', $transaction_payment->id)->delete();
+
+                return true;
+            }
+
             $account_transaction = AccountTransaction::where(
                 'transaction_payment_id',
                 $transaction_payment->id

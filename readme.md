@@ -438,6 +438,73 @@ How to change the default fallback image:
 4. Run `php artisan optimize:clear`.
 5. Hard-refresh the browser if the old image is cached.
 
+### 13. Manual M-PESA Payment Verification
+
+Purpose: Let an admin confirm that each POS M-PESA payment entered by a cashier is backed by a real Safaricom/M-PESA message, while keeping the current `custom_pay_1` / M-PESA payment workflow.
+
+Files added:
+
+- `database/migrations/2026_05_16_000001_add_mpesa_verification_fields_to_transaction_payments_table.php`
+- `database/migrations/2026_05_16_000002_remove_unverified_mpesa_account_transactions.php`
+- `resources/views/report/mpesa_verification.blade.php`
+
+Files changed:
+
+- `app/Http/Controllers/ReportController.php`
+- `app/Http/Controllers/CashRegisterController.php`
+- `app/Http/Middleware/AdminSidebarMenu.php`
+- `app/Utils/CashRegisterUtil.php`
+- `resources/views/cash_register/register_details.blade.php`
+- `routes/web.php`
+- `lang/en/lang_v1.php`
+- `readme.md`
+
+Database fields added to `transaction_payments`:
+
+- `mpesa_verification_status`: `pending`, `verified`, or `rejected`
+- `mpesa_verified_by`
+- `mpesa_verified_at`
+- `mpesa_verification_note`
+
+What changed:
+
+- M-PESA payments continue to be saved as `transaction_payments.method = custom_pay_1`.
+- The cashier-entered M-PESA transaction number continues to be saved in `transaction_payments.transaction_no`.
+- Added `Reports > M-PESA Verification`.
+- The verification screen lists M-PESA sale payments with invoice number, sale date/time, cashier, register, customer, amount, transaction number, status, verifier, and action buttons.
+- Admin can mark each payment as `Verified` or `Rejected`, or add/update a note.
+- The screen supports filters for cashier, location, register, verification status, and date range.
+- Closed/current register details now show an `M-PESA Verification` summary with Total M-PESA, Verified, Pending, and Rejected amounts.
+- M-PESA payments no longer post to linked payment accounts while they are `pending` or `rejected`.
+- The linked payment account is posted only after the M-PESA payment is marked `Verified`.
+- If a verified M-PESA payment is later rejected, its account transaction is removed from account balances.
+- Existing unverified M-PESA account transactions are soft-deleted by the cleanup migration.
+- Access uses the existing `register_report.view` permission.
+
+Server action:
+
+```bash
+php artisan migrate
+php artisan optimize:clear
+```
+
+Recommended workflow:
+
+1. Cashier makes a POS sale.
+2. Cashier selects M-PESA.
+3. Cashier enters the M-PESA transaction number.
+4. Cashier completes the sale and closes the register.
+5. Admin opens `Reports > M-PESA Verification`.
+6. Admin compares each transaction number and amount against Safaricom/M-PESA messages.
+7. Admin marks each payment as `Verified` or `Rejected`, or leaves it `Pending`.
+
+Verification notes:
+
+- New M-PESA payments default to `pending`.
+- Existing M-PESA rows are backfilled to `pending` by the migration.
+- Pending or rejected M-PESA payments remain visible in payment/register reports, but they do not increase the linked payment account balance.
+- This is a manual verification workflow. Future automation can import M-PESA statements/SMS/API data and match by transaction number, amount, date/time, till/paybill, and reference.
+
 Previous location-level image option:
 
 1. Run `php artisan migrate`.
@@ -447,7 +514,7 @@ Previous location-level image option:
 5. Save the location.
 6. This remains available for records, but the login page now uses Business `Tenant domain` for tenant branding.
 
-### 13. Superadmin Business Data Initialization
+### 14. Superadmin Business Data Initialization
 
 Purpose: Let Superadmin initialize a tenant without deleting the business, so products and prices remain but sales/stock/report transaction data is cleared.
 
@@ -481,7 +548,7 @@ php artisan optimize:clear
 
 No migration is needed.
 
-### 14. Public Index Cards and Superadmin Business Branding Edit
+### 15. Public Index Cards and Superadmin Business Branding Edit
 
 Purpose: Improve the public index page and let Superadmin update tenant branding fields after a business has already been created.
 
@@ -533,6 +600,99 @@ php artisan optimize:clear
 ```
 
 No migration is needed if the tenant branding migration from section 12 has already been run.
+
+### 16. Stock Sheet Report
+
+Purpose: Add a dedicated printable/exportable stock counting sheet for physical stock take, without changing the normal Stock Report.
+
+Files added:
+
+- `resources/views/report/stock_sheet.blade.php`
+
+Files changed:
+
+- `routes/web.php`
+- `app/Http/Controllers/ReportController.php`
+- `app/Http/Middleware/AdminSidebarMenu.php`
+- `lang/en/report.php`
+- `lang/en/lang_v1.php`
+- `readme.md`
+
+What changed:
+
+- Added `Reports > Stock Sheet`.
+- Added route `/reports/stock-sheet`.
+- Added controller method `getStockSheet()`.
+- Stock Sheet reuses the existing stock calculation from `ProductUtil::getProductStockDetails()`.
+- Added filters for business location, category, brand, and unit.
+- Added columns for SKU, product, variation, category, location, system stock, physical count, difference, and note.
+- `Physical Count`, `Difference`, and `Note` are intentionally blank so staff can write counts on a printed sheet or fill them after export.
+- Uses existing `stock_report.view` permission.
+- Export buttons are available to users with the existing `view_export_buttons` permission.
+
+Server action:
+
+```bash
+php artisan optimize:clear
+```
+
+No migration is needed.
+
+### 17. Kenya Tax Administration Sidebar
+
+Purpose: Add a dedicated Tax Administration area for Kenyan tax workflows instead of mixing every tax function inside the general Reports menu.
+
+Files added:
+
+- `database/migrations/2026_05_16_000003_add_kenya_tax_fields_to_transactions.php`
+- `resources/views/tax_admin/dashboard.blade.php`
+- `resources/views/tax_admin/vat_sales_schedule.blade.php`
+- `resources/views/tax_admin/vat_purchase_schedule.blade.php`
+- `resources/views/tax_admin/turnover_tax.blade.php`
+- `resources/views/tax_admin/etims_tracking.blade.php`
+- `resources/views/tax_admin/partials/date_location_filters.blade.php`
+- `resources/views/tax_admin/partials/schedule_js.blade.php`
+
+Files changed:
+
+- `routes/web.php`
+- `app/Http/Controllers/ReportController.php`
+- `app/Http/Middleware/AdminSidebarMenu.php`
+- `lang/en/lang_v1.php`
+- `readme.md`
+
+Database fields added to `transactions`:
+
+- `buyer_pin`
+- `etims_status`: `pending`, `submitted`, `accepted`, `failed`, or `cancelled`
+- `etims_invoice_no`
+- `etims_control_code`
+- `etims_qr_code`
+- `etims_submitted_at`
+- `etims_response`
+
+What changed:
+
+- Added a new sidebar dropdown named `Tax Administration`.
+- Added `Tax Dashboard` with output VAT, input VAT, net VAT payable, gross sales, turnover tax estimate, and eTIMS attention counts.
+- Added `VAT Sales Schedule` with invoice, customer, buyer PIN, location, taxable amount, output VAT, gross total, and eTIMS status.
+- Added `VAT Purchase Schedule` with supplier, supplier tax number, location, taxable amount, input VAT, and gross total.
+- Added `Turnover Tax Report` using the current KRA TOT estimate rate of 1.5% of gross sales.
+- Added `eTIMS Tracking` for manually recording buyer PIN, eTIMS invoice number, eTIMS control code, and eTIMS status per sale.
+- Added links to the existing `Tax Report` and `Tax Rates` under the same Tax Administration dropdown.
+- Access uses the existing `tax_report.view` permission.
+
+Server action:
+
+```bash
+php artisan migrate
+php artisan optimize:clear
+```
+
+Important limitation:
+
+- This is the internal Tax Administration foundation. It does not yet transmit invoices to KRA eTIMS automatically.
+- Full automation still requires KRA eTIMS system-to-system access or an approved middleware/provider integration.
 
 ### Recommended Online Deployment Steps
 

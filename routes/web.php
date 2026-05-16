@@ -270,6 +270,12 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::get('/reports/gst-purchase-report', [ReportController::class, 'gstPurchaseReport']);
     Route::get('/reports/gst-sales-report', [ReportController::class, 'gstSalesReport']);
     Route::get('/reports/get-stock-by-sell-price', [ReportController::class, 'getStockBySellingPrice']);
+    Route::get('/tax-admin/dashboard', [ReportController::class, 'kenyaTaxDashboard']);
+    Route::get('/tax-admin/vat-sales-schedule', [ReportController::class, 'kenyaVatSalesSchedule']);
+    Route::get('/tax-admin/vat-purchase-schedule', [ReportController::class, 'kenyaVatPurchaseSchedule']);
+    Route::get('/tax-admin/turnover-tax', [ReportController::class, 'kenyaTurnoverTaxReport']);
+    Route::get('/tax-admin/etims-tracking', [ReportController::class, 'kenyaEtimsTracking']);
+    Route::post('/tax-admin/etims-tracking/{id}', [ReportController::class, 'updateKenyaEtimsTracking']);
     Route::get('/reports/purchase-report', [ReportController::class, 'purchaseReport']);
     Route::get('/reports/sale-report', [ReportController::class, 'saleReport']);
     Route::get('/reports/service-staff-report', [ReportController::class, 'getServiceStaffReport']);
@@ -280,6 +286,7 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::get('/reports/purchase-sell', [ReportController::class, 'getPurchaseSell']);
     Route::get('/reports/customer-supplier', [ReportController::class, 'getCustomerSuppliers']);
     Route::get('/reports/stock-report', [ReportController::class, 'getStockReport']);
+    Route::get('/reports/stock-sheet', [ReportController::class, 'getStockSheet']);
     Route::get('/reports/stock-details', [ReportController::class, 'getStockDetails']);
     Route::get('/reports/tax-report', [ReportController::class, 'getTaxReport']);
     Route::get('/reports/tax-details', [ReportController::class, 'getTaxDetails']);
@@ -287,6 +294,8 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::get('/reports/expense-report', [ReportController::class, 'getExpenseReport']);
     Route::get('/reports/stock-adjustment-report', [ReportController::class, 'getStockAdjustmentReport']);
     Route::get('/reports/register-report', [ReportController::class, 'getRegisterReport']);
+    Route::get('/reports/mpesa-verification', [ReportController::class, 'getMpesaVerificationReport']);
+    Route::post('/reports/mpesa-verification/{id}', [ReportController::class, 'updateMpesaVerification']);
     Route::get('/reports/sales-representative-report', [ReportController::class, 'getSalesRepresentativeReport']);
     Route::get('/reports/sales-representative-total-expense', [ReportController::class, 'getSalesRepresentativeTotalExpense']);
     Route::get('/reports/sales-representative-total-sell', [ReportController::class, 'getSalesRepresentativeTotalSell']);

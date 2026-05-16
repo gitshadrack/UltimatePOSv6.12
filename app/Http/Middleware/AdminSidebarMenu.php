@@ -554,6 +554,57 @@ class AdminSidebarMenu
                 )->order(50);
             }
 
+            //Tax administration dropdown
+            if ($is_admin || auth()->user()->can('tax_report.view')) {
+                $menu->dropdown(
+                    __('lang_v1.tax_administration'),
+                    function ($sub) {
+                        $sub->url(
+                            action([\App\Http\Controllers\ReportController::class, 'kenyaTaxDashboard']),
+                            __('lang_v1.tax_dashboard'),
+                            ['icon' => '', 'active' => request()->segment(1) == 'tax-admin' && request()->segment(2) == 'dashboard']
+                        );
+                        $sub->url(
+                            action([\App\Http\Controllers\ReportController::class, 'kenyaVatSalesSchedule']),
+                            __('lang_v1.vat_sales_schedule'),
+                            ['icon' => '', 'active' => request()->segment(1) == 'tax-admin' && request()->segment(2) == 'vat-sales-schedule']
+                        );
+                        $sub->url(
+                            action([\App\Http\Controllers\ReportController::class, 'kenyaVatPurchaseSchedule']),
+                            __('lang_v1.vat_purchase_schedule'),
+                            ['icon' => '', 'active' => request()->segment(1) == 'tax-admin' && request()->segment(2) == 'vat-purchase-schedule']
+                        );
+                        $sub->url(
+                            action([\App\Http\Controllers\ReportController::class, 'kenyaTurnoverTaxReport']),
+                            __('lang_v1.turnover_tax_report'),
+                            ['icon' => '', 'active' => request()->segment(1) == 'tax-admin' && request()->segment(2) == 'turnover-tax']
+                        );
+                        $sub->url(
+                            action([\App\Http\Controllers\ReportController::class, 'kenyaEtimsTracking']),
+                            __('lang_v1.etims_tracking'),
+                            ['icon' => '', 'active' => request()->segment(1) == 'tax-admin' && request()->segment(2) == 'etims-tracking']
+                        );
+                        $sub->url(
+                            action([\App\Http\Controllers\ReportController::class, 'getTaxReport']),
+                            __('report.tax_report'),
+                            ['icon' => '', 'active' => request()->segment(1) == 'reports' && request()->segment(2) == 'tax-report']
+                        );
+                        $sub->url(
+                            action([\App\Http\Controllers\TaxRateController::class, 'index']),
+                            __('tax_rate.tax_rates'),
+                            ['icon' => '', 'active' => request()->segment(1) == 'tax-rates']
+                        );
+                    },
+                    ['icon' => '<svg aria-hidden="true" class="tw-size-5 tw-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                        <path d="M9 14l6 -6"></path>
+                        <circle cx="10" cy="8" r=".5" fill="currentColor"></circle>
+                        <circle cx="14" cy="14" r=".5" fill="currentColor"></circle>
+                        <path d="M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16l-3 -2l-2 2l-2 -2l-2 2l-2 -2z"></path>
+                    </svg>']
+                )->order(55);
+            }
+
             //Reports dropdown
             if ($is_admin || auth()->user()->can('purchase_n_sell_report.view') || auth()->user()->can('contacts_report.view')
                 || auth()->user()->can('stock_report.view') || auth()->user()->can('tax_report.view')
@@ -621,6 +672,11 @@ class AdminSidebarMenu
                                 action([\App\Http\Controllers\ReportController::class, 'getStockReport']),
                                 __('report.stock_report'),
                                 ['icon' => '', 'active' => request()->segment(2) == 'stock-report']
+                            );
+                            $sub->url(
+                                action([\App\Http\Controllers\ReportController::class, 'getStockSheet']),
+                                __('report.stock_sheet'),
+                                ['icon' => '', 'active' => request()->segment(2) == 'stock-sheet']
                             );
                             if (session('business.enable_product_expiry') == 1) {
                                 $sub->url(
@@ -697,6 +753,11 @@ class AdminSidebarMenu
                                 action([\App\Http\Controllers\ReportController::class, 'getRegisterReport']),
                                 __('report.register_report'),
                                 ['icon' => '', 'active' => request()->segment(2) == 'register-report']
+                            );
+                            $sub->url(
+                                action([\App\Http\Controllers\ReportController::class, 'getMpesaVerificationReport']),
+                                __('lang_v1.mpesa_verification'),
+                                ['icon' => '', 'active' => request()->segment(2) == 'mpesa-verification']
                             );
                         }
                         if (auth()->user()->can('sales_representative.view')) {

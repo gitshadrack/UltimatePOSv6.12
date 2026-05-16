@@ -137,11 +137,12 @@ class CashRegisterController extends Controller
         $open_time = $register_details['open_time'];
         $close_time = ! empty($register_details['closed_at']) ? $register_details['closed_at'] : \Carbon::now()->toDateTimeString();
         $details = $this->cashRegisterUtil->getRegisterTransactionDetails($user_id, $open_time, $close_time);
+        $mpesa_verification = $this->cashRegisterUtil->getRegisterMpesaVerificationSummary($register_details);
 
         $payment_types = $this->cashRegisterUtil->payment_types(null, false, $business_id);
 
         return view('cash_register.register_details')
-                    ->with(compact('register_details', 'details', 'payment_types', 'close_time'));
+                    ->with(compact('register_details', 'details', 'payment_types', 'close_time', 'mpesa_verification'));
     }
 
     /**
@@ -167,11 +168,12 @@ class CashRegisterController extends Controller
         $is_types_of_service_enabled = $this->moduleUtil->isModuleEnabled('types_of_service');
 
         $details = $this->cashRegisterUtil->getRegisterTransactionDetails($user_id, $open_time, $close_time, $is_types_of_service_enabled);
+        $mpesa_verification = $this->cashRegisterUtil->getRegisterMpesaVerificationSummary($register_details);
 
         $payment_types = $this->cashRegisterUtil->payment_types($register_details->location_id, true, $business_id);
 
         return view('cash_register.register_details')
-                ->with(compact('register_details', 'details', 'payment_types', 'close_time'));
+                ->with(compact('register_details', 'details', 'payment_types', 'close_time', 'mpesa_verification'));
     }
 
     /**
