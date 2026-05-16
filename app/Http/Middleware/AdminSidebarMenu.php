@@ -555,7 +555,7 @@ class AdminSidebarMenu
             }
 
             //Tax administration dropdown
-            if ($is_admin || auth()->user()->can('tax_report.view')) {
+            if (in_array('tax_administration', $enabled_modules) && ($is_admin || auth()->user()->can('tax_report.view'))) {
                 $menu->dropdown(
                     __('lang_v1.tax_administration'),
                     function ($sub) {

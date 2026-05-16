@@ -553,6 +553,10 @@ class ModuleUtil extends Util
             'stock_adjustment' => ['name' => __('stock_adjustment.stock_adjustment')],
             'expenses' => ['name' => __('expense.expenses')],
             'account' => ['name' => __('lang_v1.account')],
+            'tax_administration' => [
+                'name' => __('lang_v1.tax_administration'),
+                'tooltip' => __('lang_v1.tax_administration_module_tooltip'),
+            ],
             'tables' => ['name' => __('restaurant.tables'),
                 'tooltip' => __('restaurant.tooltip_tables'),
             ],
