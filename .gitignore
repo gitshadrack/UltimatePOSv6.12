@@ -9,7 +9,15 @@
 Homestead.json
 Homestead.yaml
 npm-debug.log
+
+# Environment files - NEVER commit these
 .env
+.env.local
+.env.*.php
+.env.backup
+.env.*.backup
+.env.production.local
+.env.development.local
 /public/uploads/business_logos
 /public/uploads/documents
 /public/uploads/img

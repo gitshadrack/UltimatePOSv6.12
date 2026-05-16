@@ -12,11 +12,12 @@ class VerifyCsrfToken extends BaseVerifier
      * @var array
      */
     protected $except = [
+        // Installation endpoints - REMOVE these after deployment
         '/install/details',
         '/install/post-details',
         '/install/install-alternate',
-        '/api/ecom/customers',
-        '/api/ecom/orders',
-        '/webhook/*'
+        
+        // Webhook endpoints - should be validated via signature verification instead
+        '/webhook/*',
     ];
 }

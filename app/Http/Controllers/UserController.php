@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Media;
 use App\User;
 use App\Utils\ModuleUtil;
+use App\Http\Requests\UpdatePasswordRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
@@ -111,7 +112,7 @@ class UserController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function updatePassword(Request $request)
+    public function updatePassword(UpdatePasswordRequest $request)
     {
         //Disable in demo
         $notAllowed = $this->moduleUtil->notAllowedInDemo();
@@ -123,17 +124,13 @@ class UserController extends Controller
             $user_id = $request->session()->get('user.id');
             $user = User::where('id', $user_id)->first();
 
-            if (Hash::check($request->input('current_password'), $user->password)) {
-                $user->password = Hash::make($request->input('new_password'));
-                $user->save();
-                $output = ['success' => 1,
-                    'msg' => __('lang_v1.password_updated_successfully'),
-                ];
-            } else {
-                $output = ['success' => 0,
-                    'msg' => __('lang_v1.u_have_entered_wrong_password'),
-                ];
-            }
+            // Validation is already done by UpdatePasswordRequest
+            $user->password = Hash::make($request->input('new_password'));
+            $user->save();
+            
+            $output = ['success' => 1,
+                'msg' => __('lang_v1.password_updated_successfully'),
+            ];
         } catch (\Exception $e) {
             \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
 

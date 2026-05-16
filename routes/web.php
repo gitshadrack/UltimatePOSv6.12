@@ -85,9 +85,12 @@ Route::middleware(['setData'])->group(function () {
         ->where('filename', '[A-Za-z0-9._-]+')
         ->name('tenant-login-image');
 
-    Route::get('/business/register', [BusinessController::class, 'getRegister'])->name('business.getRegister');
-    Route::post('/business/register', [BusinessController::class, 'postRegister'])->name('business.postRegister');
-    Route::post('/business/register/check-username', [BusinessController::class, 'postCheckUsername'])->name('business.postCheckUsername');
+    // Rate limit registration and username checks
+    Route::middleware(['throttle:5:1'])->group(function () {
+        Route::get('/business/register', [BusinessController::class, 'getRegister'])->name('business.getRegister');
+        Route::post('/business/register', [BusinessController::class, 'postRegister'])->name('business.postRegister');
+        Route::post('/business/register/check-username', [BusinessController::class, 'postCheckUsername'])->name('business.postCheckUsername');
+    });
     Route::post('/business/register/check-email', [BusinessController::class, 'postCheckEmail'])->name('business.postCheckEmail');
 
     Route::get('/invoice/{token}', [SellPosController::class, 'showInvoice'])

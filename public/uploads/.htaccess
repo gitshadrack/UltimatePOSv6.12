@@ -1,0 +1,33 @@
+# Disable execution of PHP and other scripts
+
+<FilesMatch "\.(php|php3|php4|php5|phtml|phps|pht|phar|phtml|shtml|pht|asp|aspx|jsp|sh|rb|pl|cgi|bat|exe|com|jar|js|py|txt|ini|conf)$">
+Deny from all
+</FilesMatch>
+
+# Disable directory listing
+
+Options -Indexes
+
+# Set proper MIME types for files
+
+AddType text/plain .php .phtml .php3 .php4 .php5 .phps .pht .phar .phtml .shtml .asp .aspx .jsp .sh .rb .pl .cgi .bat .exe .com .jar .js .py .ini .conf .txt
+
+# Prevent access to hidden files
+
+<FilesMatch "^\.|^#|.\*~$|\.php$">
+<IfModule mod_authz_core.c>
+Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+Order allow,deny
+Deny from all
+</IfModule>
+</FilesMatch>
+
+# Security headers
+
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "DENY"
+    Header set X-XSS-Protection "1; mode=block"
+</IfModule>
