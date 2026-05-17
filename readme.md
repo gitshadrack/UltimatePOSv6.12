@@ -687,6 +687,7 @@ Files changed:
 - `routes/web.php`
 - `app/Http/Controllers/ReportController.php`
 - `app/Http/Middleware/AdminSidebarMenu.php`
+- `app/Utils/ModuleUtil.php`
 - `lang/en/lang_v1.php`
 - `readme.md`
 
@@ -702,6 +703,9 @@ Database fields added to `transactions`:
 
 What changed:
 
+- Added a new optional module checkbox named `Tax Administration` under Settings > Business Settings > Modules.
+- The Tax Administration sidebar dropdown is hidden by default and appears only after the `Tax Administration` module is enabled.
+- Sidebar access still requires Admin role or the existing `tax_report.view` permission.
 - Added a new sidebar dropdown named `Tax Administration`.
 - Added `Tax Dashboard` with output VAT, input VAT, net VAT payable, gross sales, turnover tax estimate, and eTIMS attention counts.
 - Added `VAT Sales Schedule` with invoice, customer, buyer PIN, location, taxable amount, output VAT, gross total, and eTIMS status.
@@ -709,7 +713,7 @@ What changed:
 - Added `Turnover Tax Report` using the current KRA TOT estimate rate of 1.5% of gross sales.
 - Added `eTIMS Tracking` for manually recording buyer PIN, eTIMS invoice number, eTIMS control code, and eTIMS status per sale.
 - Added links to the existing `Tax Report` and `Tax Rates` under the same Tax Administration dropdown.
-- Access uses the existing `tax_report.view` permission.
+- Access uses the existing `tax_report.view` permission after the module is enabled.
 
 Server action:
 
@@ -722,6 +726,44 @@ Important limitation:
 
 - This is the internal Tax Administration foundation. It does not yet transmit invoices to KRA eTIMS automatically.
 - Full automation still requires KRA eTIMS system-to-system access or an approved middleware/provider integration.
+
+### 18. Decorated Admin Sidebar
+
+Purpose: Refresh the admin sidebar so menu items look like rounded action buttons, with a search box and highlighted colored module buttons similar to the supplied sidebar reference.
+
+Files changed:
+
+- `resources/views/layouts/partials/sidebar.blade.php`
+- `app/Http/AdminlteCustomPresenter.php`
+- `lang/en/lang_v1.php`
+- `readme.md`
+
+What changed:
+
+- Added a `Search menu...` input at the top of the admin sidebar.
+- Added live client-side filtering for sidebar menu items.
+- Added rounded button-style decoration for normal and dropdown sidebar links.
+- Added consistent icon spacing and coloring for SVG and Font Awesome menu icons.
+- Added colored highlighted pills for selected module/menu names:
+  - `Superadmin`
+  - `Manufacturing`
+  - `Repair`
+  - `Accounting`
+  - `AI Assistance`
+  - `HMS`
+  - `GYM`
+  - `Zatca`
+- Kept the existing sidebar menu permissions, module checks, routes, and dropdown behavior intact.
+- Hid the previous business-name sidebar brand block so the search box starts at the top like the reference.
+- Sidebar styling is included in `sidebar.blade.php` so it survives rebuilds of the ignored/generated `public/css` assets.
+
+Server action:
+
+```bash
+php artisan optimize:clear
+```
+
+No migration is needed.
 
 ### Recommended Online Deployment Steps
 
