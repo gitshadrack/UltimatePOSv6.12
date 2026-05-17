@@ -11,7 +11,7 @@ class AdminlteCustomPresenter extends Presenter
      */
     public function getOpenTagWrapper()
     {
-        return '<div class="upos-sidebar-menu tw-flex-1 tw-p-3 tw-space-y-3 tw-overflow-y-auto tw-border-r tw-border-gray-200" id="side-bar">' . PHP_EOL;
+        return '<div class="tw-flex-1 tw-p-3 tw-space-y-3 tw-overflow-y-auto tw-border-r tw-border-gray-200" id="side-bar">' . PHP_EOL;
     }
 
     /**
@@ -27,7 +27,7 @@ class AdminlteCustomPresenter extends Presenter
      */
     public function getMenuWithoutDropdownWrapper($item)
     {
-        return '<a href="' . $item->getUrl() . '" title="" class="upos-sidebar-item upos-sidebar-link ' . $this->getDecorationClass($item) . ' tw-flex tw-items-center tw-gap-3 tw-px-3 tw-py-2 tw-text-sm tw-font-medium tw-tracking-tight tw-text-gray-600 tw-transition-all tw-duration-200 tw-rounded-lg tw-whitespace-nowrap hover:tw-text-gray-900 hover:tw-bg-gray-100' . $this->getActiveState($item) . '" data-menu-title="' . e($item->title) . '" ' . $item->getAttributes() . '>' .
+        return '<a href="' . $item->getUrl() . '" title="" class="tw-flex tw-items-center tw-gap-3 tw-px-3 tw-py-2 tw-text-sm tw-font-medium tw-tracking-tight tw-text-gray-600 tw-transition-all tw-duration-200 tw-rounded-lg tw-whitespace-nowrap hover:tw-text-gray-900 hover:tw-bg-gray-100' . $this->getActiveState($item) . '" ' . $item->getAttributes() . '>' .
         $this->formatIcon($item->icon) . ' <span class="tw-truncate">' . $item->title . '</span>' .
             '</a>' . PHP_EOL;
     }
@@ -74,7 +74,7 @@ class AdminlteCustomPresenter extends Presenter
      */
     public function getMenuWithDropDownWrapper($item)
     {
-        $dropdownToggle = '<a href="#" title="" class="upos-sidebar-link ' . $this->getDecorationClass($item) . ' drop_down tw-flex tw-items-center tw-gap-3 tw-px-3 tw-py-2 tw-text-sm tw-font-medium tw-tracking-tight tw-text-gray-600 tw-transition-all tw-duration-200 tw-rounded-lg tw-whitespace-nowrap hover:tw-text-gray-900 hover:tw-bg-gray-100 focus:tw-text-gray-900 focus:tw-bg-gray-100' . $this->getActiveStateOnChild($item) . '" data-menu-title="' . e($item->title) . '" ' . $item->getAttributes() . '>' .
+        $dropdownToggle = '<a href="#" title="" class="drop_down tw-flex tw-items-center tw-gap-3 tw-px-3 tw-py-2 tw-text-sm tw-font-medium tw-tracking-tight tw-text-gray-600 tw-transition-all tw-duration-200 tw-rounded-lg tw-whitespace-nowrap hover:tw-text-gray-900 hover:tw-bg-gray-100 focus:tw-text-gray-900 focus:tw-bg-gray-100' . $this->getActiveStateOnChild($item) . '" ' . $item->getAttributes() . '>' .
         $this->formatIcon($item->icon) . ' <span class="tw-truncate">' . $item->title . '</span>' .
         '<svg aria-hidden="true" class="svg tw-ml-auto tw-text-gray-500 tw-size-4 tw-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">' . $this->getArray($item) .
             '</svg>' .
@@ -90,7 +90,7 @@ class AdminlteCustomPresenter extends Presenter
         // echo "here";
         // print_r($dropdownToggle);exit;
 
-        return '<div class="upos-sidebar-item upos-sidebar-dropdown ' . $this->getActiveStateOnChild($item) . '">' . $dropdownToggle . $childItemsContainerStart . $childItems . $childItemsContainerEnd . '</div>' . PHP_EOL;
+        return '<div class="' . $this->getActiveStateOnChild($item) . '">' . $dropdownToggle . $childItemsContainerStart . $childItems . $childItemsContainerEnd . '</div>' . PHP_EOL;
     }
 
     /**
@@ -154,34 +154,11 @@ class AdminlteCustomPresenter extends Presenter
     {
         // Check if the icon string contains "<svg", indicating it's an SVG icon
         if (strpos($icon, '<svg') !== false) {
-            return '<span class="upos-sidebar-icon">' . $icon . '</span>';
+            return $icon; // Return the SVG icon directly
         } else {
             // Assume it's a FontAwesome icon and return it wrapped in an <i> tag
-            return '<span class="upos-sidebar-icon"><i class="' . $icon . '"></i></span>';
+            return '<i class="' . $icon . '"></i>';
         }
-    }
-
-    /**
-     * Return menu decoration class for highlighted sidebar modules.
-     *
-     * @param  \Nwidart\Menus\MenuItem  $item
-     * @return string
-     */
-    protected function getDecorationClass($item)
-    {
-        $title = strtolower(trim(strip_tags((string) $item->title)));
-        $classes = [
-            'superadmin' => 'upos-sidebar-pill-teal',
-            'manufacturing' => 'upos-sidebar-pill-orange',
-            'repair' => 'upos-sidebar-pill-rose',
-            'accounting' => 'upos-sidebar-pill-purple',
-            'ai assistance' => 'upos-sidebar-pill-green',
-            'hms' => 'upos-sidebar-pill-yellow',
-            'gym' => 'upos-sidebar-pill-gray',
-            'zatca' => 'upos-sidebar-pill-gray',
-        ];
-
-        return $classes[$title] ?? '';
     }
 
     public function getArray($item)
