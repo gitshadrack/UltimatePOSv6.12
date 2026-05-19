@@ -571,6 +571,9 @@ class ModuleUtil extends Util
             'types_of_service' => ['name' => __('lang_v1.types_of_service'),
                 'tooltip' => __('lang_v1.types_of_service_help_long'),
             ],
+            'tax_administration' => ['name' => __('lang_v1.tax_administration'),
+                'tooltip' => __('lang_v1.kenya_tax_admin_tooltip'),
+            ],
         ];
     }
 

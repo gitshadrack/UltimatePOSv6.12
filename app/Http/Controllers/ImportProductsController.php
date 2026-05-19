@@ -81,6 +81,8 @@ class ImportProductsController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        $transaction_started = false;
+
         try {
             $notAllowed = $this->productUtil->notAllowedInDemo();
             if (! empty($notAllowed)) {
@@ -90,6 +92,13 @@ class ImportProductsController extends Controller
             //Set maximum php execution time
             ini_set('max_execution_time', 0);
             ini_set('memory_limit', -1);
+
+            if (! $request->hasFile('products_csv')) {
+                return redirect('import-products')->with('notification', [
+                    'success' => 0,
+                    'msg' => __('product.file_to_import').' is required',
+                ]);
+            }
 
             if ($request->hasFile('products_csv')) {
                 $file = $request->file('products_csv');
@@ -119,6 +128,7 @@ class ImportProductsController extends Controller
 
                 $business_locations = BusinessLocation::where('business_id', $business_id)->get();
                 DB::beginTransaction();
+                $transaction_started = true;
                 foreach ($imported_data as $key => $value) {
 
                     //Check if any column is missing
@@ -128,7 +138,7 @@ class ImportProductsController extends Controller
                         break;
                     }
 
-                    $row_no = $key + 1;
+                    $row_no = $key + 2;
                     $product_array = [];
                     $product_array['business_id'] = $business_id;
                     $product_array['created_by'] = $user_id;
@@ -213,21 +223,17 @@ class ImportProductsController extends Controller
                     //Add unit
                     $unit_name = trim($value[2]);
                     if (! empty($unit_name)) {
-                        $unit = Unit::where('business_id', $business_id)
-                                    ->where(function ($query) use ($unit_name) {
-                                        $query->where('short_name', $unit_name)
-                                              ->orWhere('actual_name', $unit_name);
-                                    })->first();
+                        $unit = $this->findUnit($business_id, $unit_name);
                         if (! empty($unit)) {
                             $product_array['unit_id'] = $unit->id;
                         } else {
                             $is_valid = false;
-                            $error_msg = "Unit with name $unit_name not found in row no. $row_no. You can add unit from Products > Units";
+                            $error_msg = "Unit with name $unit_name not found in Excel row $row_no. Add it from Products > Units, or use an existing unit name/short name.";
                             break;
                         }
                     } else {
                         $is_valid = false;
-                        $error_msg = "UNIT is required in row no. $row_no";
+                        $error_msg = "UNIT is required in Excel row $row_no";
                         break;
                     }
 
@@ -605,7 +611,13 @@ class ImportProductsController extends Controller
                 }
 
                 if (! $is_valid) {
-                    throw new \Exception($error_msg);
+                    DB::rollBack();
+                    $transaction_started = false;
+
+                    return redirect('import-products')->with('notification', [
+                        'success' => 0,
+                        'msg' => $error_msg,
+                    ]);
                 }
 
                 if (! empty($formated_data)) {
@@ -692,9 +704,13 @@ class ImportProductsController extends Controller
                 'msg' => __('product.file_imported_successfully'),
             ];
 
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
+            if ($transaction_started) {
+                DB::commit();
+            }
+        } catch (\Throwable $e) {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
             \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
 
             $output = ['success' => 0,
@@ -757,6 +773,54 @@ class ImportProductsController extends Controller
             'dsp_exc_tax' => $this->productUtil->num_f($dsp_exc_tax),
             'dsp_inc_tax' => $this->productUtil->num_f($dsp_inc_tax),
         ];
+    }
+
+    /**
+     * Finds a unit using exact names first, then common spreadsheet aliases.
+     *
+     * @param  int  $business_id
+     * @param  string  $unit_name
+     * @return \App\Unit|null
+     */
+    private function findUnit($business_id, $unit_name)
+    {
+        $unit_name = trim($unit_name);
+        $unit_name_lower = strtolower($unit_name);
+
+        $unit = Unit::where('business_id', $business_id)
+                    ->where(function ($query) use ($unit_name, $unit_name_lower) {
+                        $query->where('short_name', $unit_name)
+                              ->orWhere('actual_name', $unit_name)
+                              ->orWhereRaw('LOWER(short_name) = ?', [$unit_name_lower])
+                              ->orWhereRaw('LOWER(actual_name) = ?', [$unit_name_lower]);
+                    })->first();
+
+        if (! empty($unit)) {
+            return $unit;
+        }
+
+        $aliases = [
+            'pkt' => ['packet', 'packets'],
+            'pkts' => ['packet', 'packets'],
+            'pcs' => ['pc', 'pcs', 'pc(s)', 'piece', 'pieces'],
+            'pc' => ['pc', 'pcs', 'pc(s)', 'piece', 'pieces'],
+        ];
+
+        $normalized_unit_name = preg_replace('/[^a-z0-9]/', '', $unit_name_lower);
+
+        if (empty($aliases[$normalized_unit_name])) {
+            return null;
+        }
+
+        $alias_names = $aliases[$normalized_unit_name];
+
+        return Unit::where('business_id', $business_id)
+                    ->where(function ($query) use ($alias_names) {
+                        foreach ($alias_names as $alias) {
+                            $query->orWhereRaw('LOWER(short_name) = ?', [$alias])
+                                  ->orWhereRaw('LOWER(actual_name) = ?', [$alias]);
+                        }
+                    })->first();
     }
 
     /**

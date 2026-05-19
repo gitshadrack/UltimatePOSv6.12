@@ -1,0 +1,25 @@
+{
+    "name": "dorobsoft/pagespeed",
+    "description": "Advanced Performance Optimization Module",
+    "authors": [
+        {
+            "name": "Dorob Soft",
+            "email": "muabdelaal@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\PageSpeed\\Providers\\PageSpeedServiceProvider"
+            ],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\PageSpeed\\": ""
+        }
+    }
+}

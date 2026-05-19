@@ -27,7 +27,7 @@ class AdminlteCustomPresenter extends Presenter
      */
     public function getMenuWithoutDropdownWrapper($item)
     {
-        return '<a href="' . $item->getUrl() . '" title="" class="tw-flex tw-items-center tw-gap-3 tw-px-3 tw-py-2 tw-text-sm tw-font-medium tw-tracking-tight tw-text-gray-600 tw-transition-all tw-duration-200 tw-rounded-lg tw-whitespace-nowrap hover:tw-text-gray-900 hover:tw-bg-gray-100' . $this->getActiveState($item) . '" ' . $item->getAttributes() . '>' .
+        return '<a href="' . $item->getUrl() . '" title="" class="' . $this->getMenuClasses($item) . '"' . $this->getMenuStyleAttribute($item) . ' ' . $this->getItemAttributes($item) . '>' .
         $this->formatIcon($item->icon) . ' <span class="tw-truncate">' . $item->title . '</span>' .
             '</a>' . PHP_EOL;
     }
@@ -35,7 +35,7 @@ class AdminlteCustomPresenter extends Presenter
     /**
      * {@inheritdoc}.
      */
-    public function getActiveState($item, $state = ' tw-bg-gray-200 tw-text-primary-700')
+    public function getActiveState($item, $state = ' tw-bg-blue-100 tw-text-blue-700')
     {
         return $item->isActive() ? $state : null;
     }
@@ -47,7 +47,7 @@ class AdminlteCustomPresenter extends Presenter
      * @param  string  $state
      * @return null|string
      */
-    public function getActiveStateOnChild($item, $state = 'tw-pb-1 tw-rounded-md tw-bg-gray-200 tw-text-primary-700')
+    public function getActiveStateOnChild($item, $state = 'tw-pb-1 tw-rounded-md tw-bg-blue-100 tw-text-blue-700')
     {
         return $item->hasActiveOnChild() ? $state : null;
     }
@@ -74,9 +74,9 @@ class AdminlteCustomPresenter extends Presenter
      */
     public function getMenuWithDropDownWrapper($item)
     {
-        $dropdownToggle = '<a href="#" title="" class="drop_down tw-flex tw-items-center tw-gap-3 tw-px-3 tw-py-2 tw-text-sm tw-font-medium tw-tracking-tight tw-text-gray-600 tw-transition-all tw-duration-200 tw-rounded-lg tw-whitespace-nowrap hover:tw-text-gray-900 hover:tw-bg-gray-100 focus:tw-text-gray-900 focus:tw-bg-gray-100' . $this->getActiveStateOnChild($item) . '" ' . $item->getAttributes() . '>' .
+        $dropdownToggle = '<a href="#" title="" class="' . $this->getMenuClasses($item, true) . '"' . $this->getMenuStyleAttribute($item) . ' ' . $this->getItemAttributes($item) . '>' .
         $this->formatIcon($item->icon) . ' <span class="tw-truncate">' . $item->title . '</span>' .
-        '<svg aria-hidden="true" class="svg tw-ml-auto tw-text-gray-500 tw-size-4 tw-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">' . $this->getArray($item) .
+        '<svg aria-hidden="true" class="svg tw-ml-auto tw-size-4 tw-shrink-0' . $this->getDropdownArrowClasses($item) . '" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">' . $this->getArray($item) .
             '</svg>' .
             '</a>';
 
@@ -91,6 +91,117 @@ class AdminlteCustomPresenter extends Presenter
         // print_r($dropdownToggle);exit;
 
         return '<div class="' . $this->getActiveStateOnChild($item) . '">' . $dropdownToggle . $childItemsContainerStart . $childItems . $childItemsContainerEnd . '</div>' . PHP_EOL;
+    }
+
+    /**
+     * Build top-level menu classes. Known module entries are rendered as colored pills.
+     *
+     * @param  \Nwidart\Menus\MenuItem  $item
+     * @param  bool  $isDropdown
+     * @return string
+     */
+    protected function getMenuClasses($item, $isDropdown = false)
+    {
+        $baseClasses = ($isDropdown ? 'drop_down ' : '') .
+            'tw-flex tw-items-center tw-gap-3 tw-px-3 tw-py-2 tw-text-sm tw-font-medium tw-tracking-tight tw-transition-all tw-duration-200 tw-rounded-lg tw-whitespace-nowrap';
+
+        $colorClasses = $this->getMenuColorClasses($item);
+
+        if (! empty($colorClasses)) {
+            return $baseClasses . ' ' . $colorClasses;
+        }
+
+        $stateClasses = $isDropdown ? $this->getActiveStateOnChild($item) : $this->getActiveState($item);
+
+        return $baseClasses . ' tw-text-gray-600 hover:tw-text-gray-900 hover:tw-bg-gray-100 focus:tw-text-gray-900 focus:tw-bg-gray-100' . $stateClasses;
+    }
+
+    /**
+     * Module color classes matching the admin sidebar palette.
+     *
+     * @param  \Nwidart\Menus\MenuItem  $item
+     * @return string
+     */
+    protected function getMenuColorClasses($item)
+    {
+        $title = strtolower(trim(strip_tags($item->title)));
+
+        $moduleColors = [
+            'superadmin' => 'tw-text-white',
+            'manufacturing' => 'tw-text-white',
+            'repair' => 'tw-text-white',
+            'accounting' => 'tw-text-white',
+            'ai assistance' => 'tw-text-white',
+            'hms' => 'tw-text-gray-900',
+            'gym' => 'tw-text-white',
+            'zatca' => 'tw-text-white',
+        ];
+
+        foreach ($moduleColors as $module => $classes) {
+            if (strpos($title, $module) !== false) {
+                return $classes;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Inline module colors so they work even when the CSS bundle has no matching utility.
+     *
+     * @param  \Nwidart\Menus\MenuItem  $item
+     * @return string
+     */
+    protected function getMenuStyleAttribute($item)
+    {
+        $title = strtolower(trim(strip_tags($item->title)));
+
+        $moduleStyles = [
+            'superadmin' => 'background-color: #12dddc; color: #ffffff;',
+            'manufacturing' => 'background-color: #ff851b; color: #ffffff;',
+            'repair' => 'background-color: #bc8f8f; color: #ffffff;',
+            'accounting' => 'background-color: #c66bd8; color: #ffffff;',
+            'ai assistance' => 'background-color: #6aa894; color: #ffffff;',
+            'hms' => 'background-color: #fff200; color: #111827;',
+            'gym' => 'background-color: #9ca3af; color: #ffffff;',
+            'zatca' => 'background-color: #7c8ea3; color: #ffffff;',
+        ];
+
+        foreach ($moduleStyles as $module => $style) {
+            if (strpos($title, $module) !== false) {
+                return ' style="' . $style . '"';
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Prevent duplicate inline style attributes on colored module rows.
+     *
+     * @param  \Nwidart\Menus\MenuItem  $item
+     * @return string
+     */
+    protected function getItemAttributes($item)
+    {
+        $attributes = $item->getAttributes();
+
+        if (! empty($this->getMenuStyleAttribute($item))) {
+            $attributes = preg_replace('/\sstyle=(["\']).*?\1/i', '', $attributes);
+        }
+
+        return $attributes;
+    }
+
+    /**
+     * Keep dropdown arrows readable on colored module rows.
+     *
+     * @param  \Nwidart\Menus\MenuItem  $item
+     * @return string
+     */
+    protected function getDropdownArrowClasses($item)
+    {
+        return empty($this->getMenuColorClasses($item)) ? ' tw-text-gray-500' : ' tw-text-current';
     }
 
     /**

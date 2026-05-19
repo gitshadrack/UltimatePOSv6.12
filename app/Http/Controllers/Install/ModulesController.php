@@ -187,8 +187,12 @@ class ModulesController extends Controller
             } elseif ($request->action_type == 'deactivate') {
                 $module->disable();
             }
-            // Publish assets for this specific module after status change
-            Artisan::call('module:publish', ['module' => $module_name, '--force' => true]);
+            // Publish assets for this specific module after status change.
+            try {
+                Artisan::call('module:publish', ['module' => $module_name]);
+            } catch (\Throwable $e) {
+                Artisan::call('module:publish');
+            }
 
             // Clear module assets cache when module is activated/deactivated
             Cache::forget('module_assets');
@@ -276,8 +280,26 @@ class ModulesController extends Controller
                 $zip->extractTo($path.'/');
                 $zip->close();
 
-                // Check for required files after extraction
+                // Check for required files after extraction. Prefer module.json name over ZIP filename,
+                // because module folders commonly use StudlyCase while ZIP names may be slugged.
                 $module_dir = $path . '/' . $module_name;
+                $extracted_module_dirs = collect(\File::directories($path))
+                    ->sortByDesc(function ($directory) {
+                        return filemtime($directory);
+                    });
+
+                foreach ($extracted_module_dirs as $directory) {
+                    if (file_exists($directory . '/module.json')) {
+                        $module_json = json_decode(file_get_contents($directory . '/module.json'), true);
+
+                        if (! empty($module_json['name'])) {
+                            $module_dir = $directory;
+                            $module_name = $module_json['name'];
+                            break;
+                        }
+                    }
+                }
+
                 $data_controller_path = $module_dir . '/Http/Controllers/DataController.php';
                 if (!(file_exists($module_dir . '/composer.json')
                     && file_exists($module_dir . '/module.json')
@@ -298,6 +320,7 @@ class ModulesController extends Controller
 
                 // Publish assets for the uploaded module using its name
                 try {
+                    Artisan::call('module:enable', ['module' => $module_name]);
                     Artisan::call('module:publish', ['module' => $module_name, '--force' => true]);
                 } catch (\Throwable $e) {
                     // Fallback to publishing all if targeted signature not supported

@@ -1,0 +1,14 @@
+{
+    "name": "PageSpeed",
+    "alias": "pagespeed",
+    "description": "Advanced Performance Optimization Module - Dramatically improve page load speed with caching, minification, compression, and optimization & DM +201091092091",
+    "keywords": [],
+    "active": 1,
+    "order": 10,
+    "providers": [
+        "Modules\\PageSpeed\\Providers\\PageSpeedServiceProvider"
+    ],
+    "aliases": {},
+    "files": [],
+    "requires": []
+}
