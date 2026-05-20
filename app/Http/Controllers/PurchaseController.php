@@ -1112,11 +1112,25 @@ class PurchaseController extends Controller
     public function importPurchaseProducts(Request $request)
     {
         try {
+            if (! $request->hasFile('file')) {
+                return [
+                    'success' => false,
+                    'msg' => __('product.file_to_import').' is required. If you selected a file, check the server upload_max_filesize and post_max_size limits.',
+                ];
+            }
+
             $file = $request->file('file');
 
             $parsed_array = Excel::toArray([], $file);
             //Remove header row
             $imported_data = array_splice($parsed_array[0], 1);
+
+            if (empty($imported_data)) {
+                return [
+                    'success' => false,
+                    'msg' => __('product.file_to_import').' does not contain any rows to import.',
+                ];
+            }
 
             $business_id = $request->session()->get('user.business_id');
             $location_id = $request->input('location_id');
@@ -1168,7 +1182,7 @@ class PurchaseController extends Controller
                     break;
                 }
 
-                if (! empty($value[0])) {
+                if (! empty($value[1])) {
                     $temp_array['quantity'] = $value[1];
                 } else {
                     $error_msg = __('lang_v1.quantity_required', ['row' => $row_index]);

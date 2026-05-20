@@ -298,6 +298,13 @@ class SellingPriceGroupController extends Controller
             ini_set('max_execution_time', 0);
             ini_set('memory_limit', -1);
 
+            if (! $request->hasFile('product_group_prices')) {
+                return redirect('update-product-price')->with('notification', [
+                    'success' => 0,
+                    'msg' => __('product.file_to_import').' is required. If you selected a file, check the server upload_max_filesize and post_max_size limits.',
+                ]);
+            }
+
             if ($request->hasFile('product_group_prices')) {
                 $file = $request->file('product_group_prices');
 
@@ -307,6 +314,10 @@ class SellingPriceGroupController extends Controller
 
                 //Remove header row
                 $imported_data = array_splice($parsed_array[0], 1);
+
+                if (empty($imported_data)) {
+                    throw new \Exception(__('product.file_to_import').' does not contain any rows to import.');
+                }
 
                 $business_id = $request->session()->get('user.business_id');
                 $price_groups = SellingPriceGroup::where('business_id', $business_id)->active()->get();
@@ -385,7 +396,9 @@ class SellingPriceGroupController extends Controller
                 'msg' => __('lang_v1.product_prices_imported_successfully'),
             ];
         } catch (\Exception $e) {
-            DB::rollBack();
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
             \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
 
             $output = ['success' => 0,

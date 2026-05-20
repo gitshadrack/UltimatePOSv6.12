@@ -108,6 +108,13 @@ class ImportProductsController extends Controller
                 //Remove header row
                 $imported_data = array_splice($parsed_array[0], 1);
 
+                if (empty($imported_data)) {
+                    return redirect('import-products')->with('notification', [
+                        'success' => 0,
+                        'msg' => __('product.file_to_import').' does not contain any rows to import.',
+                    ]);
+                }
+
                 $business_id = $request->session()->get('user.business_id');
                 $user_id = $request->session()->get('user.id');
                 $default_profit_percent = $request->session()->get('business.default_profit_percent');

@@ -100,11 +100,26 @@ class ImportSalesController extends Controller
 
         $business_id = request()->session()->get('user.business_id');
 
+        if (! $request->hasFile('sales')) {
+            return redirect('import-sales')->with('notification', [
+                'success' => 0,
+                'msg' => __('product.file_to_import').' is required. If you selected a file, check the server upload_max_filesize and post_max_size limits.',
+            ]);
+        }
+
         if ($request->hasFile('sales')) {
             $file_name = time().'_'.$request->sales->getClientOriginalName();
             $request->sales->storeAs('temp', $file_name);
 
             $parsed_array = $this->__parseData($file_name);
+            if (count($parsed_array) <= 1) {
+                @unlink(public_path('uploads/temp/'.$file_name));
+
+                return redirect('import-sales')->with('notification', [
+                    'success' => 0,
+                    'msg' => __('product.file_to_import').' does not contain any rows to import.',
+                ]);
+            }
 
             $import_fields = $this->__importFields();
             foreach ($import_fields as $key => $value) {
@@ -167,9 +182,16 @@ class ImportSalesController extends Controller
         }
 
         try {
+            $file_name = $request->input('file_name');
+            if (empty($file_name) || ! file_exists(public_path('uploads/temp/'.$file_name))) {
+                return redirect('import-sales')->with('notification', [
+                    'success' => 0,
+                    'msg' => __('product.file_to_import').' was not found. Please upload the file again.',
+                ]);
+            }
+
             DB::beginTransaction();
 
-            $file_name = $request->input('file_name');
             $import_fields = $request->input('import_fields');
             $group_by = $request->input('group_by');
             $location_id = $request->input('location_id');
@@ -179,6 +201,10 @@ class ImportSalesController extends Controller
             $parsed_array = $this->__parseData($file_name);
             //Remove header row
             unset($parsed_array[0]);
+            if (empty($parsed_array)) {
+                throw new \Exception(__('product.file_to_import').' does not contain any rows to import.');
+            }
+
             $formatted_sales_data = $this->__formatSaleData($parsed_array, $import_fields, $group_by);
             //Set maximum php execution time
             ini_set('max_execution_time', 0);

@@ -603,6 +603,13 @@ class ExpenseController extends Controller
         $business_id = $request->session()->get('user.business_id');
         $user_id = $request->session()->get('user.id');
 
+        if (! $request->hasFile('expense_csv')) {
+            return redirect('import-expense')->with('notification', [
+                'success' => 0,
+                'msg' => __('product.file_to_import').' is required. If you selected a file, check the server upload_max_filesize and post_max_size limits.',
+            ]);
+        }
+
         if ($request->hasFile('expense_csv')) {
             $file = $request->file('expense_csv');
 
@@ -613,6 +620,10 @@ class ExpenseController extends Controller
 
             //Remove header row
             $imported_data = array_splice($parsed_array[0], 1);
+
+            if (empty($imported_data)) {
+                throw new \Exception(__('product.file_to_import').' does not contain any rows to import.');
+            }
 
             $expense_array = [];
             DB::beginTransaction();
@@ -867,14 +878,18 @@ class ExpenseController extends Controller
 
         }
 
-        DB::commit();
+        if (DB::transactionLevel() > 0) {
+            DB::commit();
+        }
 
         $output = ['success' => 1,
             'msg' => __('product.file_imported_successfully'),
         ];
 
         } catch (\Exception $e) {
-            DB::rollBack();
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
             \Log::emergency('File:' . $e->getFile() . 'Line:' . $e->getLine() . 'Message:' . $e->getMessage());
 
             $output = ['success' => 0,

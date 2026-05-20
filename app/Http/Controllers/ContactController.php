@@ -1043,11 +1043,22 @@ class ContactController extends Controller
             //Set maximum php execution time
             ini_set('max_execution_time', 0);
 
+            if (! $request->hasFile('contacts_csv')) {
+                return redirect()->route('contacts.import')->with('notification', [
+                    'success' => 0,
+                    'msg' => __('product.file_to_import').' is required. If you selected a file, check the server upload_max_filesize and post_max_size limits.',
+                ]);
+            }
+
             if ($request->hasFile('contacts_csv')) {
                 $file = $request->file('contacts_csv');
                 $parsed_array = Excel::toArray([], $file);
                 //Remove header row
                 $imported_data = array_splice($parsed_array[0], 1);
+
+                if (empty($imported_data)) {
+                    throw new \Exception(__('product.file_to_import').' does not contain any rows to import.');
+                }
 
                 $business_id = $request->session()->get('user.business_id');
                 $user_id = $request->session()->get('user.id');
@@ -1250,7 +1261,9 @@ class ContactController extends Controller
                 DB::commit();
             }
         } catch (\Exception $e) {
-            DB::rollBack();
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
             \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
 
             $output = ['success' => 0,
