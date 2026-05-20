@@ -463,19 +463,24 @@ class ManageUserController extends Controller
      */
     public function signInAsUser($id)
     {
-        if (! auth()->user()->can('superadmin') && empty(session('previous_user_id'))) {
+        $previous_user_id = session('previous_user_id');
+
+        if (! auth()->user()->can('superadmin') && (empty($previous_user_id) || (int) $id !== (int) $previous_user_id)) {
             abort(403, 'Unauthorized action.');
         }
 
         $user_id = auth()->user()->id;
         $username = auth()->user()->username;
-        session()->flush();
+        Auth::logout();
+        request()->session()->invalidate();
+        request()->session()->regenerateToken();
 
         if (request()->has('save_current')) {
             session(['previous_user_id' => $user_id, 'previous_username' => $username]);
         }
 
         Auth::loginUsingId($id);
+        request()->session()->regenerate();
 
         return redirect()->route('home');
     }

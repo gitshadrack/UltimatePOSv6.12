@@ -67,12 +67,15 @@ class LoginController extends Controller
         return 'username';
     }
 
-    public function logout()
+    public function logout(Request $request)
     {
-        $this->businessUtil->activityLog(auth()->user(), 'logout');
+        if (auth()->check()) {
+            $this->businessUtil->activityLog(auth()->user(), 'logout');
+        }
 
-        request()->session()->flush();
         \Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
 
         return redirect('/login');
     }
@@ -90,7 +93,7 @@ class LoginController extends Controller
         $this->businessUtil->activityLog($user, 'login', null, [], false, $user->business_id);
 
         if (! $user->business->is_active) {
-            \Auth::logout();
+            $this->logoutAndInvalidateSession($request);
 
             return redirect('/login')
               ->with(
@@ -98,7 +101,7 @@ class LoginController extends Controller
                   ['success' => 0, 'msg' => __('lang_v1.business_inactive')]
               );
         } elseif ($user->status != 'active') {
-            \Auth::logout();
+            $this->logoutAndInvalidateSession($request);
 
             return redirect('/login')
               ->with(
@@ -106,7 +109,7 @@ class LoginController extends Controller
                   ['success' => 0, 'msg' => __('lang_v1.user_inactive')]
               );
         } elseif (! $user->allow_login) {
-            \Auth::logout();
+            $this->logoutAndInvalidateSession($request);
 
             return redirect('/login')
                 ->with(
@@ -114,7 +117,7 @@ class LoginController extends Controller
                     ['success' => 0, 'msg' => __('lang_v1.login_not_allowed')]
                 );
         } elseif (($user->user_type == 'user_customer') && ! $this->moduleUtil->hasThePermissionInSubscription($user->business_id, 'crm_module')) {
-            \Auth::logout();
+            $this->logoutAndInvalidateSession($request);
 
             return redirect('/login')
                 ->with(
@@ -122,6 +125,13 @@ class LoginController extends Controller
                     ['success' => 0, 'msg' => __('lang_v1.business_dont_have_crm_subscription')]
                 );
         }
+    }
+
+    protected function logoutAndInvalidateSession(Request $request)
+    {
+        \Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
     }
 
     protected function redirectTo()

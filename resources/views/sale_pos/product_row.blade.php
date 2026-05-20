@@ -1,6 +1,7 @@
 @php
 	$common_settings = session()->get('business.common_settings');
 	$multiplier = 1;
+	$can_view_pos_default_purchase_price = auth()->user()->can('view_default_purchase_price_from_pos_screen');
 
 	$action = !empty($action) ? $action : '';
 @endphp
@@ -419,7 +420,9 @@
 	@endif
 	<td>
 		<input type="text" style="width: auto" name="products[{{$row_count}}][unit_price_inc_tax]" class="form-control pos_unit_price_inc_tax input_number" value="{{@num_format($unit_price_inc_tax)}}" @if(!$edit_price) readonly @endif data-rule-min-value="{{$min_price_inc_tax}}" data-msg-min-value="{{__('lang_v1.minimum_selling_price_error_msg', ['price' => @num_format($min_price_inc_tax)])}}" data-min-price-message-template="{{__('lang_v1.minimum_selling_price_error_msg', ['price' => '__price__'])}}">
-		<input type="text" style="width: auto; margin-top: 2px" class="form-control input-sm pos_cost_price_inc_tax" value="{{@num_format($cost_price_inc_tax)}}" readonly tabindex="-1" title="@lang('product.default_purchase_price') (@lang('product.inc_of_tax'))">
+		@if($can_view_pos_default_purchase_price)
+			<input type="text" style="width: auto; margin-top: 2px" class="form-control input-sm pos_cost_price_inc_tax" value="{{@num_format($cost_price_inc_tax)}}" readonly tabindex="-1" title="@lang('product.default_purchase_price') (@lang('product.inc_of_tax'))">
+		@endif
 	</td>
 	@if(!empty($common_settings['enable_product_warranty']) && !empty($is_direct_sell))
 		<td>

@@ -34,6 +34,55 @@
             </table>
           </div>
         </div>
+        @if(!empty($mpesa_audit_trail) && $mpesa_audit_trail->count())
+          <div class="row">
+            <div class="col-md-12 col-sm-12">
+              <h3>M-PESA Audit Trail</h3>
+              <div class="table-responsive">
+                <table class="table table-slim table-bordered">
+                  <thead>
+                    <tr>
+                      <th>@lang('lang_v1.date')</th>
+                      <th>@lang('sale.invoice_no')</th>
+                      <th>M-PESA Reference</th>
+                      <th>@lang('sale.customer_name')</th>
+                      <th>@lang('sale.amount')</th>
+                      <th>@lang('sale.status')</th>
+                      <th>Audited By</th>
+                      <th>Audited At</th>
+                      <th>@lang('brand.note')</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @foreach($mpesa_audit_trail as $payment)
+                      @php
+                        $status = $payment->mpesa_verification_status ?: 'pending';
+                        $status_class = [
+                          'verified' => 'success',
+                          'rejected' => 'danger',
+                          'pending' => 'warning',
+                        ][$status] ?? 'default';
+                        $amount = !empty($payment->is_return) ? -1 * $payment->amount : $payment->amount;
+                        $customer_name = !empty($payment->supplier_business_name) ? $payment->supplier_business_name : $payment->customer;
+                      @endphp
+                      <tr>
+                        <td>{{ @format_datetime($payment->paid_on ?? $payment->transaction_date) }}</td>
+                        <td>{{ $payment->invoice_no }}</td>
+                        <td>{{ $payment->transaction_no ?: $payment->note }}</td>
+                        <td>{{ $customer_name }}</td>
+                        <td><span class="display_currency" data-currency_symbol="true">{{ $amount }}</span></td>
+                        <td><span class="label label-{{ $status_class }}">{{ ucfirst($status) }}</span></td>
+                        <td>{{ trim($payment->verifier_name) ?: '--' }}</td>
+                        <td>@if(!empty($payment->mpesa_verified_at)){{ @format_datetime($payment->mpesa_verified_at) }}@else -- @endif</td>
+                        <td>{{ $payment->mpesa_verification_note ?: '--' }}</td>
+                      </tr>
+                    @endforeach
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        @endif
       @endif
       <hr>
       @if(!empty($register_details->denominations))

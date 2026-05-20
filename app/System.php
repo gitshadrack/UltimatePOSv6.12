@@ -71,13 +71,12 @@ class System extends Model
      */
     public static function getCurrency()
     {
-        $c_id = System::where('key', 'app_currency_id')
-                ->first()
-                ->value;
+        $system_currency = System::where('key', 'app_currency_id')
+                ->first();
 
-        $currency = Currency::find($c_id);
+        $currency = ! empty($system_currency->value) ? Currency::find($system_currency->value) : null;
 
-        return $currency;
+        return $currency ?: Currency::first();
     }
 
     /**

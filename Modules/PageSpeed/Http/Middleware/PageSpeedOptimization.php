@@ -144,6 +144,13 @@ class PageSpeedOptimization
     {
         $path = $request->path();
 
+        // Never cache pages for an active Laravel browser session.
+        // Admin forms contain CSRF tokens; cached tokens cause 419 Page Expired.
+        $sessionCookie = config('session.cookie');
+        if (! empty($sessionCookie) && $request->cookies->has($sessionCookie)) {
+            return true;
+        }
+
         // 1. Skip AJAX requests - هذه تُحمّل البيانات الديناميكية للـ DataTables
         if ($request->ajax() || $request->wantsJson()) {
             return true;
@@ -160,6 +167,10 @@ class PageSpeedOptimization
             'register',
             'logout',
             'password',
+            'roles',
+            'users',
+            'business',
+            'modules',
             'pagespeed',            // PageSpeed settings page - shows dynamic statistics
             'pos/create',           // نقطة البيع - real-time
             'pos/edit',

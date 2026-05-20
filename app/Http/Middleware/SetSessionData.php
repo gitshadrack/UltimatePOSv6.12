@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Business;
+use App\Currency;
 use App\Utils\BusinessUtil;
 use Closure;
 use Illuminate\Support\Facades\Auth;
@@ -18,10 +19,14 @@ class SetSessionData
      */
     public function handle($request, Closure $next)
     {
-        if (! $request->session()->has('user')) {
+        $user = Auth::user();
+        $session_user_id = $request->session()->get('user.id');
+
+        if (! $request->session()->has('user') || $session_user_id != $user->id) {
             $business_util = new BusinessUtil;
 
-            $user = Auth::user();
+            $request->session()->forget(['user', 'business', 'currency', 'financial_year']);
+
             $session_data = ['id' => $user->id,
                 'surname' => $user->surname,
                 'first_name' => $user->first_name,
@@ -32,12 +37,12 @@ class SetSessionData
             ];
             $business = Business::findOrFail($user->business_id);
 
-            $currency = $business->currency;
-            $currency_data = ['id' => $currency->id,
-                'code' => $currency->code,
-                'symbol' => $currency->symbol,
-                'thousand_separator' => $currency->thousand_separator,
-                'decimal_separator' => $currency->decimal_separator,
+            $currency = $business->currency ?: Currency::first();
+            $currency_data = ['id' => optional($currency)->id,
+                'code' => optional($currency)->code,
+                'symbol' => optional($currency)->symbol,
+                'thousand_separator' => optional($currency)->thousand_separator,
+                'decimal_separator' => optional($currency)->decimal_separator,
             ];
 
             $request->session()->put('user', $session_data);

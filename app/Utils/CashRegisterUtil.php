@@ -432,6 +432,52 @@ class CashRegisterUtil extends Util
     }
 
     /**
+     * Returns the M-PESA audit trail for a register window.
+     *
+     * @param  object  $register_details
+     * @return \Illuminate\Support\Collection
+     */
+    public function getRegisterMpesaAuditTrail($register_details)
+    {
+        if (empty($register_details)) {
+            return collect();
+        }
+
+        $close_time = ! empty($register_details->closed_at)
+            ? $register_details->closed_at
+            : \Carbon::now()->toDateTimeString();
+
+        return TransactionPayment::join('transactions as t', 'transaction_payments.transaction_id', '=', 't.id')
+            ->leftJoin('contacts as c', 't.contact_id', '=', 'c.id')
+            ->leftJoin('users as verifier', 'transaction_payments.mpesa_verified_by', '=', 'verifier.id')
+            ->where('t.business_id', $register_details->business_id)
+            ->where('t.created_by', $register_details->user_id)
+            ->whereBetween('t.created_at', [$register_details->open_time, $close_time])
+            ->where('t.type', 'sell')
+            ->where('t.status', 'final')
+            ->where('transaction_payments.method', 'custom_pay_1')
+            ->select(
+                'transaction_payments.id',
+                'transaction_payments.amount',
+                'transaction_payments.is_return',
+                'transaction_payments.transaction_no',
+                'transaction_payments.note',
+                'transaction_payments.paid_on',
+                'transaction_payments.mpesa_verification_status',
+                'transaction_payments.mpesa_verified_at',
+                'transaction_payments.mpesa_verification_note',
+                't.invoice_no',
+                't.transaction_date',
+                'c.name as customer',
+                'c.supplier_business_name',
+                DB::raw("CONCAT(COALESCE(verifier.surname, ''), ' ', COALESCE(verifier.first_name, ''), ' ', COALESCE(verifier.last_name, '')) as verifier_name")
+            )
+            ->orderBy('transaction_payments.paid_on')
+            ->orderBy('transaction_payments.id')
+            ->get();
+    }
+
+    /**
      * Adds verified/pending/rejected M-PESA totals to register details.
      *
      * @param  object|null  $register_details

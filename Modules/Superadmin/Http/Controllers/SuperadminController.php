@@ -34,6 +34,7 @@ class SuperadminController extends Controller
         $date_filters['this_week']['end'] = date('Y-m-d', strtotime('sunday this week'));
 
         $currency = System::getCurrency();
+        $currency_label = ! empty($currency) ? $currency->currency : '';
 
         //Count all busineses not subscribed.
         $not_subscribed = Business::leftjoin('subscriptions AS s', 'business.id', '=', 's.business_id')
@@ -44,7 +45,7 @@ class SuperadminController extends Controller
 
         $monthly_sells_chart = new CommonChart;
         $monthly_sells_chart->labels(array_keys($subscriptions))
-            ->dataset(__('superadmin::lang.total_subscriptions', ['currency' => $currency->currency]), 'column', array_values($subscriptions));
+            ->dataset(__('superadmin::lang.total_subscriptions', ['currency' => $currency_label]), 'column', array_values($subscriptions));
 
         return view('superadmin::superadmin.index')
             ->with(compact(

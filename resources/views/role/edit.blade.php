@@ -778,6 +778,14 @@
                 <div class="col-md-12">
                     <div class="checkbox">
                       <label>
+                        {!! Form::checkbox('permissions[]', 'view_default_purchase_price_from_pos_screen', in_array('view_default_purchase_price_from_pos_screen', $role_permissions), ['class' => 'input-icheck']); !!}
+                        View default purchase price on POS screen
+                      </label>
+                    </div>
+                </div>
+                <div class="col-md-12">
+                    <div class="checkbox">
+                      <label>
                         {!! Form::checkbox('permissions[]', 'edit_product_discount_from_pos_screen', in_array('edit_product_discount_from_pos_screen', $role_permissions), ['class' => 'input-icheck']); !!}
                         {{ __('lang_v1.edit_product_discount_from_pos_screen') }}
                       </label>

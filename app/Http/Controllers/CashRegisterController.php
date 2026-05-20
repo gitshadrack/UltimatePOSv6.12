@@ -138,11 +138,12 @@ class CashRegisterController extends Controller
         $close_time = ! empty($register_details['closed_at']) ? $register_details['closed_at'] : \Carbon::now()->toDateTimeString();
         $details = $this->cashRegisterUtil->getRegisterTransactionDetails($user_id, $open_time, $close_time);
         $mpesa_verification = $this->cashRegisterUtil->getRegisterMpesaVerificationSummary($register_details);
+        $mpesa_audit_trail = $this->cashRegisterUtil->getRegisterMpesaAuditTrail($register_details);
 
         $payment_types = $this->cashRegisterUtil->payment_types(null, false, $business_id);
 
         return view('cash_register.register_details')
-                    ->with(compact('register_details', 'details', 'payment_types', 'close_time', 'mpesa_verification'));
+                    ->with(compact('register_details', 'details', 'payment_types', 'close_time', 'mpesa_verification', 'mpesa_audit_trail'));
     }
 
     /**
@@ -169,11 +170,12 @@ class CashRegisterController extends Controller
 
         $details = $this->cashRegisterUtil->getRegisterTransactionDetails($user_id, $open_time, $close_time, $is_types_of_service_enabled);
         $mpesa_verification = $this->cashRegisterUtil->getRegisterMpesaVerificationSummary($register_details);
+        $mpesa_audit_trail = $this->cashRegisterUtil->getRegisterMpesaAuditTrail($register_details);
 
         $payment_types = $this->cashRegisterUtil->payment_types($register_details->location_id, true, $business_id);
 
         return view('cash_register.register_details')
-                ->with(compact('register_details', 'details', 'payment_types', 'close_time', 'mpesa_verification'));
+                ->with(compact('register_details', 'details', 'payment_types', 'close_time', 'mpesa_verification', 'mpesa_audit_trail'));
     }
 
     /**
@@ -200,13 +202,14 @@ class CashRegisterController extends Controller
 
         $details = $this->cashRegisterUtil->getRegisterTransactionDetails($user_id, $open_time, $close_time, $is_types_of_service_enabled);
         $mpesa_verification = $this->cashRegisterUtil->getRegisterMpesaVerificationSummary($register_details);
+        $mpesa_audit_trail = $this->cashRegisterUtil->getRegisterMpesaAuditTrail($register_details);
 
         $payment_types = $this->cashRegisterUtil->payment_types($register_details->location_id, true, $business_id);
 
         $pos_settings = ! empty(request()->session()->get('business.pos_settings')) ? json_decode(request()->session()->get('business.pos_settings'), true) : [];
 
         return view('cash_register.close_register_modal')
-                    ->with(compact('register_details', 'details', 'payment_types', 'pos_settings', 'mpesa_verification'));
+                    ->with(compact('register_details', 'details', 'payment_types', 'pos_settings', 'mpesa_verification', 'mpesa_audit_trail'));
     }
 
     /**
