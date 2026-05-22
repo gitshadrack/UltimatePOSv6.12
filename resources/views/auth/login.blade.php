@@ -28,6 +28,38 @@
             }
         }
 
+        $is_numeric_login_enabled = false;
+        $numeric_login_locations = collect();
+        $selected_location_id = old('location_id');
+        $login_type = old('login_type') == 'password' ? 'password' : 'pin';
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('business_locations', 'enable_numeric_login')) {
+                $numeric_login_locations = \App\BusinessLocation::join('business', 'business.id', '=', 'business_locations.business_id')
+                    ->where('business_locations.enable_numeric_login', 1)
+                    ->where('business.is_active', 1)
+                    ->where('business_locations.is_active', 1)
+                    ->select(
+                        'business_locations.id',
+                        'business_locations.name',
+                        'business_locations.location_id',
+                        'business.name as business_name'
+                    )
+                    ->orderBy('business.name')
+                    ->orderBy('business_locations.name')
+                    ->get();
+                $is_numeric_login_enabled = $numeric_login_locations->isNotEmpty();
+            }
+        } catch (\Exception $e) {
+            $is_numeric_login_enabled = false;
+            $numeric_login_locations = collect();
+        }
+
+        if (!$is_numeric_login_enabled) {
+            $login_type = 'password';
+        } elseif (empty($selected_location_id) && $numeric_login_locations->count() == 1) {
+            $selected_location_id = $numeric_login_locations->first()->id;
+        }
+
         $login_business_name = null;
         $login_image_url = asset('img/login-side.jpg');
         try {
@@ -247,6 +279,105 @@
             padding: 34px;
         }
 
+        .pin-keypad {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        .pin-keypad-button {
+            height: 66px;
+            border: 0;
+            border-radius: 4px;
+            background: #1f73e0;
+            color: #fff;
+            font-size: 18px;
+            font-weight: 700;
+            line-height: 1;
+            transition: background-color 0.15s ease, border-color 0.15s ease;
+        }
+
+        .pin-keypad-button:hover,
+        .pin-keypad-button:focus {
+            background: #155fc0;
+            outline: none;
+        }
+
+        .pin-keypad-button:active {
+            background: #104d9b;
+        }
+
+        .pin-keypad-action {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .access-code-card {
+            max-width: 360px;
+            margin: 0 auto;
+            padding: 22px 20px 20px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.84);
+        }
+
+        .access-code-title {
+            color: #ff7a1a;
+            font-size: 17px;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 4px;
+        }
+
+        .access-code-input,
+        .access-code-location {
+            width: 100%;
+            height: 34px;
+            border: 1px solid #1f73e0;
+            border-radius: 8px;
+            background: #fff;
+            color: #111827;
+            font-size: 18px;
+            text-align: center;
+            outline: none;
+        }
+
+        .access-code-location {
+            margin-bottom: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: left;
+        }
+
+        .pin-keypad-login {
+            background: #35c98d;
+        }
+
+        .pin-keypad-login:hover,
+        .pin-keypad-login:focus {
+            background: #24ad75;
+        }
+
+        .pin-keypad-clear {
+            background: #ff7a1a;
+        }
+
+        .pin-keypad-clear:hover,
+        .pin-keypad-clear:focus {
+            background: #e76508;
+        }
+
+        .abc-login-toggle {
+            width: 100%;
+            height: 42px;
+            margin-top: 10px;
+            border: 0;
+            border-radius: 6px;
+            background: #2d4054;
+            color: #fff;
+            font-weight: 800;
+        }
+
         .login-split-page .tw-absolute.tw-top-2,
         .login-split-page .tw-absolute.tw-top-5 {
             z-index: 5;
@@ -381,7 +512,7 @@
             <div
                 class="login-card tw-p-5 md:tw-p-6 tw-mb-4 tw-rounded-2xl tw-transition-all tw-duration-200 tw-bg-white tw-shadow-sm tw-ring-1 tw-ring-gray-200">
                 <div class="login-card-inner tw-flex tw-flex-col tw-gap-4 tw-dw-rounded-box">
-                    <div class="tw-flex tw-items-center tw-flex-col">
+                    <div class="password-login-field {{ $login_type == 'pin' ? 'hide' : '' }} tw-flex tw-items-center tw-flex-col">
                         <h1 class="tw-text-lg md:tw-text-xl tw-font-semibold tw-text-[#1e1e1e]">
                             @lang('lang_v1.welcome_back')
                         </h1>
@@ -392,7 +523,56 @@
 
                     <form method="POST" action="{{ route('login') }}" id="login-form">
                         {{ csrf_field() }}
-                        <div class="form-group has-feedback {{ $errors->has('username') ? ' has-error' : '' }}">
+                        <input type="hidden" name="login_type" id="login_type" value="{{ $login_type }}">
+                        @if($is_numeric_login_enabled)
+                            <div class="access-code-card pin-login-field {{ $login_type == 'pin' ? '' : 'hide' }}">
+                                <div class="access-code-title">@lang('lang_v1.enter_access_code')</div>
+                                @if($numeric_login_locations->count() == 1)
+                                    <input type="hidden" name="location_id" id="location_id" value="{{ $selected_location_id }}">
+                                @else
+                                    <select name="location_id" id="location_id"
+                                        class="access-code-location" {{ $login_type == 'pin' ? 'required' : '' }}>
+                                        <option value="">@lang('lang_v1.select_location')</option>
+                                        @foreach($numeric_login_locations as $location)
+                                            <option value="{{ $location->id }}" {{ (string) $selected_location_id === (string) $location->id ? 'selected' : '' }}>
+                                                {{ $location->business_name }} - {{ $location->name }} @if(!empty($location->location_id))({{ $location->location_id }})@endif
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                @endif
+
+                                <input class="access-code-input" id="pin" type="password" inputmode="numeric"
+                                    pattern="[0-9]*" maxlength="6" name="pin"
+                                    {{ $login_type == 'pin' ? 'required' : '' }} autocomplete="off" />
+
+                                <div class="pin-keypad" aria-label="@lang('lang_v1.numeric_keypad')">
+                                    @foreach([1, 2, 3, 4, 5, 6, 7, 8, 9] as $key)
+                                        <button type="button" class="pin-keypad-button" data-pin-key="{{ $key }}">{{ $key }}</button>
+                                    @endforeach
+                                    <button type="submit" class="pin-keypad-button pin-keypad-login">
+                                        @lang('lang_v1.login')
+                                    </button>
+                                    <button type="button" class="pin-keypad-button" data-pin-key="0">0</button>
+                                    <button type="button" class="pin-keypad-button pin-keypad-clear" data-pin-action="clear">
+                                        @lang('lang_v1.clear')
+                                    </button>
+                                </div>
+                                <button type="button" class="abc-login-toggle login-type-btn" data-login-type="password">
+                                    @lang('lang_v1.abc_letters')
+                                </button>
+                                @if ($errors->has('pin'))
+                                    <span class="help-block text-center">
+                                        <strong>{{ $errors->first('pin') }}</strong>
+                                    </span>
+                                @endif
+                                @if ($errors->has('location_id'))
+                                    <span class="help-block text-center">
+                                        <strong>{{ $errors->first('location_id') }}</strong>
+                                    </span>
+                                @endif
+                            </div>
+                        @endif
+                        <div class="form-group has-feedback password-login-field {{ $login_type == 'pin' ? 'hide' : '' }} {{ $errors->has('username') ? ' has-error' : '' }}">
                             <label class="tw-dw-form-control">
                                 <div class="tw-dw-label">
                                     <span
@@ -401,7 +581,7 @@
 
                                 <input
                                     class="tw-border tw-border-[#D1D5DA] tw-outline-none tw-h-12 tw-bg-transparent tw-rounded-lg tw-px-3 tw-font-medium tw-text-black placeholder:tw-text-gray-500 placeholder:tw-font-medium"
-                                    name="username" required autofocus placeholder="@lang('lang_v1.username')"
+                                    name="username" {{ $login_type == 'pin' ? '' : 'required' }} autofocus placeholder="@lang('lang_v1.username')"
                                     data-last-active-input="" id="username" type="text" name="username"
                                     value="{{ $username }}" />
                                 @if ($errors->has('username'))
@@ -412,7 +592,7 @@
                             </label>
                         </div>
 
-                        <div class="form-group has-feedback {{ $errors->has('password') ? ' has-error' : '' }}">
+                        <div class="form-group has-feedback password-login-field {{ $login_type == 'pin' ? 'hide' : '' }} {{ $errors->has('password') ? ' has-error' : '' }}">
                             <label class="tw-dw-form-control">
                                 <div class="tw-dw-label">
                                     <span
@@ -426,7 +606,7 @@
 
                                 <input
                                     class="tw-border tw-border-[#D1D5DA] tw-outline-none tw-h-12 tw-bg-transparent tw-rounded-lg tw-px-3 tw-font-medium tw-text-black placeholder:tw-text-gray-500 placeholder:tw-font-medium"
-                                    id="password" type="password" name="password" value="{{ $password }}" required
+                                    id="password" type="password" name="password" value="{{ $password }}" {{ $login_type == 'pin' ? '' : 'required' }}
                                     placeholder="@lang('lang_v1.password')" />
                                 <button type="button" id="show_hide_icon" class="show_hide_icon"
                                     style="position: absolute; top:48px;right:5px;">
@@ -445,7 +625,7 @@
                         </div>
 
 
-                        <div class="tw-dw-form-control">
+                        <div class="tw-dw-form-control password-login-field {{ $login_type == 'pin' ? 'hide' : '' }}">
                             <label class="tw-dw-cursor-pointer tw-dw-label tw-self-start tw-gap-2">
                                 <input type="checkbox" name="remember" {{ old('remember') ? 'checked' : '' }}
                                     class="tw-dw-checkbox">
@@ -454,7 +634,7 @@
                             </label>
                         </div>
                         @if(config('constants.enable_recaptcha'))
-                        <div class="row">
+                        <div class="row password-login-field {{ $login_type == 'pin' ? 'hide' : '' }}">
                             <div class="col-md-12">
                                 <div class="form-group">
                                     <div class="g-recaptcha" data-sitekey="{{ config('constants.google_recaptcha_key') }}"></div>
@@ -466,12 +646,19 @@
                         </div>
                         @endif
                         <button type="submit"
-                            class="tw-bg-gradient-to-r tw-from-indigo-500 tw-to-blue-500 tw-h-12 tw-rounded-xl tw-text-sm md:tw-text-base tw-text-white tw-font-semibold tw-w-full tw-max-w-full mt-2 hover:tw-from-indigo-600 hover:tw-to-blue-600 focus:tw-outline-none focus:tw-ring-2 focus:tw-ring-blue-500 focus:tw-ring-offset-2 active:tw-from-indigo-700 active:tw-to-blue-700">
+                            class="password-login-field {{ $login_type == 'pin' ? 'hide' : '' }} tw-bg-gradient-to-r tw-from-indigo-500 tw-to-blue-500 tw-h-12 tw-rounded-xl tw-text-sm md:tw-text-base tw-text-white tw-font-semibold tw-w-full tw-max-w-full mt-2 hover:tw-from-indigo-600 hover:tw-to-blue-600 focus:tw-outline-none focus:tw-ring-2 tw-ring-blue-500 focus:tw-ring-offset-2 active:tw-from-indigo-700 active:tw-to-blue-700">
                             @lang('lang_v1.login')
                         </button>
+                        @if($is_numeric_login_enabled)
+                        <button type="button"
+                            class="password-login-field login-type-btn {{ $login_type == 'pin' ? 'hide' : '' }} tw-h-12 tw-rounded-xl tw-text-sm md:tw-text-base tw-text-blue-700 tw-font-semibold tw-w-full tw-max-w-full mt-2 tw-border tw-border-blue-200 tw-bg-blue-50"
+                            data-login-type="pin">
+                            @lang('lang_v1.login_with_pin')
+                        </button>
+                        @endif
                     </form>
 
-                    <div class="tw-flex tw-items-center tw-flex-col">
+                    <div class="password-login-field {{ $login_type == 'pin' ? 'hide' : '' }} tw-flex tw-items-center tw-flex-col">
                         <!-- Register Url -->
 
                         @if (!($request->segment(1) == 'business' && $request->segment(2) == 'register'))
@@ -495,11 +682,62 @@
     <script type="text/javascript">
         $(document).ready(function() {
             $('#show_hide_icon').off('click');
+            function setLoginType(type) {
+                $('#login_type').val(type);
+
+                if (type === 'pin') {
+                    $('.password-login-field').addClass('hide');
+                    $('.pin-login-field').removeClass('hide');
+                    $('#username').prop('required', false);
+                    $('#password').prop('required', false);
+                    $('#pin').prop('required', true).focus();
+                    $('#location_id').prop('required', $('#location_id').is('select'));
+                } else {
+                    $('.pin-login-field').addClass('hide');
+                    $('.password-login-field').removeClass('hide');
+                    $('#username').prop('required', true);
+                    $('#pin').prop('required', false).val('');
+                    $('#location_id').prop('required', false);
+                    $('#password').prop('required', true).focus();
+                }
+            }
+
+            $('.login-type-btn').on('click', function() {
+                setLoginType($(this).data('login-type'));
+            });
+
+            $('.pin-keypad-button').off('click.pinKeypad').on('click.pinKeypad', function(e) {
+                if ($(this).attr('type') === 'submit') {
+                    return;
+                }
+
+                e.preventDefault();
+                const pinInput = $('#pin');
+                const key = $(this).attr('data-pin-key');
+                const action = $(this).attr('data-pin-action');
+                let currentPin = pinInput.val();
+
+                if (action === 'clear') {
+                    pinInput.val('').focus();
+                    return;
+                }
+
+                if (action === 'backspace') {
+                    pinInput.val(currentPin.slice(0, -1)).focus();
+                    return;
+                }
+
+                if (typeof key !== 'undefined' && currentPin.length < 6) {
+                    pinInput.val(currentPin + key).focus();
+                }
+            });
+
             $('.change_lang').click(function() {
                 window.location = "{{ route('login') }}?lang=" + $(this).attr('value');
             });
             $('a.demo-login').click(function(e) {
                 e.preventDefault();
+                setLoginType('password');
                 $('#username').val($(this).data('admin'));
                 $('#password').val("{{ $password }}");
                 $('form#login-form').submit();

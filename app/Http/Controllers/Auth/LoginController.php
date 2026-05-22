@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\BusinessLocation;
 use App\Providers\RouteServiceProvider;
+use App\User;
 use App\Utils\BusinessUtil;
 use App\Utils\ModuleUtil;
 use Illuminate\Foundation\Auth\AuthenticatesUsers;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use App\Rules\ReCaptcha;
 
 
@@ -150,6 +153,17 @@ class LoginController extends Controller
 
     public function validateLogin(Request $request)
     {
+        if ($request->input('login_type') == 'pin') {
+            $rules = [
+                'location_id' => 'required|integer',
+                'pin' => 'required|digits_between:4,6',
+            ];
+
+            $this->validate($request, $rules);
+
+            return;
+        }
+
         if(config('constants.enable_recaptcha')){
             $this->validate($request, [
                 $this->username() => 'required|string',
@@ -163,6 +177,65 @@ class LoginController extends Controller
             ]);
         }
        
+    }
+
+    protected function attemptLogin(Request $request)
+    {
+        if ($request->input('login_type') == 'pin') {
+            return $this->attemptPinLogin($request);
+        }
+
+        return $this->guard()->attempt(
+            $this->credentials($request),
+            $request->filled('remember')
+        );
+    }
+
+    protected function attemptPinLogin(Request $request)
+    {
+        $location = BusinessLocation::with('business')
+            ->Active()
+            ->find($request->input('location_id'));
+
+        if (empty($location) || empty($location->business)) {
+            return false;
+        }
+
+        if (empty($location->enable_numeric_login)) {
+            return false;
+        }
+
+        $pin = (string) $request->input('pin');
+        $users = User::with('business')
+            ->where('business_id', $location->business_id)
+            ->where('allow_login', 1)
+            ->where('status', 'active')
+            ->where('is_enable_service_staff_pin', 1)
+            ->whereNotNull('service_staff_pin')
+            ->permission(['location.'.$location->id, 'access_all_locations'])
+            ->get();
+
+        $matched_users = $users->filter(function ($user) use ($pin) {
+            $stored_pin = (string) $user->service_staff_pin;
+            $pin_matches = hash_equals($stored_pin, $pin);
+
+            if (! $pin_matches && (strpos($stored_pin, '$2y$') === 0 || strpos($stored_pin, '$argon2') === 0)) {
+                $pin_matches = Hash::check($pin, $stored_pin);
+            }
+
+            return $pin_matches;
+        });
+
+        if ($matched_users->count() !== 1) {
+            return false;
+        }
+
+        $user = $matched_users->first();
+        $this->guard()->login($user, $request->filled('remember'));
+        $request->session()->regenerate();
+        $request->session()->put('numeric_login_location_id', $location->id);
+
+        return true;
     }
 
 }

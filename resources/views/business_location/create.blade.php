@@ -36,6 +36,17 @@
                 </div>
                 <div class="col-sm-6">
                     <div class="form-group">
+                        <div class="checkbox">
+                            <label>
+                                {!! Form::checkbox('enable_numeric_login', 1, false, ['class' => 'input-icheck']); !!}
+                                <strong>@lang('lang_v1.enable_numeric_login')</strong>
+                            </label>
+                            <p class="help-block">@lang('lang_v1.enable_numeric_login_help')</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="form-group">
                         {!! Form::label('landmark', __( 'business.landmark' ) . ':') !!}
                         {!! Form::text('landmark', null, ['class' => 'form-control', 'placeholder' => __( 'business.landmark' ) ]); !!}
                     </div>

@@ -22,6 +22,7 @@ class BusinessLocation extends Model
     protected $casts = [
         'featured_products' => 'array',
         'enable_mpesa_verification' => 'boolean',
+        'enable_numeric_login' => 'boolean',
     ];
 
     /**
@@ -94,6 +95,11 @@ class BusinessLocation extends Model
     public function price_group()
     {
         return $this->belongsTo(\App\SellingPriceGroup::class, 'selling_price_group_id');
+    }
+
+    public function business()
+    {
+        return $this->belongsTo(\App\Business::class);
     }
 
     /**

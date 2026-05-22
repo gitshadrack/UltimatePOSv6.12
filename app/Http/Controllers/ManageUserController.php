@@ -137,6 +137,9 @@ class ManageUserController extends Controller
 
             $request['max_sales_discount_percent'] = ! is_null($request->input('max_sales_discount_percent')) ? $this->moduleUtil->num_uf($request->input('max_sales_discount_percent')) : null;
 
+            $business_id = $request->session()->get('user.business_id');
+            $this->validateUniqueServiceStaffPin($request, $business_id);
+
             $user = $this->moduleUtil->createUser($request);
 
             event(new UserCreatedOrModified($user, 'added'));
@@ -309,6 +312,15 @@ class ManageUserController extends Controller
 
             DB::beginTransaction();
 
+            $user = User::where('business_id', $business_id)
+                          ->findOrFail($id);
+
+            $pin_for_validation = ! empty($request->input('service_staff_pin'))
+                ? $request->input('service_staff_pin')
+                : $user->service_staff_pin;
+
+            $this->validateUniqueServiceStaffPin($request, $business_id, $id, $pin_for_validation);
+
             if ($user_data['allow_login'] && $request->has('username')) {
                 $user_data['username'] = $request->input('username');
                 $ref_count = $this->moduleUtil->setAndGetReferenceCount('username');
@@ -321,9 +333,6 @@ class ManageUserController extends Controller
                     $user_data['username'] .= $username_ext;
                 }
             }
-
-            $user = User::where('business_id', $business_id)
-                          ->findOrFail($id);
 
             $user->update($user_data);
             $role_id = $request->input('role');
@@ -386,6 +395,58 @@ class ManageUserController extends Controller
         $admins = User::role('Admin#'.$business_id)->get();
 
         return $admins;
+    }
+
+    private function validateUniqueServiceStaffPin(Request $request, $business_id, $exclude_user_id = null, $pin = null)
+    {
+        if (empty($request->input('is_enable_service_staff_pin'))) {
+            return;
+        }
+
+        $pin = ! is_null($pin) ? $pin : $request->input('service_staff_pin');
+        if (empty($pin)) {
+            return;
+        }
+
+        $target_locations = $this->getRequestedLocationIds($request, $business_id);
+        if (empty($target_locations)) {
+            return;
+        }
+
+        $duplicate_users = User::where('business_id', $business_id)
+            ->where('is_enable_service_staff_pin', 1)
+            ->where('service_staff_pin', $pin)
+            ->when(! empty($exclude_user_id), function ($query) use ($exclude_user_id) {
+                $query->where('id', '!=', $exclude_user_id);
+            })
+            ->get();
+
+        foreach ($duplicate_users as $duplicate_user) {
+            $duplicate_locations = $duplicate_user->permitted_locations($business_id);
+            if ($duplicate_locations == 'all' || in_array('all', $target_locations)) {
+                throw new \Exception(__('lang_v1.service_staff_pin_location_duplicate'));
+            }
+
+            if (! empty(array_intersect($target_locations, $duplicate_locations))) {
+                throw new \Exception(__('lang_v1.service_staff_pin_location_duplicate'));
+            }
+        }
+    }
+
+    private function getRequestedLocationIds(Request $request, $business_id)
+    {
+        if ($request->input('access_all_locations') == 'access_all_locations') {
+            return ['all'];
+        }
+
+        $location_permissions = $request->input('location_permissions', []);
+        $location_ids = [];
+
+        foreach ($location_permissions as $location_permission) {
+            $location_ids[] = (int) str_replace('location.', '', $location_permission);
+        }
+
+        return array_values(array_filter($location_ids));
     }
 
     /**
