@@ -25,6 +25,13 @@
                 </div>
                 <div class="col-sm-6">
                     <div class="form-group">
+                        {!! Form::label('login_domain', __( 'lang_v1.location_login_domain' ) . ':') !!}
+                        {!! Form::text('login_domain', null, ['class' => 'form-control', 'placeholder' => 'branch-a.pos-system.co.ke']); !!}
+                        <p class="help-block">@lang('lang_v1.location_login_domain_help')</p>
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="form-group">
                         <div class="checkbox">
                             <label>
                                 {!! Form::checkbox('enable_mpesa_verification', 1, false, ['class' => 'input-icheck']); !!}

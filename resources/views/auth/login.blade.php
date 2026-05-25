@@ -29,39 +29,45 @@
         }
 
         $is_numeric_login_enabled = false;
-        $numeric_login_locations = collect();
+        $login_locations = collect();
         $selected_location_id = old('location_id');
         $login_type = old('login_type') == 'password' ? 'password' : 'pin';
-        try {
-            if (\Illuminate\Support\Facades\Schema::hasColumn('business_locations', 'enable_numeric_login')) {
-                $numeric_login_locations = \App\BusinessLocation::join('business', 'business.id', '=', 'business_locations.business_id')
-                    ->where('business_locations.enable_numeric_login', 1)
-                    ->where('business.is_active', 1)
-                    ->where('business_locations.is_active', 1)
-                    ->select(
-                        'business_locations.id',
-                        'business_locations.name',
-                        'business_locations.location_id',
-                        'business.name as business_name'
-                    )
-                    ->orderBy('business.name')
-                    ->orderBy('business_locations.name')
-                    ->get();
-                $is_numeric_login_enabled = $numeric_login_locations->isNotEmpty();
-            }
-        } catch (\Exception $e) {
-            $is_numeric_login_enabled = false;
-            $numeric_login_locations = collect();
-        }
-
-        if (!$is_numeric_login_enabled) {
-            $login_type = 'password';
-        } elseif (empty($selected_location_id) && $numeric_login_locations->count() == 1) {
-            $selected_location_id = $numeric_login_locations->first()->id;
-        }
-
         $login_business_name = null;
+        $login_business_id = null;
         $login_image_url = asset('img/login-side.jpg');
+        $normalize_login_key = function ($value) {
+            $value = trim((string) $value);
+            if ($value === '') {
+                return null;
+            }
+
+            $parseable_value = preg_match('/^[a-z][a-z0-9+\-.]*:\/\//i', $value)
+                ? $value
+                : 'http://' . ltrim($value, '/');
+            $value_host = parse_url($parseable_value, PHP_URL_HOST);
+            $value = !empty($value_host) ? $value_host : explode('/', $value)[0];
+            $value = preg_replace('/:\d+$/', '', $value);
+
+            return strtolower(preg_replace('/^www\./', '', trim($value, " \t\n\r\0\x0B./")));
+        };
+        $get_login_alias = function ($value) {
+            $value_parts = explode('.', $value);
+
+            return count($value_parts) > 2 ? $value_parts[0] : null;
+        };
+        $login_key_matches = function ($configured_key, $request_key) use ($normalize_login_key, $get_login_alias) {
+            $configured_key = $normalize_login_key($configured_key);
+            if (empty($configured_key) || empty($request_key)) {
+                return false;
+            }
+
+            if ($configured_key === $request_key) {
+                return true;
+            }
+
+            return strpos($configured_key, '.') === false &&
+                $configured_key === $get_login_alias($request_key);
+        };
         try {
             if (
                 \Illuminate\Support\Facades\Schema::hasColumn('business', 'tenant_domain') &&
@@ -147,12 +153,13 @@
 
                 $normalized_host = $normalize_domain($request->getHost());
                 $businesses = \App\Business::whereNotNull('tenant_domain')
-                    ->select('name', 'tenant_domain', 'login_image')
+                    ->select('id', 'name', 'tenant_domain', 'login_image')
                     ->get();
 
                 foreach ($businesses as $business) {
                     if ($tenant_domain_matches($business->tenant_domain, $normalized_host)) {
                         $login_business_name = $business->name;
+                        $login_business_id = $business->id;
                         $business_login_image_url = $resolve_login_image_url($business->login_image);
                         if (!empty($business_login_image_url)) {
                             $login_image_url = $business_login_image_url;
@@ -163,6 +170,75 @@
             }
         } catch (\Exception $e) {
             $login_business_name = null;
+        }
+
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('business_locations', 'enable_numeric_login')) {
+                $has_location_login_domain = \Illuminate\Support\Facades\Schema::hasColumn('business_locations', 'login_domain');
+                $location_select = [
+                    'business_locations.id',
+                    'business_locations.name',
+                    'business_locations.location_id',
+                    'business_locations.enable_numeric_login',
+                    'business.name as business_name',
+                ];
+
+                if ($has_location_login_domain) {
+                    $location_select[] = 'business_locations.login_domain';
+                }
+
+                $login_locations = \App\BusinessLocation::join('business', 'business.id', '=', 'business_locations.business_id')
+                    ->where('business.is_active', 1)
+                    ->where('business_locations.is_active', 1)
+                    ->when(!empty($login_business_id), function ($query) use ($login_business_id) {
+                        $query->where('business_locations.business_id', $login_business_id);
+                    })
+                    ->select($location_select)
+                    ->orderBy('business.name')
+                    ->orderBy('business_locations.name')
+                    ->get();
+
+                $preselected_login_location = null;
+                $requested_login_location = trim((string) request()->query('location', request()->query('location_id', '')));
+
+                if ($requested_login_location !== '') {
+                    $requested_login_location_key = $normalize_login_key($requested_login_location);
+                    $preselected_login_location = $login_locations->first(function ($location) use ($requested_login_location, $requested_login_location_key, $has_location_login_domain, $login_key_matches) {
+                        if ((string) $location->id === $requested_login_location || (string) $location->location_id === $requested_login_location) {
+                            return true;
+                        }
+
+                        return $has_location_login_domain &&
+                            $login_key_matches($location->login_domain, $requested_login_location_key);
+                    });
+                }
+
+                if (empty($preselected_login_location) && $has_location_login_domain) {
+                    $normalized_host = $normalize_login_key($request->getHost());
+                    $preselected_login_location = $login_locations->first(function ($location) use ($normalized_host, $login_key_matches) {
+                        return $login_key_matches($location->login_domain, $normalized_host);
+                    });
+                }
+
+                if (!empty($preselected_login_location)) {
+                    $selected_location_id = $preselected_login_location->id;
+                    $login_locations = collect([$preselected_login_location]);
+                }
+
+                $is_numeric_login_enabled = $login_locations->where('enable_numeric_login', 1)->isNotEmpty();
+            }
+        } catch (\Exception $e) {
+            $is_numeric_login_enabled = false;
+            $login_locations = collect();
+        }
+
+        if ($login_locations->isNotEmpty() && empty($selected_location_id)) {
+            $selected_location_id = $login_locations->first()->id;
+        }
+
+        $selected_login_location = $login_locations->firstWhere('id', (int) $selected_location_id);
+        if (!$is_numeric_login_enabled || empty($selected_login_location) || empty($selected_login_location->enable_numeric_login)) {
+            $login_type = 'password';
         }
     @endphp
     <style>
@@ -524,22 +600,31 @@
                     <form method="POST" action="{{ route('login') }}" id="login-form">
                         {{ csrf_field() }}
                         <input type="hidden" name="login_type" id="login_type" value="{{ $login_type }}">
-                        @if($is_numeric_login_enabled)
-                            <div class="access-code-card pin-login-field {{ $login_type == 'pin' ? '' : 'hide' }}">
-                                <div class="access-code-title">@lang('lang_v1.enter_access_code')</div>
-                                @if($numeric_login_locations->count() == 1)
-                                    <input type="hidden" name="location_id" id="location_id" value="{{ $selected_location_id }}">
+                        @if($login_locations->isNotEmpty())
+                            <div class="form-group login-location-field">
+                                @if($login_locations->count() == 1)
+                                    @php $only_login_location = $login_locations->first(); @endphp
+                                    <input type="hidden" name="location_id" id="location_id"
+                                        value="{{ $selected_location_id }}"
+                                        data-numeric-login="{{ !empty($only_login_location->enable_numeric_login) ? 1 : 0 }}">
                                 @else
                                     <select name="location_id" id="location_id"
-                                        class="access-code-location" {{ $login_type == 'pin' ? 'required' : '' }}>
+                                        class="access-code-location">
                                         <option value="">@lang('lang_v1.select_location')</option>
-                                        @foreach($numeric_login_locations as $location)
-                                            <option value="{{ $location->id }}" {{ (string) $selected_location_id === (string) $location->id ? 'selected' : '' }}>
+                                        @foreach($login_locations as $location)
+                                            <option value="{{ $location->id }}"
+                                                data-numeric-login="{{ !empty($location->enable_numeric_login) ? 1 : 0 }}"
+                                                {{ (string) $selected_location_id === (string) $location->id ? 'selected' : '' }}>
                                                 {{ $location->business_name }} - {{ $location->name }} @if(!empty($location->location_id))({{ $location->location_id }})@endif
                                             </option>
                                         @endforeach
                                     </select>
                                 @endif
+                            </div>
+                        @endif
+                        @if($is_numeric_login_enabled)
+                            <div class="access-code-card pin-login-field {{ $login_type == 'pin' ? '' : 'hide' }}">
+                                <div class="access-code-title">@lang('lang_v1.enter_access_code')</div>
 
                                 <input class="access-code-input" id="pin" type="password" inputmode="numeric"
                                     pattern="[0-9]*" maxlength="6" name="pin"
@@ -682,8 +767,29 @@
     <script type="text/javascript">
         $(document).ready(function() {
             $('#show_hide_icon').off('click');
-            function setLoginType(type) {
+            function selectedLocationUsesPin() {
+                const locationInput = $('#location_id');
+
+                if (!locationInput.length) {
+                    return false;
+                }
+
+                if (locationInput.is('select')) {
+                    return locationInput.find('option:selected').data('numeric-login') == 1;
+                }
+
+                return locationInput.data('numeric-login') == 1;
+            }
+
+            function setLoginType(type, forceLocationPreference) {
+                if (forceLocationPreference) {
+                    type = selectedLocationUsesPin() ? 'pin' : 'password';
+                } else if (type === 'pin' && !selectedLocationUsesPin()) {
+                    type = 'password';
+                }
+
                 $('#login_type').val(type);
+                $('.login-type-btn[data-login-type="pin"]').toggleClass('hide', !selectedLocationUsesPin());
 
                 if (type === 'pin') {
                     $('.password-login-field').addClass('hide');
@@ -691,16 +797,22 @@
                     $('#username').prop('required', false);
                     $('#password').prop('required', false);
                     $('#pin').prop('required', true).focus();
-                    $('#location_id').prop('required', $('#location_id').is('select'));
+                    $('#location_id').prop('required', true);
                 } else {
                     $('.pin-login-field').addClass('hide');
                     $('.password-login-field').removeClass('hide');
                     $('#username').prop('required', true);
                     $('#pin').prop('required', false).val('');
-                    $('#location_id').prop('required', false);
+                    $('#location_id').prop('required', $('#location_id').is('select'));
                     $('#password').prop('required', true).focus();
                 }
             }
+
+            $('#location_id').on('change', function() {
+                setLoginType($('#login_type').val(), true);
+            });
+
+            setLoginType($('#login_type').val());
 
             $('.login-type-btn').on('click', function() {
                 setLoginType($(this).data('login-type'));

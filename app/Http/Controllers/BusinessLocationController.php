@@ -174,6 +174,9 @@ class BusinessLocationController extends Controller
             if (Schema::hasColumn('business_locations', 'enable_numeric_login')) {
                 $input['enable_numeric_login'] = $request->input('enable_numeric_login', 0);
             }
+            if (Schema::hasColumn('business_locations', 'login_domain')) {
+                $input['login_domain'] = $request->input('login_domain');
+            }
 
             $input['business_id'] = $business_id;
             $login_image = $this->commonUtil->uploadFile($request, 'login_image', 'location_login_images', 'image');
@@ -287,6 +290,9 @@ class BusinessLocationController extends Controller
             }
             if (Schema::hasColumn('business_locations', 'enable_numeric_login')) {
                 $input['enable_numeric_login'] = $request->input('enable_numeric_login', 0);
+            }
+            if (Schema::hasColumn('business_locations', 'login_domain')) {
+                $input['login_domain'] = $request->input('login_domain');
             }
 
             $business_id = $request->session()->get('user.business_id');

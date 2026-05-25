@@ -1520,6 +1520,8 @@ return [
     'numeric_login_tooltip' => 'Allow users to log in using username and staff PIN.',
     'enable_numeric_login' => 'Enable Numeric Login',
     'enable_numeric_login_help' => 'If enabled, this location can use the access-code keypad login. PINs are matched only within this business location.',
+    'location_login_domain' => 'Location login domain/code',
+    'location_login_domain_help' => 'Optional. Use a full domain, subdomain, or short code to pre-select this location on the login page.',
     'login_with_pin' => 'Login with PIN',
     'login_with_password' => 'Login with password',
     'enter_access_code' => 'Enter Access Code/ Swipe Card',

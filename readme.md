@@ -765,6 +765,68 @@ php artisan optimize:clear
 
 No migration is needed.
 
+### 19. Pre-Location Login Routing
+
+Purpose: Let each business location decide its login style before the cashier sees the login form. A location can use numeric PIN login while another location in the same business uses normal ABC username/password login, without asking the cashier to choose from a location dropdown.
+
+Files added:
+
+- `database/migrations/2026_05_25_000001_add_login_domain_to_business_locations_table.php`
+
+Files changed:
+
+- `app/Http/Controllers/Auth/LoginController.php`
+- `app/Http/Controllers/BusinessLocationController.php`
+- `app/Http/Controllers/SellPosController.php`
+- `resources/views/auth/login.blade.php`
+- `resources/views/business_location/create.blade.php`
+- `resources/views/business_location/edit.blade.php`
+- `lang/en/lang_v1.php`
+- `readme.md`
+
+Database fields added to `business_locations`:
+
+- `login_domain`: optional domain, subdomain, or short code used to pre-select a location on the login page.
+
+What changed:
+
+- Business Location create/edit now includes `Location login domain/code`.
+- The login page can resolve a location from the current domain or from a URL query such as `/login?location=branch-a`.
+- If a location is resolved, the login location field is hidden and that location is used automatically.
+- If the resolved location has `Enable Numeric Login` enabled, the login page shows the PIN keypad.
+- If the resolved location does not have `Enable Numeric Login` enabled, the login page shows normal ABC username/password login.
+- For ABC login, the preselected location is stored in the session after authentication and POS defaults to that location.
+- PIN login remains guarded by location, so a PIN can only log in through a location where numeric login is enabled.
+- If no location can be resolved, the login page falls back to the visible location selector behavior.
+
+How to configure pre-location login:
+
+1. Run `php artisan migrate`.
+2. Open Business Settings > Business Locations.
+3. Edit each location.
+4. Set `Location login domain/code`, for example:
+   - `branch-a.pos-system.co.ke`
+   - `branch-b`
+   - `main-shop`
+5. Enable or disable `Enable Numeric Login` per location.
+6. Open the location login page by domain or code:
+   - `https://branch-a.pos-system.co.ke/login`
+   - `/login?location=branch-b`
+
+Matching behavior:
+
+1. Full domains can match the browser host, for example `branch-a.pos-system.co.ke`.
+2. Short codes can match the first subdomain segment, so `branch-a` matches `branch-a.pos-system.co.ke`.
+3. URL query values can match the location database id, the location id/code, or the `Location login domain/code`.
+4. When a business `Tenant domain` is matched, location matching is scoped to that business.
+
+Server action:
+
+```bash
+php artisan migrate
+php artisan optimize:clear
+```
+
 ### Recommended Online Deployment Steps
 
 1. Upload all changed controller files.

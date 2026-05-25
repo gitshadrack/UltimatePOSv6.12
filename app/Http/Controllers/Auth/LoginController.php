@@ -128,6 +128,37 @@ class LoginController extends Controller
                     ['success' => 0, 'msg' => __('lang_v1.business_dont_have_crm_subscription')]
                 );
         }
+
+        $this->setPreselectedLoginLocation($request, $user);
+    }
+
+    protected function setPreselectedLoginLocation(Request $request, $user)
+    {
+        $location_id = $request->input('location_id');
+        if (empty($location_id)) {
+            $request->session()->forget('preselected_login_location_id');
+
+            return;
+        }
+
+        $location = BusinessLocation::Active()
+            ->where('business_id', $user->business_id)
+            ->find($location_id);
+
+        if (empty($location)) {
+            $request->session()->forget('preselected_login_location_id');
+
+            return;
+        }
+
+        $permitted_locations = $user->permitted_locations();
+        if ($permitted_locations != 'all' && ! in_array($location->id, $permitted_locations)) {
+            $request->session()->forget('preselected_login_location_id');
+
+            return;
+        }
+
+        $request->session()->put('preselected_login_location_id', $location->id);
     }
 
     protected function logoutAndInvalidateSession(Request $request)

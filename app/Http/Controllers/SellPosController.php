@@ -235,6 +235,11 @@ class SellPosController extends Controller
         $bl_attributes = $business_locations['attributes'];
         $business_locations = $business_locations['locations'];
 
+        $preselected_location_id = request()->session()->get('preselected_login_location_id');
+        if (empty($default_location) && !empty($preselected_location_id) && $business_locations->has($preselected_location_id)) {
+            $default_location = BusinessLocation::findOrFail($preselected_location_id);
+        }
+
         //set first location as default locaton
         if (empty($default_location)) {
             foreach ($business_locations as $id => $name) {
