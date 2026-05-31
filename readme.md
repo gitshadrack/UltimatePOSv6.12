@@ -797,7 +797,7 @@ What changed:
 - If the resolved location does not have `Enable Numeric Login` enabled, the login page shows normal ABC username/password login.
 - For ABC login, the preselected location is stored in the session after authentication and POS defaults to that location.
 - PIN login remains guarded by location, so a PIN can only log in through a location where numeric login is enabled.
-- If no location can be resolved, the login page falls back to the visible location selector behavior.
+- If no domain/code is matched, the login page uses the first active location in the scoped location list and still keeps the location field hidden.
 
 How to configure pre-location login:
 
@@ -826,6 +826,32 @@ Server action:
 php artisan migrate
 php artisan optimize:clear
 ```
+
+### POS Virtual Keyboard Toggle
+
+Purpose: Add an optional on-screen keyboard for the POS screen, controlled from Business Settings > POS. The setting is disabled by default.
+
+Files added:
+
+- `resources/views/sale_pos/partials/virtual_keyboard.blade.php`
+- `public/js/pos_virtual_keyboard.js`
+
+Files changed:
+
+- `app/Utils/BusinessUtil.php`
+- `resources/views/business/partials/settings_pos.blade.php`
+- `resources/views/sale_pos/create.blade.php`
+- `resources/views/sale_pos/edit.blade.php`
+- `readme.md`
+
+What changed:
+
+- Added `enable_virtual_keyboard` to the default POS settings with a default value of `0`.
+- Added an `Enable virtual keyboard` checkbox in Business Settings > POS.
+- Loaded the virtual keyboard Blade partial and JavaScript only when the setting is enabled.
+- Added a POS on-screen keyboard with `ABC` and `123` layouts, backspace, clear, space, and enter.
+- Added a light/dark theme button on the virtual keyboard toolbar; the selected theme is remembered in the browser.
+- Kept the keyboard disabled by default for existing and new businesses.
 
 ### Recommended Online Deployment Steps
 

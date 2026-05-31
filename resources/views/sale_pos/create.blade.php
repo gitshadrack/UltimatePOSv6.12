@@ -96,6 +96,10 @@
 
     @include('sale_pos.partials.weighing_scale_modal')
 
+    @if (!empty($pos_settings['enable_virtual_keyboard']))
+        @include('sale_pos.partials.virtual_keyboard')
+    @endif
+
 @stop
 @section('css')
     <!-- include module css -->
@@ -109,6 +113,9 @@
 @stop
 @section('javascript')
     <script src="{{ asset('js/pos.js?v=' . $asset_v) }}"></script>
+    @if (!empty($pos_settings['enable_virtual_keyboard']))
+        <script src="{{ asset('js/pos_virtual_keyboard.js?v=' . $asset_v) }}"></script>
+    @endif
     <script src="{{ asset('js/printer.js?v=' . $asset_v) }}"></script>
     <script src="{{ asset('js/product.js?v=' . $asset_v) }}"></script>
     <script src="{{ asset('js/opening_stock.js?v=' . $asset_v) }}"></script>

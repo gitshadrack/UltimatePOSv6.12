@@ -281,6 +281,19 @@
                 <div class="checkbox">
                 <br>
                   <label>
+                    {!! Form::checkbox('pos_settings[enable_virtual_keyboard]', 1,
+                    empty($pos_settings['enable_virtual_keyboard']) ? 0 : 1,
+                    [ 'class' => 'input-icheck']); !!} Enable virtual keyboard
+                  </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-4">
+            <div class="form-group">
+                <div class="checkbox">
+                <br>
+                  <label>
                     {!! Form::checkbox('pos_settings[show_invoice_scheme]', 1,  
                        empty($pos_settings['show_invoice_scheme']) ? 0 : 1 , 
                     [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.show_invoice_scheme' ) }}

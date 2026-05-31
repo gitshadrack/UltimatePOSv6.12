@@ -600,27 +600,10 @@
                     <form method="POST" action="{{ route('login') }}" id="login-form">
                         {{ csrf_field() }}
                         <input type="hidden" name="login_type" id="login_type" value="{{ $login_type }}">
-                        @if($login_locations->isNotEmpty())
-                            <div class="form-group login-location-field">
-                                @if($login_locations->count() == 1)
-                                    @php $only_login_location = $login_locations->first(); @endphp
-                                    <input type="hidden" name="location_id" id="location_id"
-                                        value="{{ $selected_location_id }}"
-                                        data-numeric-login="{{ !empty($only_login_location->enable_numeric_login) ? 1 : 0 }}">
-                                @else
-                                    <select name="location_id" id="location_id"
-                                        class="access-code-location">
-                                        <option value="">@lang('lang_v1.select_location')</option>
-                                        @foreach($login_locations as $location)
-                                            <option value="{{ $location->id }}"
-                                                data-numeric-login="{{ !empty($location->enable_numeric_login) ? 1 : 0 }}"
-                                                {{ (string) $selected_location_id === (string) $location->id ? 'selected' : '' }}>
-                                                {{ $location->business_name }} - {{ $location->name }} @if(!empty($location->location_id))({{ $location->location_id }})@endif
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                @endif
-                            </div>
+                        @if(!empty($selected_login_location))
+                            <input type="hidden" name="location_id" id="location_id"
+                                value="{{ $selected_login_location->id }}"
+                                data-numeric-login="{{ !empty($selected_login_location->enable_numeric_login) ? 1 : 0 }}">
                         @endif
                         @if($is_numeric_login_enabled)
                             <div class="access-code-card pin-login-field {{ $login_type == 'pin' ? '' : 'hide' }}">
