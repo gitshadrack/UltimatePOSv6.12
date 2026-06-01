@@ -853,6 +853,68 @@ What changed:
 - Added a light/dark theme button on the virtual keyboard toolbar; the selected theme is remembered in the browser.
 - Kept the keyboard disabled by default for existing and new businesses.
 
+### Tax Invoice Receipt Design
+
+Purpose: Add a stronger tax-invoice receipt layout that captures tax details clearly and gives printed invoices a more genuine, verifiable feel.
+
+Files added:
+
+- `resources/views/sale_pos/receipts/tax-invoice.blade.php`
+
+Files changed:
+
+- `app/Http/Controllers/InvoiceLayoutController.php`
+- `app/Utils/TransactionUtil.php`
+- `public/js/app.js`
+- `resources/views/invoice_layout/edit.blade.php`
+- `readme.md`
+
+What changed:
+
+- Added a new selectable invoice layout design named `Tax Invoice`.
+- Based the new design on the existing `columnize-taxes` receipt so it keeps item-level taxable value and per-tax columns.
+- Added an `Official Tax Invoice` badge.
+- Added a tax invoice verification block with invoice serial, invoice date, business tax IDs, customer tax ID, printed time, verification code, and invoice URL.
+- Moved the QR code into the verification area with a `Scan to verify` label.
+- Added a stronger tax summary showing net taxable amount, exempt amount, individual taxes, total tax, and gross invoice amount.
+- Added receipt data fields for `invoice_url`, `printed_at`, `document_verification_code`, and unformatted total tax.
+- Enabled the tax heading inputs for both `columnize-taxes` and `tax-invoice` designs.
+
+How to configure:
+
+1. Open Business Settings > Invoice Settings > Invoice Layouts.
+2. Create or edit an invoice layout.
+3. Select `Tax Invoice` as the design.
+4. Fill the tax column headings, for example `VAT`.
+5. Enable business tax numbers, customer tax label, QR code, and invoice URL fields as needed.
+6. Assign the layout to a business location for POS or sale invoices.
+
+Server action:
+
+```bash
+php artisan optimize:clear
+```
+
+No migration is needed.
+
+### Customer Balance On Invoices
+
+Purpose: Show the customer's total outstanding balance on printed invoices and receipts.
+
+Files changed:
+
+- `app/Utils/TransactionUtil.php`
+- `resources/views/sale_pos/receipts/english-arabic.blade.php`
+- `readme.md`
+
+What changed:
+
+- The receipt payload now always includes the customer's total balance across all sales for finalized sales.
+- Existing receipt designs that already render the all-sales balance now show it without requiring the old layout checkbox.
+- The English/Arabic receipt design now includes a customer balance row.
+- The label still uses the invoice layout's `Total due (all sales)` label when configured, with a `Customer Balance` fallback.
+- No migration is needed.
+
 ### Recommended Online Deployment Steps
 
 1. Upload all changed controller files.

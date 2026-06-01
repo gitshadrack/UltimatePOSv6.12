@@ -1954,8 +1954,8 @@ $(document).ready(function() {
     });
 
     if ($('form#add_invoice_layout_form').length > 0) {
-        $('select#design').change(function() {
-            if ($(this).val() == 'columnize-taxes') {
+        $('select#design, select#design_select').change(function() {
+            if ($.inArray($(this).val(), ['columnize-taxes', 'tax-invoice']) !== -1) {
                 $('div#columnize-taxes').removeClass('hide');
                 $('div#columnize-taxes')
                     .find('input')

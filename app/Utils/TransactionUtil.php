@@ -1468,6 +1468,7 @@ class TransactionUtil extends Util
         }
 
         //Format tax
+        $output['tax_total_unformatted'] = 0;
         if (! empty($output['taxes'])) {
             $total_tax = 0;
             foreach ($output['taxes'] as $key => $value) {
@@ -1476,6 +1477,7 @@ class TransactionUtil extends Util
                 $output['taxes'][$key] = $this->num_f($value, $show_currency, $business_details);
             }
 
+            $output['tax_total_unformatted'] = $total_tax;
             $output['taxes'][trans('lang_v1.total_tax')] = $this->num_f($total_tax, $show_currency, $business_details);
         }
 
@@ -1533,18 +1535,14 @@ class TransactionUtil extends Util
             $output['total_due'] = ($due == 0) ? 0 : $this->num_f($due, $show_currency, $business_details);
             $output['total_due_label'] = $il->total_due_label;
 
-            if ($il->show_previous_bal == 1) {
-                $all_due = $this->getContactDue($transaction->contact_id);
-                if (! empty($all_due)) {
-                    $output['all_bal_label'] = $il->prev_bal_label;
-                    $output['all_due'] = $this->num_f($all_due, $show_currency, $business_details);
-                }
-            }
+            $all_due = $this->getContactDue($transaction->contact_id);
+            $all_due = ! empty($all_due) ? $all_due : 0;
+            $output['all_bal_label'] = ! empty($il->prev_bal_label) ? $il->prev_bal_label : __('contact.customer').' '.__('lang_v1.balance');
+            $output['all_due'] = $this->num_f($all_due, $show_currency, $business_details);
 
             if ($il->show_previous_balance_due == 1) {
                 $output['total_previous_due_label'] = $il->previous_balance_due_label;
                 // previous due should EXCLUDE current sale due
-                $all_due = $this->getContactDue($transaction->contact_id);
                 $previous_due = $all_due - $due;
                 if ($previous_due < 0) {
                     $previous_due = 0;
@@ -1638,6 +1636,15 @@ class TransactionUtil extends Util
 
         //Barcode related information.
         $output['show_barcode'] = ! empty($il->show_barcode) ? true : false;
+        $output['invoice_url'] = $this->getInvoiceUrl($transaction->id, $business_details->id);
+        $output['printed_at'] = $this->format_date(\Carbon::now(), true, $business_details);
+        $output['document_verification_code'] = strtoupper(substr(sha1(implode('|', [
+            $transaction->business_id,
+            $transaction->id,
+            $transaction->invoice_no,
+            $transaction->final_total,
+            optional($transaction->created_at)->timestamp,
+        ])), 0, 12));
 
         if (in_array($transaction_type, ['sell', 'sales_order'])) {
             //Qr code related information.

@@ -344,7 +344,16 @@
                                     </td>
                                     <td style="font-weight: bold; direction: rtl; text-align: right;">المبلغ المستحق:</td>
                                 </tr>
-                               
+                                @if(!empty($receipt_details->all_due) && !empty($receipt_details->all_bal_label))
+                                    <tr>
+                                        <td style=" font-weight: bold; text-align: right;">Customer Balance:</td>
+                                        <td class="print-red" style="text-align: center;">
+                                            {{$receipt_details->all_due}}
+                                        </td>
+                                        <td style="font-weight: bold; direction: rtl; text-align: right;">&#1585;&#1589;&#1610;&#1583; &#1575;&#1604;&#1593;&#1605;&#1610;&#1604;:</td>
+                                    </tr>
+                                @endif
+
                             </tbody>
                         </table>
                     </div>

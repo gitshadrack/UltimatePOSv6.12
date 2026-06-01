@@ -60,30 +60,30 @@
                </small>
           </div>
 
-          <div class="form-group @if($invoice_layout->design != 'columnize-taxes') hide @endif" id="columnize-taxes">
+          <div class="form-group @if(!in_array($invoice_layout->design, ['columnize-taxes', 'tax-invoice'])) hide @endif" id="columnize-taxes">
             <div class="col-md-3">
               <input type="text" class="form-control" 
               name="table_tax_headings[]" required="required" placeholder="tax 1 name" value="{{$invoice_layout->table_tax_headings[0]}}"
-              @if($invoice_layout->design != 'columnize-taxes') disabled @endif>
+              @if(!in_array($invoice_layout->design, ['columnize-taxes', 'tax-invoice'])) disabled @endif>
               @show_tooltip(__('lang_v1.tooltip_columnize_taxes_heading'))
             </div>
             <div class="col-md-3">
               <input type="text" class="form-control" 
               name="table_tax_headings[]" placeholder="tax 2 name" 
               value="{{$invoice_layout->table_tax_headings[1]}}"
-              @if($invoice_layout->design != 'columnize-taxes') disabled @endif>
+              @if(!in_array($invoice_layout->design, ['columnize-taxes', 'tax-invoice'])) disabled @endif>
             </div>
             <div class="col-md-3">
               <input type="text" class="form-control" 
               name="table_tax_headings[]" placeholder="tax 3 name"
               value="{{$invoice_layout->table_tax_headings[2]}}"
-              @if($invoice_layout->design != 'columnize-taxes') disabled @endif>
+              @if(!in_array($invoice_layout->design, ['columnize-taxes', 'tax-invoice'])) disabled @endif>
             </div>
             <div class="col-md-3">
               <input type="text" class="form-control" 
               name="table_tax_headings[]" placeholder="tax 4 name"
               value="{{$invoice_layout->table_tax_headings[3]}}"
-              @if($invoice_layout->design != 'columnize-taxes') disabled @endif>
+              @if(!in_array($invoice_layout->design, ['columnize-taxes', 'tax-invoice'])) disabled @endif>
             </div>
 
           </div>
