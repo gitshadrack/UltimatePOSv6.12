@@ -226,6 +226,7 @@
                         'id' => 'express_transaction_no',
                         'autocomplete' => 'off',
                     ]) !!}
+                    <p class="help-block">@lang('lang_v1.intasend_pos_transaction_code_help')</p>
                 </div>
             </div>
             <div class="modal-footer">

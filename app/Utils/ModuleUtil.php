@@ -574,6 +574,9 @@ class ModuleUtil extends Util
             'tax_administration' => ['name' => __('lang_v1.tax_administration'),
                 'tooltip' => __('lang_v1.kenya_tax_admin_tooltip'),
             ],
+            'intasend' => ['name' => __('lang_v1.intasend_integration'),
+                'tooltip' => __('lang_v1.intasend_module_tooltip'),
+            ],
         ];
     }
 

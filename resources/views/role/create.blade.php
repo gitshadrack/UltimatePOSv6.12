@@ -1729,6 +1729,15 @@
           <div class="col-md-12">
             <div class="checkbox">
               <label>
+                {!! Form::checkbox('permissions[]', 'intasend.manage', false,
+                [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.manage_intasend' ) }}
+              </label>
+            </div>
+          </div>
+
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
                 {!! Form::checkbox('permissions[]', 'edit_account_transaction', false, 
                 [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.edit_account_transaction' ) }}
               </label>

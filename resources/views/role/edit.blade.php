@@ -1722,6 +1722,15 @@
           <div class="col-md-12">
             <div class="checkbox">
               <label>
+                {!! Form::checkbox('permissions[]', 'intasend.manage', in_array('intasend.manage', $role_permissions),
+                [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.manage_intasend' ) }}
+              </label>
+            </div>
+          </div>
+
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
                 {!! Form::checkbox('permissions[]', 'edit_account_transaction', in_array('edit_account_transaction', $role_permissions), 
                 [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.edit_account_transaction' ) }}
               </label>

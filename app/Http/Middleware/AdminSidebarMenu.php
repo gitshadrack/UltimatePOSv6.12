@@ -870,6 +870,7 @@ class AdminSidebarMenu
             if (auth()->user()->can('business_settings.access') ||
                 auth()->user()->can('barcode_settings.access') ||
                 auth()->user()->can('invoice_settings.access') ||
+                (in_array('intasend', $enabled_modules) && auth()->user()->can('intasend.manage')) ||
                 auth()->user()->can('tax_rate.view') ||
                 auth()->user()->can('tax_rate.create') ||
                 auth()->user()->can('access_package_subscriptions')) {
@@ -893,6 +894,23 @@ class AdminSidebarMenu
                                 action([\App\Http\Controllers\InvoiceSchemeController::class, 'index']),
                                 __('invoice.invoice_settings'),
                                 ['icon' => '', 'active' => in_array(request()->segment(1), ['invoice-schemes', 'invoice-layouts'])]
+                            );
+                        }
+                        if (in_array('intasend', $enabled_modules) && auth()->user()->can('intasend.manage')) {
+                            $sub->url(
+                                action([\App\Http\Controllers\IntaSendController::class, 'settings']),
+                                __('lang_v1.intasend_settings'),
+                                ['icon' => '', 'active' => request()->segment(1) == 'intasend' && request()->segment(2) == 'settings']
+                            );
+                            $sub->url(
+                                action([\App\Http\Controllers\IntaSendController::class, 'pool']),
+                                __('lang_v1.intasend_holding_pool'),
+                                ['icon' => '', 'active' => request()->segment(1) == 'intasend' && request()->segment(2) == 'payments']
+                            );
+                            $sub->url(
+                                action([\App\Http\Controllers\IntaSendController::class, 'collections']),
+                                __('lang_v1.intasend_collections_report'),
+                                ['icon' => '', 'active' => request()->segment(1) == 'intasend' && request()->segment(2) == 'collections']
                             );
                         }
                         if (auth()->user()->can('barcode_settings.access')) {

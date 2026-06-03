@@ -68,6 +68,9 @@
 		<div class="form-group">
 			{!! Form::label("transaction_no_{$i}_{$row_index}", __('lang_v1.transaction_no')) !!}
 			{!! Form::text("payment[$row_index][transaction_no_{$i}]", $payment_line['transaction_no'], ['class' => 'form-control', 'placeholder' => __('lang_v1.transaction_no'), 'id' => "transaction_no_{$i}_{$row_index}"]); !!}
+			@if ($i == 1)
+				<p class="help-block">@lang('lang_v1.intasend_pos_transaction_code_help')</p>
+			@endif
 		</div>
 	</div>
 </div>

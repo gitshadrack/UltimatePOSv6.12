@@ -773,6 +773,15 @@ class TransactionUtil extends Util
                         }
                     }
 
+                    if ($payment_data['method'] == 'custom_pay_1'
+                        && ! empty($payment_data['transaction_no'])
+                        && (new IntaSendUtil())->hasCompletePayment($transaction->business_id, $payment_data['transaction_no'], $payment_amount)) {
+                        $payment_data['mpesa_verification_status'] = 'verified';
+                        $payment_data['mpesa_verified_by'] = empty($user_id) ? auth()->user()->id : $user_id;
+                        $payment_data['mpesa_verified_at'] = \Carbon::now();
+                        $payment_data['mpesa_verification_note'] = 'Verified by matching IntaSend collection during POS billing.';
+                    }
+
                     $payments_formatted[] = new TransactionPayment($payment_data);
 
                     if (! empty($payment['denominations'])) {
@@ -805,6 +814,11 @@ class TransactionUtil extends Util
         if (! empty($payments_formatted)) {
             $transaction->payment_lines()->saveMany($payments_formatted);
             $payment_lines = $transaction->payment_lines;
+            $intasendUtil = new IntaSendUtil();
+            foreach ($payments_formatted as $payment_line) {
+                $intasendUtil->linkPosTransactionPayment($payment_line, $transaction, empty($user_id) ? auth()->user()->id : $user_id);
+            }
+
             foreach ($account_transactions as $account_transaction) {
                 $payment = $payment_lines->where('payment_ref_no', $account_transaction['payment_ref_no'])->first();
 
@@ -873,10 +887,19 @@ class TransactionUtil extends Util
                 $payment['mpesa_verification_status'] = 'pending';
                 $payment['mpesa_verified_by'] = null;
                 $payment['mpesa_verified_at'] = null;
+
+                if (! empty($payment['transaction_no'])
+                    && (new IntaSendUtil())->hasCompletePayment($transaction->business_id, $payment['transaction_no'], $payment['amount'])) {
+                    $payment['mpesa_verification_status'] = 'verified';
+                    $payment['mpesa_verified_by'] = auth()->id();
+                    $payment['mpesa_verified_at'] = \Carbon::now();
+                    $payment['mpesa_verification_note'] = 'Verified by matching IntaSend collection during POS billing.';
+                }
             }
         }
 
         $tp->update($payment);
+        (new IntaSendUtil())->linkPosTransactionPayment($tp->fresh(), $transaction, auth()->id());
 
         if (! empty($denominations)) {
             $this->updateCashDenominations($tp, $denominations);

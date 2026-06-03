@@ -771,6 +771,7 @@ Purpose: Let each business location decide its login style before the cashier se
 
 Files added:
 
+- `database/migrations/2026_05_21_000001_add_enable_numeric_login_to_business_locations_table.php`
 - `database/migrations/2026_05_25_000001_add_login_domain_to_business_locations_table.php`
 
 Files changed:
@@ -786,6 +787,7 @@ Files changed:
 
 Database fields added to `business_locations`:
 
+- `enable_numeric_login`: location-level toggle for numeric PIN login.
 - `login_domain`: optional domain, subdomain, or short code used to pre-select a location on the login page.
 
 What changed:
@@ -819,6 +821,33 @@ Matching behavior:
 2. Short codes can match the first subdomain segment, so `branch-a` matches `branch-a.pos-system.co.ke`.
 3. URL query values can match the location database id, the location id/code, or the `Location login domain/code`.
 4. When a business `Tenant domain` is matched, location matching is scoped to that business.
+
+Server action:
+
+```bash
+php artisan migrate
+php artisan optimize:clear
+```
+
+### POS Default Purchase Price Visibility Permission
+
+Purpose: Add a separate role permission for viewing the default purchase price from the POS product row.
+
+Files added:
+
+- `database/migrations/2026_05_19_000001_add_view_default_purchase_price_from_pos_screen_permission.php`
+
+Files changed:
+
+- `resources/views/sale_pos/product_row.blade.php`
+- `resources/views/role/create.blade.php`
+- `resources/views/role/edit.blade.php`
+
+What changed:
+
+- Added permission `view_default_purchase_price_from_pos_screen`.
+- POS product rows now check this permission before showing the default purchase price.
+- Added the permission checkbox to role create/edit screens.
 
 Server action:
 
@@ -915,6 +944,101 @@ What changed:
 - The label still uses the invoice layout's `Total due (all sales)` label when configured, with a `Customer Balance` fallback.
 - No migration is needed.
 
+### IntaSend M-PESA Webhook and Reconciliation Holding Pool
+
+Purpose: Add the first implementation phase for the IntaSend M-PESA integration described in `intasend_ultimate_pos_integration.docx`, with location settings, webhook ingestion, duplicate protection, conservative customer matching, and a holding pool for manual reconciliation.
+
+Files added:
+
+- `database/migrations/2026_06_03_000001_create_intasend_integration_tables.php`
+- `database/migrations/2026_06_03_000002_add_verification_and_match_fields_to_intasend_tables.php`
+- `app/IntaSendSetting.php`
+- `app/IntaSendPayment.php`
+- `app/Utils/IntaSendUtil.php`
+- `app/Http/Controllers/IntaSendController.php`
+- `resources/views/intasend/settings.blade.php`
+- `resources/views/intasend/pool.blade.php`
+
+Files changed:
+
+- `app/IntaSendSetting.php`
+- `app/IntaSendPayment.php`
+- `app/Http/Controllers/IntaSendController.php`
+- `resources/views/intasend/settings.blade.php`
+- `resources/views/intasend/pool.blade.php`
+- `resources/views/intasend/collections.blade.php`
+- `routes/web.php`
+- `app/Http/Middleware/VerifyCsrfToken.php`
+- `app/Http/Middleware/AdminSidebarMenu.php`
+- `resources/views/role/create.blade.php`
+- `resources/views/role/edit.blade.php`
+- `lang/en/lang_v1.php`
+- `readme.md`
+
+Database tables added:
+
+- `intasend_settings`: stores active IntaSend credentials, till/paybill number, and payment link per business location.
+- `intasend_payments`: stores every inbound IntaSend payment payload, mapping status, matched customer, attached Ultimate POS payment, and audit fields.
+
+Database fields added later:
+
+- `intasend_settings.webhook_secret`
+- `intasend_settings.require_webhook_signature`
+- `intasend_payments.match_reason`
+- `intasend_payments.match_note`
+- `intasend_payments.auto_attached`
+
+What changed:
+
+- Added permission `intasend.manage`.
+- Added IntaSend to Business Settings > Modules, so each business can enable or disable the integration.
+- Added Settings > IntaSend Settings.
+- Added Settings > IntaSend Holding Pool.
+- Added Settings > IntaSend Collections Report.
+- Added public webhook endpoint `POST /intasend/webhook`.
+- Added CSRF exception for `/intasend/webhook`.
+- Webhook supports IntaSend challenge responses.
+- Webhook callbacks for a resolved business are ignored with `status: disabled` when the IntaSend module is disabled for that business.
+- Added optional webhook signature verification using a per-location shared secret. The verifier supports common HMAC-SHA256 signature header formats such as `X-IntaSend-Signature`, `X-Webhook-Signature`, and `X-Hub-Signature-256`, including raw-body and timestamp-prefixed HMAC variants.
+- Webhook records `COMPLETE` payments, ignores non-complete states, and prevents duplicate processing with a unique transaction code.
+- Location is resolved from the configured till/paybill number.
+- Customer is matched first by `api_ref` values like `customer_id_123`, then by normalized phone number.
+- Match reason and match note are stored for audit review, including `api_ref`, `phone`, `phone_multiple`, manual, or no-match cases.
+- If a payment is complete, location-resolved, and customer-matched, it is attached as a verified `custom_pay_1` / M-PESA customer due payment.
+- If it cannot be safely attached, it remains visible in the IntaSend Holding Pool for manual linking.
+- POS cashier M-PESA billing can link to IntaSend by transaction code. When a cashier enters the M-PESA/IntaSend code in the POS transaction number field for `custom_pay_1`, the matching COMPLETE IntaSend payment is linked to the selected sale customer, marked attached, and the POS M-PESA payment is marked verified. This works whether the webhook arrives before or after the cashier keys the code.
+- Manual linking creates an Ultimate POS customer due payment, distributes it to unpaid sales/opening balance through the existing `payAtOnce()` utility, and posts to the configured M-PESA account when account module/payment account settings allow it.
+- Explicitly set model table names to `intasend_settings` and `intasend_payments` so Laravel does not infer `inta_send_settings` / `inta_send_payments`.
+- Added a migration-required warning on IntaSend screens so missing tables show a clear message instead of a 500 error.
+- IntaSend Settings uses the existing `business.is_active` language label for the Active checkbox.
+- Register integration decision for this phase: IntaSend payments remain a back-office/customer-ledger collection workflow and do not create cashier register transactions. This avoids assigning webhook payments to the wrong cashier or shift when payments arrive without an active POS register.
+
+Important limitations:
+
+- The exact IntaSend signing header must still be confirmed against the live IntaSend account configuration before enabling `Require webhook signature` in production.
+- Auto-matching is intentionally conservative. Payments without a resolved location or customer stay in the holding pool.
+- The current implementation applies payments to customer due balances, not to a cashier's active POS register session.
+
+Server action:
+
+```bash
+php artisan migrate
+php artisan optimize:clear
+```
+
+Setup:
+
+1. Run migrations.
+2. Open Business Settings > Modules and enable `IntaSend Integration`.
+3. Grant `Manage IntaSend` to trusted admin roles.
+4. Open Settings > IntaSend Settings.
+5. For each location, enter the till/paybill number exactly as IntaSend sends it in the webhook payload.
+6. Optionally enter a webhook secret and enable `Require webhook signature` after confirming the signing header with IntaSend.
+7. Map each location's `custom_pay_1` payment account to the correct M-PESA/mobile money account.
+8. Configure IntaSend to send webhooks to `/intasend/webhook`.
+9. Review unmatched payments from Settings > IntaSend Holding Pool.
+10. Review completed collections from Settings > IntaSend Collections Report.
+
 ### Recommended Online Deployment Steps
 
 1. Upload all changed controller files.
@@ -937,6 +1061,17 @@ For changes without migrations:
 ```bash
 php artisan optimize:clear
 ```
+
+### Operational Recommendations
+
+1. Keep this README as the source of truth for implemented customizations. When adding a migration, permission, route, or business workflow, document the changed files, required server action, and any setup steps in the same change section.
+2. Treat `intasend_ultimate_pos_integration.docx` as the original integration specification. The repo now includes the first implementation phase: webhook ingestion, IntaSend tables, location settings, conservative customer matching, and a reconciliation holding pool.
+3. Keep IntaSend as its own project phase for future expansion because it affects webhook security, duplicate transaction handling, multi-location till mapping, customer ledger settlement, account posting, and manual reconciliation.
+4. Add live IntaSend webhook signature verification after confirming the exact signing headers and secret validation method for the merchant account.
+5. Keep the manual M-PESA verification workflow under regression testing whenever payments, registers, account transactions, or reports are changed. Pending and rejected M-PESA payments must not increase linked account balances at locations where manual verification is enabled.
+6. Keep the Kenya Tax Administration feature clearly labelled as internal reporting and manual eTIMS tracking. It does not automatically submit invoices to KRA eTIMS.
+7. Keep PWA expectations modest. The current PWA only supports installability and static asset caching; it does not support offline selling, stock updates, payment capture, or report syncing.
+8. Confirm `.env` remains untracked in Git before deployment or handoff. Store live credentials in the server environment, not in committed project files.
 
 ### Migration Safety Note
 
