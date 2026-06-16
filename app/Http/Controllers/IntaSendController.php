@@ -11,6 +11,7 @@ use App\Utils\ModuleUtil;
 use App\Utils\TransactionUtil;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Yajra\DataTables\Facades\DataTables;
@@ -182,6 +183,12 @@ class IntaSendController extends Controller
                 ->editColumn('amount', function ($row) {
                     return '<span class="display_currency" data-currency_symbol="true">'.$this->transactionUtil->num_f($row->amount, true).'</span>';
                 })
+                ->editColumn('charges', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">'.$this->transactionUtil->num_f($row->charges, true).'</span>';
+                })
+                ->editColumn('net_amount', function ($row) {
+                    return '<span class="display_currency" data-currency_symbol="true">'.$this->transactionUtil->num_f($row->net_amount, true).'</span>';
+                })
                 ->editColumn('created_at', function ($row) {
                     return $this->transactionUtil->format_date($row->created_at, true);
                 })
@@ -209,7 +216,7 @@ class IntaSendController extends Controller
 
                     return $buttons ?: '--';
                 })
-                ->rawColumns(['amount', 'customer', 'action'])
+                ->rawColumns(['amount', 'charges', 'net_amount', 'customer', 'action'])
                 ->make(true);
         }
 
@@ -271,7 +278,9 @@ class IntaSendController extends Controller
                     return ! empty($row->auto_attached) ? __('messages.yes') : __('messages.no');
                 })
                 ->with('total_collected', (clone $query)->sum('intasend_payments.amount'))
-                ->rawColumns(['amount'])
+                ->with('total_charges', (clone $query)->sum('intasend_payments.charges'))
+                ->with('total_net_amount', (clone $query)->sum('intasend_payments.net_amount'))
+                ->rawColumns(['amount', 'charges', 'net_amount'])
                 ->make(true);
         }
 
@@ -302,6 +311,159 @@ class IntaSendController extends Controller
         return $output;
     }
 
+    public function posSearch(Request $request)
+    {
+        $this->authorizePosUse($request);
+
+        if (! $this->hasIntaSendPaymentsSchema()) {
+            return ['success' => false, 'msg' => __('lang_v1.run_intasend_migration'), 'payments' => []];
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+        $location_id = $request->input('location_id');
+        $transaction_code = trim((string) $request->input('transaction_code'));
+        $phone_number = trim((string) $request->input('phone_number'));
+        $amount = $request->filled('amount') ? (float) $request->input('amount') : null;
+
+        if ($transaction_code === '' && $phone_number === '' && empty($amount)) {
+            return ['success' => true, 'payments' => []];
+        }
+
+        $phone_variants = $this->phoneVariants($phone_number);
+
+        $query = IntaSendPayment::where('business_id', $business_id)
+            ->where('status', 'COMPLETE')
+            ->where(function ($query) {
+                $query->whereNull('transaction_payment_id')
+                    ->where(function ($inner) {
+                        $inner->where('is_attached', 0)
+                            ->orWhereNull('is_attached');
+                    });
+            })
+            ->where(function ($query) use ($transaction_code, $phone_variants, $amount) {
+                if ($transaction_code !== '') {
+                    $query->orWhere('transaction_code', $transaction_code);
+                }
+
+                if (! empty($phone_variants)) {
+                    $query->orWhereIn('phone_number', $phone_variants);
+                }
+
+                if (! empty($amount)) {
+                    $query->orWhereRaw('ABS(intasend_payments.amount - ?) <= 0.01', [$amount]);
+                }
+            })
+            ->orderByDesc('created_at')
+            ->limit(15);
+
+        if (! empty($location_id)) {
+            $query->where(function ($query) use ($location_id) {
+                $query->where('business_location_id', $location_id)
+                    ->orWhereNull('business_location_id');
+            });
+        }
+
+        $query = $query->get();
+
+        $payments = $query->map(function ($payment) use ($amount, $phone_variants, $transaction_code) {
+            $reasons = [];
+            if ($transaction_code !== '' && strtoupper((string) $payment->transaction_code) == strtoupper($transaction_code)) {
+                $reasons[] = __('lang_v1.transaction_code');
+            }
+            if (! empty($phone_variants) && in_array($payment->phone_number, $phone_variants)) {
+                $reasons[] = __('lang_v1.phone_number');
+            }
+            if (! empty($amount) && abs((float) $payment->amount - $amount) <= 0.01) {
+                $reasons[] = __('sale.amount');
+            }
+
+            return [
+                'id' => $payment->id,
+                'transaction_code' => $payment->transaction_code,
+                'phone_number' => $payment->phone_number,
+                'amount' => (float) $payment->amount,
+                'amount_formatted' => $this->transactionUtil->num_f($payment->amount, true),
+                'net_amount' => (float) $payment->net_amount,
+                'charges' => (float) $payment->charges,
+                'status' => $payment->status,
+                'created_at' => $this->transactionUtil->format_date($payment->created_at, true),
+                'match_reason' => implode(', ', $reasons),
+            ];
+        });
+
+        return ['success' => true, 'payments' => $payments];
+    }
+
+    public function sendStkPush(Request $request)
+    {
+        $this->authorizePosUse($request);
+
+        $request->validate([
+            'phone_number' => 'required',
+            'amount' => 'required|numeric|min:1',
+            'location_id' => 'nullable|integer',
+            'contact_id' => 'nullable|integer',
+        ]);
+
+        $business_id = $request->session()->get('user.business_id');
+        $setting = $this->activeSettingForPos($business_id, $request->input('location_id'));
+
+        if (empty($setting) || empty($setting->intasend_secret_key)) {
+            return ['success' => false, 'msg' => __('lang_v1.intasend_stk_missing_secret')];
+        }
+
+        $api_ref = 'pos_stk_'.$business_id.'_'.auth()->id().'_'.time();
+        if ($request->filled('contact_id')) {
+            $api_ref .= '_customer_id_'.$request->input('contact_id');
+        }
+
+        $payload = [
+            'amount' => (float) $request->input('amount'),
+            'currency' => 'KES',
+            'phone_number' => trim((string) $request->input('phone_number')),
+            'api_ref' => $api_ref,
+            'comment' => 'UltimatePOS POS STK Push',
+        ];
+
+        try {
+            $response = Http::withToken($setting->intasend_secret_key)
+                ->asJson()
+                ->timeout(20)
+                ->post($this->stkEndpoint($setting), $payload);
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'msg' => __('lang_v1.intasend_stk_push_sent'),
+                    'api_ref' => $api_ref,
+                    'data' => $response->json(),
+                ];
+            }
+
+            Log::warning('IntaSend STK push failed.', [
+                'business_id' => $business_id,
+                'location_id' => $request->input('location_id'),
+                'endpoint' => $this->stkEndpoint($setting),
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            $response_data = $response->json();
+            $error_detail = $response_data['errors'][0]['detail'] ?? null;
+
+            return [
+                'success' => false,
+                'msg' => trim(__('lang_v1.intasend_stk_push_failed').' '.($error_detail ?: '')),
+                'status' => $response->status(),
+                'data' => $response_data,
+            ];
+        } catch (\Exception $e) {
+            Log::error('IntaSend STK push exception: '.$e->getMessage());
+
+            return ['success' => false, 'msg' => $e->getMessage()];
+        }
+    }
+
     protected function authorizeManage()
     {
         if (! (auth()->user()->can('intasend.manage') || auth()->user()->can('superadmin'))) {
@@ -312,6 +474,62 @@ class IntaSendController extends Controller
         if (! $this->moduleUtil->isModuleEnabled('intasend', $business_id)) {
             abort(403, 'IntaSend module is disabled for this business.');
         }
+    }
+
+    protected function authorizePosUse(Request $request)
+    {
+        $business_id = $request->session()->get('user.business_id');
+        if (! $this->moduleUtil->isModuleEnabled('intasend', $business_id)) {
+            abort(403, 'IntaSend module is disabled for this business.');
+        }
+    }
+
+    protected function activeSettingForPos($business_id, $location_id = null)
+    {
+        $query = IntaSendSetting::where('business_id', $business_id)
+            ->where('is_active', 1);
+
+        if (! empty($location_id)) {
+            $location_setting = (clone $query)
+                ->where('business_location_id', $location_id)
+                ->first();
+
+            if (! empty($location_setting)) {
+                return $location_setting;
+            }
+        }
+
+        return $query->first();
+    }
+
+    protected function stkEndpoint(IntaSendSetting $setting)
+    {
+        return 'https://api.intasend.com/api/v1/payment/mpesa-stk-push/';
+    }
+
+    protected function phoneVariants($phone_number)
+    {
+        $digits = preg_replace('/\D+/', '', (string) $phone_number);
+        if ($digits === '') {
+            return [];
+        }
+
+        $local = $digits;
+        if (strpos($digits, '254') === 0 && strlen($digits) == 12) {
+            $local = '0'.substr($digits, 3);
+        }
+
+        $international = $digits;
+        if (strpos($digits, '0') === 0 && strlen($digits) == 10) {
+            $international = '254'.substr($digits, 1);
+        }
+
+        return array_values(array_unique(array_filter([
+            $digits,
+            $local,
+            $international,
+            '+'.$international,
+        ])));
     }
 
     protected function hasIntaSendSettingsSchema()
@@ -326,7 +544,10 @@ class IntaSendController extends Controller
         return Schema::hasTable('intasend_payments')
             && Schema::hasColumn('intasend_payments', 'match_reason')
             && Schema::hasColumn('intasend_payments', 'match_note')
-            && Schema::hasColumn('intasend_payments', 'auto_attached');
+            && Schema::hasColumn('intasend_payments', 'auto_attached')
+            && Schema::hasColumn('intasend_payments', 'net_amount')
+            && Schema::hasColumn('intasend_payments', 'charges')
+            && Schema::hasColumn('intasend_payments', 'currency');
     }
 
     protected function isPaymentCallback(Request $request)

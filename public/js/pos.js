@@ -782,6 +782,8 @@ $(document).ready(function() {
             var transaction_no_index = $(this).data('transaction_no_index');
             $('div#transaction_no_modal')
                 .data('transaction_no_index', transaction_no_index)
+                .removeData('payment_row_index')
+                .removeData('fill_only')
                 .modal('show');
         } else if (pay_method == 'card') {
             $('div#card_details_modal').modal('show');
@@ -796,8 +798,152 @@ $(document).ready(function() {
         $('input#card_number').focus();
     });
 
+    function reset_intasend_pos_candidates(message) {
+        var container = $('#intasend_pos_candidates');
+        container.addClass('hide');
+        container.find('tbody').empty();
+
+        if (message) {
+            container.removeClass('hide');
+            container
+                .find('tbody')
+                .append(
+                    $('<tr>').append(
+                        $('<td>')
+                            .attr('colspan', 5)
+                            .addClass('text-center text-muted')
+                            .text(message)
+                    )
+                );
+        }
+    }
+
+    function render_intasend_pos_candidates(payments) {
+        var container = $('#intasend_pos_candidates');
+        var tbody = container.find('tbody');
+        tbody.empty();
+
+        if (!payments || payments.length === 0) {
+            reset_intasend_pos_candidates(
+                LANG.no_mpesa_messages_found || LANG.no_intasend_collections_found || 'No confirmed M-PESA messages found'
+            );
+            return;
+        }
+
+        $.each(payments, function(index, payment) {
+            var select_btn = $('<button>')
+                .attr('type', 'button')
+                .addClass('btn btn-xs btn-primary select-intasend-pos-payment')
+                .data('transaction_code', payment.transaction_code || '')
+                .text(LANG.select_mpesa_message || LANG.select_collection || 'Select');
+
+            tbody.append(
+                $('<tr>')
+                    .append($('<td>').text(payment.transaction_code || '--'))
+                    .append($('<td>').text(payment.phone_number || '--'))
+                    .append($('<td>').text(payment.amount_formatted || payment.amount || '--'))
+                    .append($('<td>').text(payment.created_at || '--'))
+                    .append($('<td>').append(select_btn))
+            );
+        });
+
+        container.removeClass('hide');
+    }
+
+    function search_intasend_pos_collections() {
+        var search_url = $('#intasend_pos_search_url').val();
+        if (!search_url) {
+            return false;
+        }
+
+        reset_intasend_pos_candidates(LANG.loading || 'Loading...');
+
+        $.ajax({
+            method: 'GET',
+            url: search_url,
+            dataType: 'json',
+            data: {
+                phone_number: $.trim($('#intasend_stk_phone_number').val()),
+                amount: __read_number($('#intasend_stk_amount')),
+                transaction_code: $.trim($('#express_transaction_no').val()),
+                location_id: $('input#location_id').val(),
+            },
+            success: function(result) {
+                if (result.success === false) {
+                    toastr.error(result.msg || LANG.something_went_wrong);
+                    reset_intasend_pos_candidates();
+                    return;
+                }
+
+                render_intasend_pos_candidates(result.payments || []);
+            },
+            error: function() {
+                toastr.error(LANG.something_went_wrong || 'Something went wrong');
+                reset_intasend_pos_candidates();
+            },
+        });
+    }
+
+    function get_transaction_no_modal_payment_row() {
+        var modal = $('div#transaction_no_modal');
+        var row_index = modal.data('payment_row_index');
+
+        if (row_index === undefined || row_index === null || row_index === '') {
+            return $('#payment_rows_div').find('.payment_row').first();
+        }
+
+        var transaction_no_index = modal.data('transaction_no_index') || 1;
+        var transaction_no_input = $('input#transaction_no_' + transaction_no_index + '_' + row_index);
+
+        return transaction_no_input.closest('.payment_row');
+    }
+
+    function set_transaction_no_modal_from_payment_row() {
+        var modal = $('div#transaction_no_modal');
+        var row_index = modal.data('payment_row_index');
+        var transaction_no_index = modal.data('transaction_no_index') || 1;
+        var payment_row = get_transaction_no_modal_payment_row();
+        var amount = __read_number(payment_row.find('.payment-amount'));
+        var transaction_no = '';
+        var save_button = $('button#pos-save-transaction-no');
+
+        if (!save_button.data('default_text')) {
+            save_button.data('default_text', save_button.text());
+        }
+
+        if (row_index !== undefined && row_index !== null && row_index !== '') {
+            transaction_no = $.trim($('input#transaction_no_' + transaction_no_index + '_' + row_index).val());
+        }
+
+        $('input#express_transaction_no').val(transaction_no);
+        save_button.text(
+            modal.data('fill_only')
+                ? (LANG.use_mpesa_message || 'Use M-PESA Message')
+                : (save_button.data('default_text') || save_button.text())
+        );
+        if ($('#intasend_stk_amount').length) {
+            $('#intasend_stk_phone_number').val('');
+            __write_number($('#intasend_stk_amount'), amount > 0 ? amount : __read_number($('input#final_total_input')));
+        }
+    }
+
     $('div#transaction_no_modal').on('shown.bs.modal', function(e) {
-        $('input#express_transaction_no').val('').focus();
+        set_transaction_no_modal_from_payment_row();
+        reset_intasend_pos_candidates();
+        if ($('input#intasend_stk_phone_number').length) {
+            $('input#intasend_stk_phone_number').focus();
+        } else {
+            $('input#express_transaction_no').focus();
+        }
+    });
+
+    $('div#transaction_no_modal').on('hidden.bs.modal', function(e) {
+        var save_button = $('button#pos-save-transaction-no');
+
+        $(this)
+            .removeData('payment_row_index')
+            .removeData('fill_only');
+        save_button.text(save_button.data('default_text') || save_button.text());
     });
 
     $('div#confirmSuspendModal').on('shown.bs.modal', function(e) {
@@ -828,10 +974,17 @@ $(document).ready(function() {
         }
 
         var transaction_no_index = $('div#transaction_no_modal').data('transaction_no_index');
-        $('input#transaction_no_' + transaction_no_index + '_0').val(transaction_no);
+        var payment_row_index = $('div#transaction_no_modal').data('payment_row_index');
+        if (payment_row_index === undefined || payment_row_index === null || payment_row_index === '') {
+            payment_row_index = 0;
+        }
+
+        $('input#transaction_no_' + transaction_no_index + '_' + payment_row_index).val(transaction_no);
 
         $('div#transaction_no_modal').modal('hide');
-        pos_form_obj.submit();
+        if (!$('div#transaction_no_modal').data('fill_only')) {
+            pos_form_obj.submit();
+        }
     });
 
     $('input#express_transaction_no').keypress(function(e) {
@@ -839,6 +992,85 @@ $(document).ready(function() {
             e.preventDefault();
             $('button#pos-save-transaction-no').click();
         }
+    });
+
+    $(document)
+        .off('click.intasendStk', 'button#send-intasend-stk-push')
+        .on('click.intasendStk', 'button#send-intasend-stk-push', function() {
+        var button = $(this);
+        var stk_url = $('#intasend_stk_push_url').val();
+        var phone_number = $.trim($('#intasend_stk_phone_number').val());
+        var amount = __read_number($('#intasend_stk_amount'));
+
+        if (button.data('requesting')) {
+            return false;
+        }
+
+        if (!stk_url) {
+            return false;
+        }
+
+        if (phone_number === '' || isNaN(amount) || amount <= 0) {
+            toastr.error(LANG.phone_or_amount_required || 'Phone number and amount are required');
+            return false;
+        }
+
+        toastr.clear();
+        button.data('requesting', true).prop('disabled', true);
+
+        $.ajax({
+            method: 'POST',
+            url: stk_url,
+            dataType: 'json',
+            data: {
+                phone_number: phone_number,
+                amount: amount,
+                location_id: $('input#location_id').val(),
+                contact_id: $('select#customer_id').val(),
+            },
+            success: function(result) {
+                if (result.success) {
+                    toastr.success(result.msg || LANG.intasend_stk_push_sent || 'STK push sent');
+                    setTimeout(search_intasend_pos_collections, 3000);
+                } else {
+                    toastr.error(result.msg || LANG.something_went_wrong);
+                }
+            },
+            error: function() {
+                toastr.error(LANG.something_went_wrong || 'Something went wrong');
+            },
+            complete: function() {
+                button.data('requesting', false).prop('disabled', false);
+            },
+        });
+    });
+
+    $(document)
+        .off('click.intasendSearch', 'button#search-intasend-collections')
+        .on('click.intasendSearch', 'button#search-intasend-collections', function() {
+        search_intasend_pos_collections();
+    });
+
+    $(document).on('click', '.select-intasend-pos-payment', function() {
+        var transaction_code = $(this).data('transaction_code');
+        if (transaction_code) {
+            $('input#express_transaction_no').val(transaction_code);
+            toastr.success(LANG.mpesa_message_selected || LANG.intasend_collection_selected || 'M-PESA message selected');
+            if ($('div#transaction_no_modal').data('fill_only')) {
+                $('button#pos-save-transaction-no').click();
+            }
+        }
+    });
+
+    $(document).on('click', '.intasend-row-action', function() {
+        var row_index = $(this).data('row_index');
+        var transaction_no_index = $(this).data('transaction_no_index') || 1;
+
+        $('div#transaction_no_modal')
+            .data('transaction_no_index', transaction_no_index)
+            .data('payment_row_index', row_index)
+            .data('fill_only', true)
+            .modal('show');
     });
 
     $('button#pos-suspend').click(function() {

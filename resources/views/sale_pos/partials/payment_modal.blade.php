@@ -218,6 +218,59 @@
                 <h4 class="modal-title">@lang('lang_v1.transaction_no')</h4>
             </div>
             <div class="modal-body">
+                @php
+                    $is_intasend_enabled = $is_intasend_enabled ?? (!empty($enabled_modules) && in_array('intasend', $enabled_modules));
+                @endphp
+                @if($is_intasend_enabled)
+                    <input type="hidden" id="intasend_pos_search_url" value="{{ route('intasend.pos_search') }}">
+                    <input type="hidden" id="intasend_stk_push_url" value="{{ route('intasend.stk_push') }}">
+                    <div class="row">
+                        <div class="col-sm-6">
+                            <div class="form-group">
+                                {!! Form::label('intasend_stk_phone_number', __('lang_v1.phone_number')) !!}
+                                {!! Form::text('', null, [
+                                    'class' => 'form-control',
+                                    'placeholder' => __('lang_v1.phone_number'),
+                                    'id' => 'intasend_stk_phone_number',
+                                    'autocomplete' => 'off',
+                                ]) !!}
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="form-group">
+                                {!! Form::label('intasend_stk_amount', __('sale.amount')) !!}
+                                {!! Form::text('', null, [
+                                    'class' => 'form-control input_number',
+                                    'placeholder' => __('sale.amount'),
+                                    'id' => 'intasend_stk_amount',
+                                    'autocomplete' => 'off',
+                                ]) !!}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <button type="button" class="btn btn-primary" id="send-intasend-stk-push">
+                            <i class="fa fa-mobile"></i> @lang('lang_v1.send_intasend_stk_push')
+                        </button>
+                        <button type="button" class="btn btn-default" id="search-intasend-collections">
+                            <i class="fa fa-search"></i> @lang('lang_v1.search_mpesa_messages')
+                        </button>
+                    </div>
+                    <div id="intasend_pos_candidates" class="table-responsive hide">
+                        <table class="table table-condensed table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>@lang('lang_v1.mpesa_transaction_no')</th>
+                                    <th>@lang('lang_v1.phone_number')</th>
+                                    <th>@lang('sale.amount')</th>
+                                    <th>@lang('messages.date')</th>
+                                    <th>@lang('messages.action')</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                @endif
                 <div class="form-group">
                     {!! Form::label('express_transaction_no', __('lang_v1.transaction_no')) !!}
                     {!! Form::text('', null, [
@@ -226,7 +279,9 @@
                         'id' => 'express_transaction_no',
                         'autocomplete' => 'off',
                     ]) !!}
-                    <p class="help-block">@lang('lang_v1.intasend_pos_transaction_code_help')</p>
+                    @if($is_intasend_enabled)
+                        <p class="help-block">@lang('lang_v1.intasend_pos_transaction_code_help')</p>
+                    @endif
                 </div>
             </div>
             <div class="modal-footer">

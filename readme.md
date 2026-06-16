@@ -952,12 +952,15 @@ Files added:
 
 - `database/migrations/2026_06_03_000001_create_intasend_integration_tables.php`
 - `database/migrations/2026_06_03_000002_add_verification_and_match_fields_to_intasend_tables.php`
+- `database/migrations/2026_06_03_000003_add_net_and_charges_to_intasend_payments.php`
 - `app/IntaSendSetting.php`
 - `app/IntaSendPayment.php`
 - `app/Utils/IntaSendUtil.php`
 - `app/Http/Controllers/IntaSendController.php`
 - `resources/views/intasend/settings.blade.php`
 - `resources/views/intasend/pool.blade.php`
+- `resources/views/intasend/collections.blade.php`
+- `routes/webhooks.php`
 
 Files changed:
 
@@ -967,6 +970,13 @@ Files changed:
 - `resources/views/intasend/settings.blade.php`
 - `resources/views/intasend/pool.blade.php`
 - `resources/views/intasend/collections.blade.php`
+- `app/Providers/RouteServiceProvider.php`
+- `app/Http/Controllers/SellPosController.php`
+- `app/Utils/TransactionUtil.php`
+- `resources/views/sale_pos/partials/payment_modal.blade.php`
+- `resources/views/sale_pos/partials/payment_type_details.blade.php`
+- `public/js/pos.js`
+- `public/.htaccess`
 - `routes/web.php`
 - `app/Http/Middleware/VerifyCsrfToken.php`
 - `app/Http/Middleware/AdminSidebarMenu.php`
@@ -987,6 +997,9 @@ Database fields added later:
 - `intasend_payments.match_reason`
 - `intasend_payments.match_note`
 - `intasend_payments.auto_attached`
+- `intasend_payments.net_amount`
+- `intasend_payments.charges`
+- `intasend_payments.currency`
 
 What changed:
 
@@ -995,18 +1008,25 @@ What changed:
 - Added Settings > IntaSend Settings.
 - Added Settings > IntaSend Holding Pool.
 - Added Settings > IntaSend Collections Report.
-- Added public webhook endpoint `POST /intasend/webhook`.
+- Added middleware-free public webhook endpoint `GET|POST /intasend/webhook` through `routes/webhooks.php`.
 - Added CSRF exception for `/intasend/webhook`.
-- Webhook supports IntaSend challenge responses.
+- Webhook supports IntaSend challenge responses. Challenge-only requests echo the challenge, while real `collection_event` callbacks are processed even when IntaSend includes a `challenge` field in the payment payload.
+- Webhook responses send no-cache headers, and `public/.htaccess` excludes `/intasend/webhook` from PageSpeed processing to avoid stale cached challenge responses.
 - Webhook callbacks for a resolved business are ignored with `status: disabled` when the IntaSend module is disabled for that business.
 - Added optional webhook signature verification using a per-location shared secret. The verifier supports common HMAC-SHA256 signature header formats such as `X-IntaSend-Signature`, `X-Webhook-Signature`, and `X-Hub-Signature-256`, including raw-body and timestamp-prefixed HMAC variants.
-- Webhook records `COMPLETE` payments, ignores non-complete states, and prevents duplicate processing with a unique transaction code.
-- Location is resolved from the configured till/paybill number.
+- Webhook records `COMPLETE` payments, ignores non-complete states such as `PENDING`, and prevents duplicate processing with a unique transaction code.
+- Location is resolved from the configured till/paybill number. For sandbox testing where no till/paybill is sent, the resolver falls back to the single active configured IntaSend location.
 - Customer is matched first by `api_ref` values like `customer_id_123`, then by normalized phone number.
 - Match reason and match note are stored for audit review, including `api_ref`, `phone`, `phone_multiple`, manual, or no-match cases.
 - If a payment is complete, location-resolved, and customer-matched, it is attached as a verified `custom_pay_1` / M-PESA customer due payment.
 - If it cannot be safely attached, it remains visible in the IntaSend Holding Pool for manual linking.
-- POS cashier M-PESA billing can link to IntaSend by transaction code. When a cashier enters the M-PESA/IntaSend code in the POS transaction number field for `custom_pay_1`, the matching COMPLETE IntaSend payment is linked to the selected sale customer, marked attached, and the POS M-PESA payment is marked verified. This works whether the webhook arrives before or after the cashier keys the code.
+- POS cashier M-PESA billing can link to IntaSend by transaction code. When a cashier enters the M-PESA/IntaSend code in the POS transaction number field or express M-PESA popup for `custom_pay_1`, the matching COMPLETE IntaSend payment is linked to the selected sale customer, marked attached, and the POS M-PESA payment is marked verified. This works whether the webhook arrives before or after the cashier keys the code.
+- The M-PESA express button opens the IntaSend/STK popup. Cashiers can enter the customer's phone number, send a STK prompt for the current POS total, search confirmed M-PESA messages by phone number, transaction code, or matching gross amount, select the M-PESA message, and finalize the payment.
+- POS multiple-payment rows now support IntaSend STK Push per M-PESA split line. When a cashier selects `M-PESA` / `custom_pay_1` on any payment row, the row shows a `Send STK Push` button beside the transaction number field.
+- The IntaSend popup is row-aware for multiple payments. It uses the selected row's amount, searches collections for that row amount, and writes the selected M-PESA/IntaSend transaction code back to the same payment row instead of always using the first payment row.
+- Dynamically added payment rows also receive the IntaSend row action when the IntaSend module is enabled for the business.
+- IntaSend gross/net handling is explicit: `intasend_payments.amount` stores the customer-paid gross amount from `value`, while `net_amount`, `charges`, and `currency` store settlement details from IntaSend. Customer dues and POS M-PESA payments use the gross amount; finance reports can compare gross collected, charges, and net received.
+- POS transaction-code linking trusts the unique M-PESA/IntaSend code and does not require the POS gross amount to equal the IntaSend `net_amount`, because IntaSend may send `value` as the paid amount and `net_amount` after charges.
 - Manual linking creates an Ultimate POS customer due payment, distributes it to unpaid sales/opening balance through the existing `payAtOnce()` utility, and posts to the configured M-PESA account when account module/payment account settings allow it.
 - Explicitly set model table names to `intasend_settings` and `intasend_payments` so Laravel does not infer `inta_send_settings` / `inta_send_payments`.
 - Added a migration-required warning on IntaSend screens so missing tables show a clear message instead of a 500 error.
@@ -1018,6 +1038,9 @@ Important limitations:
 - The exact IntaSend signing header must still be confirmed against the live IntaSend account configuration before enabling `Require webhook signature` in production.
 - Auto-matching is intentionally conservative. Payments without a resolved location or customer stay in the holding pool.
 - The current implementation applies payments to customer due balances, not to a cashier's active POS register session.
+- `PENDING` IntaSend callbacks stay ignored. A later `COMPLETE` callback with the same final M-PESA reference is required before the system can link, attach, or verify the collection.
+- Sandbox environments may not expose a till/paybill number. Keep only one active configured IntaSend location during sandbox testing, or add real till/paybill mapping before testing multiple locations.
+- POS STK Push requires an IntaSend secret key on the active location setting. The modal search can only select payments after IntaSend has sent a `COMPLETE` webhook into the local holding pool.
 
 Server action:
 
@@ -1032,12 +1055,15 @@ Setup:
 2. Open Business Settings > Modules and enable `IntaSend Integration`.
 3. Grant `Manage IntaSend` to trusted admin roles.
 4. Open Settings > IntaSend Settings.
-5. For each location, enter the till/paybill number exactly as IntaSend sends it in the webhook payload.
+5. For each live location, enter the till/paybill number exactly as IntaSend sends it in the webhook payload. In sandbox, this can be left blank only if there is exactly one active configured IntaSend location.
 6. Optionally enter a webhook secret and enable `Require webhook signature` after confirming the signing header with IntaSend.
 7. Map each location's `custom_pay_1` payment account to the correct M-PESA/mobile money account.
 8. Configure IntaSend to send webhooks to `/intasend/webhook`.
 9. Review unmatched payments from Settings > IntaSend Holding Pool.
 10. Review completed collections from Settings > IntaSend Collections Report.
+11. For POS cashier linking, select the M-PESA payment method and enter the final M-PESA/IntaSend transaction code in the transaction number field. The code must match a COMPLETE IntaSend collection.
+12. For POS STK Push from the M-PESA button, enter the customer's phone number in the M-PESA popup, send STK, wait for the customer to approve, search M-PESA messages, select the confirmed message, then finalize the POS payment.
+13. For multiple payments, add the required payment rows, set the M-PESA row amount, choose M-PESA on that row, click `Send STK Push` beside that row's transaction number field, select the confirmed M-PESA message, and continue finalizing the sale after all split rows are correct.
 
 ### Recommended Online Deployment Steps
 

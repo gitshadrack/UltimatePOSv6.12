@@ -14,6 +14,9 @@ class IntaSendPayment extends Model
         'is_attached' => 'boolean',
         'auto_attached' => 'boolean',
         'payload' => 'array',
+        'amount' => 'decimal:4',
+        'net_amount' => 'decimal:4',
+        'charges' => 'decimal:4',
         'attached_at' => 'datetime',
     ];
 

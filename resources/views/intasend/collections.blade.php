@@ -56,7 +56,13 @@
 
     <div class="box box-solid">
         <div class="box-body">
-            <h4>@lang('lang_v1.total_collected'): <span id="intasend_total_collected" class="display_currency" data-currency_symbol="true"></span></h4>
+            <h4>
+                @lang('lang_v1.total_collected'): <span id="intasend_total_collected" class="display_currency" data-currency_symbol="true"></span>
+                &nbsp; | &nbsp;
+                @lang('lang_v1.intasend_total_charges'): <span id="intasend_total_charges" class="display_currency" data-currency_symbol="true"></span>
+                &nbsp; | &nbsp;
+                @lang('lang_v1.intasend_total_net'): <span id="intasend_total_net_amount" class="display_currency" data-currency_symbol="true"></span>
+            </h4>
             <div class="table-responsive">
                 <table class="table table-bordered table-striped" id="intasend_collections_table">
                     <thead>
@@ -66,7 +72,9 @@
                             <th>@lang('purchase.business_location')</th>
                             <th>@lang('contact.customer')</th>
                             <th>@lang('lang_v1.phone_number')</th>
-                            <th>@lang('sale.amount')</th>
+                            <th>@lang('lang_v1.intasend_amount_paid')</th>
+                            <th>@lang('lang_v1.intasend_charges')</th>
+                            <th>@lang('lang_v1.intasend_net_amount')</th>
                             <th>@lang('lang_v1.status')</th>
                             <th>@lang('lang_v1.match_reason')</th>
                             <th>@lang('lang_v1.auto_attached')</th>
@@ -116,6 +124,8 @@
                 { data: 'contact_name', name: 'c.name' },
                 { data: 'phone_number', name: 'intasend_payments.phone_number' },
                 { data: 'amount', name: 'intasend_payments.amount' },
+                { data: 'charges', name: 'intasend_payments.charges' },
+                { data: 'net_amount', name: 'intasend_payments.net_amount' },
                 { data: 'reconciliation_status', name: 'intasend_payments.reconciliation_status' },
                 { data: 'match_reason', name: 'intasend_payments.match_reason' },
                 { data: 'auto_attached', name: 'intasend_payments.auto_attached' },
@@ -123,7 +133,11 @@
             aaSorting: [[0, 'desc']],
             fnDrawCallback: function (settings) {
                 var total = settings.json && settings.json.total_collected ? settings.json.total_collected : 0;
+                var charges = settings.json && settings.json.total_charges ? settings.json.total_charges : 0;
+                var net_amount = settings.json && settings.json.total_net_amount ? settings.json.total_net_amount : 0;
                 $('#intasend_total_collected').text(__currency_trans_from_en(total, true));
+                $('#intasend_total_charges').text(__currency_trans_from_en(charges, true));
+                $('#intasend_total_net_amount').text(__currency_trans_from_en(net_amount, true));
             }
         });
 

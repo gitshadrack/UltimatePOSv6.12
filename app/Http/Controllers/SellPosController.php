@@ -249,6 +249,7 @@ class SellPosController extends Controller
         }
 
         $payment_types = $this->productUtil->payment_types(null, true, $business_id);
+        $is_intasend_enabled = $this->moduleUtil->isModuleEnabled('intasend', $business_id);
 
         //Shortcuts
         $shortcuts = json_decode($business_details->keyboard_shortcuts, true);
@@ -341,6 +342,7 @@ class SellPosController extends Controller
                 'default_invoice_schemes',
                 'invoice_layouts',
                 'users',
+                'is_intasend_enabled',
             ));
     }
 
@@ -1146,6 +1148,7 @@ class SellPosController extends Controller
         $edit_discount = auth()->user()->can('edit_product_discount_from_pos_screen');
         $edit_price = auth()->user()->can('edit_product_price_from_pos_screen');
         $shipping_statuses = $this->transactionUtil->shipping_statuses();
+        $is_intasend_enabled = $this->moduleUtil->isModuleEnabled('intasend', $business_id);
 
         $warranties = $this->productUtil->getWarrantiesForDropdown();
         $sub_type = request()->get('sub_type');
@@ -1178,7 +1181,7 @@ class SellPosController extends Controller
                 'brands', 'accounts', 'waiters', 'redeem_details', 'edit_price', 'edit_discount',
                 'shipping_statuses', 'warranties', 'sub_type', 'pos_module_data', 'invoice_schemes',
                 'default_invoice_schemes', 'invoice_layouts', 'featured_products', 'customer_due',
-                'users', 'only_payment'));
+                'users', 'only_payment', 'is_intasend_enabled'));
     }
 
     /**
@@ -1750,8 +1753,11 @@ class SellPosController extends Controller
             $accounts = Account::forDropdown($business_id, true, false, true);
         }
 
+        $enabled_modules = $request->session()->get('business.enabled_modules') ?? [];
+        $is_intasend_enabled = in_array('intasend', $enabled_modules);
+
         return view('sale_pos.partials.payment_row')
-            ->with(compact('payment_types', 'row_index', 'removable', 'payment_line', 'accounts'));
+            ->with(compact('payment_types', 'row_index', 'removable', 'payment_line', 'accounts', 'enabled_modules', 'is_intasend_enabled'));
     }
 
     /**

@@ -133,6 +133,8 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::get('/intasend/payments', [IntaSendController::class, 'pool'])->name('intasend.payments');
     Route::post('/intasend/payments/{id}/attach', [IntaSendController::class, 'attach'])->name('intasend.payments.attach');
     Route::get('/intasend/collections', [IntaSendController::class, 'collections'])->name('intasend.collections');
+    Route::get('/intasend/pos-search', [IntaSendController::class, 'posSearch'])->name('intasend.pos_search');
+    Route::post('/intasend/stk-push', [IntaSendController::class, 'sendStkPush'])->name('intasend.stk_push');
     Route::get('/user/profile', [UserController::class, 'getProfile'])->name('user.getProfile');
     Route::post('/user/update', [UserController::class, 'updateProfile'])->name('user.updateProfile');
     Route::post('/user/update-password', [UserController::class, 'updatePassword'])->name('user.updatePassword');
