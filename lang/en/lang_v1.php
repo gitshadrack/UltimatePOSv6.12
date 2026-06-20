@@ -534,7 +534,7 @@ return [
     'total_sell_return' => 'Total Sell Return',
     'total_sell_return_paid' => 'Total Sell Return Paid',
     'total_sell_return_inc_tax' => 'Total Sell Return Including Tax',
-    'tooltip_columnize_taxes_heading' => 'Enter tax name for headings, heading should be present in tax name. For example headings can be: CGST, SGST, IGST & CESS. For tax names CGST@8% or CGST@10%; SGST@10% or SGST@8% etc',
+    'tooltip_columnize_taxes_heading' => 'Enter tax name for headings, heading should be present in tax name. For Kenya tax invoices, examples can be: VAT, Excise Duty, Withholding VAT, or Turnover Tax. For tax names use VAT@16%, Excise Duty@10%, Withholding VAT@2%, etc',
     'sales_payment_dues' => 'Sales Payment Due',
     'purchase_payment_dues' => 'Purchase Payment Due',
     'tooltip_sales_payment_dues' => "Pending payment for Sales. <br/><small class='text-muted'>Based on invoice pay term. <br/> Showing payments to be received in 7 days or less.</small>",
