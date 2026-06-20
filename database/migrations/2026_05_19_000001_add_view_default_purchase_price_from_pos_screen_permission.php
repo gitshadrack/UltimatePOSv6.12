@@ -12,9 +12,10 @@ return new class extends Migration
      */
     public function up()
     {
-        if (! Permission::where('name', 'view_default_purchase_price_from_pos_screen')->exists()) {
-            Permission::create(['name' => 'view_default_purchase_price_from_pos_screen']);
-        }
+        Permission::firstOrCreate([
+            'name' => 'view_default_purchase_price_from_pos_screen',
+            'guard_name' => 'web',
+        ]);
     }
 
     /**
@@ -24,6 +25,8 @@ return new class extends Migration
      */
     public function down()
     {
-        Permission::where('name', 'view_default_purchase_price_from_pos_screen')->delete();
+        Permission::where('name', 'view_default_purchase_price_from_pos_screen')
+            ->where('guard_name', 'web')
+            ->delete();
     }
 };
