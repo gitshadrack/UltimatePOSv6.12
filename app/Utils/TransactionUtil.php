@@ -1563,10 +1563,19 @@ class TransactionUtil extends Util
             $output['total_due'] = ($due == 0) ? 0 : $this->num_f($due, $show_currency, $business_details);
             $output['total_due_label'] = $il->total_due_label;
 
-            $all_due = $this->getContactDue($transaction->contact_id);
-            $all_due = ! empty($all_due) ? $all_due : 0;
-            $output['all_bal_label'] = ! empty($il->prev_bal_label) ? $il->prev_bal_label : __('contact.customer').' '.__('lang_v1.balance');
-            $output['all_due'] = $this->num_f($all_due, $show_currency, $business_details);
+            $show_customer_balance_on_invoice = ! empty($location_details->show_customer_balance_on_invoice)
+                && empty($customer->is_default);
+            $all_due = 0;
+
+            if ($show_customer_balance_on_invoice || $il->show_previous_balance_due == 1) {
+                $all_due = $this->getContactDue($transaction->contact_id);
+                $all_due = ! empty($all_due) ? $all_due : 0;
+            }
+
+            if ($show_customer_balance_on_invoice) {
+                $output['all_bal_label'] = ! empty($il->prev_bal_label) ? $il->prev_bal_label : __('contact.customer').' '.__('lang_v1.balance');
+                $output['all_due'] = $this->num_f($all_due, $show_currency, $business_details);
+            }
 
             if ($il->show_previous_balance_due == 1) {
                 $output['total_previous_due_label'] = $il->previous_balance_due_label;

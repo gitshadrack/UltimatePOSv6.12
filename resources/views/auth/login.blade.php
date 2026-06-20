@@ -233,7 +233,8 @@
         }
 
         if ($login_locations->isNotEmpty() && empty($selected_location_id)) {
-            $selected_location_id = $login_locations->first()->id;
+            $default_login_location = $login_locations->firstWhere('enable_numeric_login', 1) ?: $login_locations->first();
+            $selected_location_id = $default_login_location->id;
         }
 
         $selected_login_location = $login_locations->firstWhere('id', (int) $selected_location_id);
@@ -481,8 +482,7 @@
 
         @media (min-width: 992px) {
             .login-split-page {
-                height: 100vh;
-                overflow: hidden;
+                min-height: 100vh;
             }
 
             .login-split-page .container-fluid,
@@ -600,7 +600,20 @@
                     <form method="POST" action="{{ route('login') }}" id="login-form">
                         {{ csrf_field() }}
                         <input type="hidden" name="login_type" id="login_type" value="{{ $login_type }}">
-                        @if(!empty($selected_login_location))
+                        @if($login_locations->count() > 1)
+                            <select name="location_id" id="location_id" class="access-code-location pin-login-field {{ $login_type == 'pin' ? '' : 'hide' }}">
+                                @foreach($login_locations as $login_location)
+                                    <option value="{{ $login_location->id }}"
+                                        data-numeric-login="{{ !empty($login_location->enable_numeric_login) ? 1 : 0 }}"
+                                        {{ (int) $selected_location_id === (int) $login_location->id ? 'selected' : '' }}>
+                                        {{ $login_location->business_name }} - {{ $login_location->name }}
+                                        @if(!empty($login_location->location_id))
+                                            ({{ $login_location->location_id }})
+                                        @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                        @elseif(!empty($selected_login_location))
                             <input type="hidden" name="location_id" id="location_id"
                                 value="{{ $selected_login_location->id }}"
                                 data-numeric-login="{{ !empty($selected_login_location->enable_numeric_login) ? 1 : 0 }}">
@@ -786,7 +799,7 @@
                     $('.password-login-field').removeClass('hide');
                     $('#username').prop('required', true);
                     $('#pin').prop('required', false).val('');
-                    $('#location_id').prop('required', $('#location_id').is('select'));
+                    $('#location_id').prop('required', false);
                     $('#password').prop('required', true).focus();
                 }
             }

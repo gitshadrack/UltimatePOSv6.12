@@ -1134,6 +1134,49 @@ php artisan migrate
 php artisan optimize:clear
 ```
 
+### Customer Balance On Invoices By Location
+
+Purpose: Let selected business locations append a registered customer's current balance to sale invoices while keeping walk-in customer invoices clean.
+
+Files changed:
+
+- `app/BusinessLocation.php`
+- `app/Http/Controllers/BusinessLocationController.php`
+- `app/Http/Controllers/Install/InstallController.php`
+- `app/Utils/InstallUtil.php`
+- `app/Utils/TransactionUtil.php`
+- `database/migrations/2026_06_20_000001_add_show_customer_balance_on_invoice_to_business_locations_table.php`
+- `resources/views/business_location/create.blade.php`
+- `resources/views/business_location/edit.blade.php`
+- `readme.md`
+
+Database field added to `business_locations`:
+
+- `show_customer_balance_on_invoice`: boolean, default `0`.
+
+What changed:
+
+- Business Location create/edit now includes `Show customer balance on invoices`.
+- When enabled for a location, sale invoices can show the customer's current balance using the existing `Customer Balance`/`all_due` receipt rows.
+- Walk-in customers are excluded by checking `contacts.is_default`, even when the location setting is enabled.
+- Existing invoice-layout previous-balance behavior remains independent of this location switch.
+- `InstallUtil::addShowCustomerBalanceOnInvoiceToBusinessLocations()` was added as an idempotent fallback for updater flows. The normal updater still runs `php artisan migrate --force`, so the migration remains the primary upgrade path.
+
+Setup:
+
+1. Run migrations.
+2. Open Business Settings > Business Locations.
+3. Edit the target location.
+4. Enable `Show customer balance on invoices`.
+5. Save and print a sale invoice for a registered customer.
+
+Server action:
+
+```bash
+php artisan migrate
+php artisan optimize:clear
+```
+
 ### Log Triage Fixes For Recurring Errors
 
 Purpose: Reduce the most common errors found in `storage/logs`, especially issues caused by partially upgraded database schemas and stale transaction/product references.

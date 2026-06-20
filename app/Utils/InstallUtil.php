@@ -131,6 +131,21 @@ class InstallUtil extends Util
         return true;
     }
 
+    public function addShowCustomerBalanceOnInvoiceToBusinessLocations()
+    {
+        if (! Schema::hasColumn('business_locations', 'show_customer_balance_on_invoice')) {
+            Schema::table('business_locations', function (Blueprint $table) {
+                $column = $table->boolean('show_customer_balance_on_invoice')->default(0);
+
+                if (Schema::hasColumn('business_locations', 'pos_inactivity_logout_minutes')) {
+                    $column->after('pos_inactivity_logout_minutes');
+                }
+            });
+        }
+
+        return true;
+    }
+
     /**
      * This function checks for product variations, maps if existing in
      * template or else create a new variation template

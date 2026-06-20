@@ -61,6 +61,17 @@
                 </div>
                 <div class="col-sm-6">
                     <div class="form-group">
+                        <div class="checkbox">
+                            <label>
+                                {!! Form::checkbox('show_customer_balance_on_invoice', 1, false, ['class' => 'input-icheck']); !!}
+                                <strong>Show customer balance on invoices</strong>
+                            </label>
+                            <p class="help-block">When enabled, invoices for registered customers show their current balance. Walk-in customer invoices are excluded.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="form-group">
                         {!! Form::label('landmark', __( 'business.landmark' ) . ':') !!}
                         {!! Form::text('landmark', null, ['class' => 'form-control', 'placeholder' => __( 'business.landmark' ) ]); !!}
                     </div>

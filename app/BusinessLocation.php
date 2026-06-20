@@ -25,6 +25,7 @@ class BusinessLocation extends Model
         'enable_mpesa_verification' => 'boolean',
         'enable_numeric_login' => 'boolean',
         'pos_inactivity_logout_minutes' => 'integer',
+        'show_customer_balance_on_invoice' => 'boolean',
     ];
 
     /**

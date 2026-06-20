@@ -177,6 +177,9 @@ class BusinessLocationController extends Controller
             if (Schema::hasColumn('business_locations', 'pos_inactivity_logout_minutes')) {
                 $input['pos_inactivity_logout_minutes'] = $this->getPosInactivityLogoutMinutes($request);
             }
+            if (Schema::hasColumn('business_locations', 'show_customer_balance_on_invoice')) {
+                $input['show_customer_balance_on_invoice'] = $request->input('show_customer_balance_on_invoice', 0);
+            }
             if (Schema::hasColumn('business_locations', 'login_domain')) {
                 $input['login_domain'] = $request->input('login_domain');
             }
@@ -296,6 +299,9 @@ class BusinessLocationController extends Controller
             }
             if (Schema::hasColumn('business_locations', 'pos_inactivity_logout_minutes')) {
                 $input['pos_inactivity_logout_minutes'] = $this->getPosInactivityLogoutMinutes($request);
+            }
+            if (Schema::hasColumn('business_locations', 'show_customer_balance_on_invoice')) {
+                $input['show_customer_balance_on_invoice'] = $request->input('show_customer_balance_on_invoice', 0);
             }
             if (Schema::hasColumn('business_locations', 'login_domain')) {
                 $input['login_domain'] = $request->input('login_domain');
