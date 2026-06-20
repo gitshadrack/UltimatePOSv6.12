@@ -1065,6 +1065,123 @@ Setup:
 12. For POS STK Push from the M-PESA button, enter the customer's phone number in the M-PESA popup, send STK, wait for the customer to approve, search M-PESA messages, select the confirmed message, then finalize the POS payment.
 13. For multiple payments, add the required payment rows, set the M-PESA row amount, choose M-PESA on that row, click `Send STK Push` beside that row's transaction number field, select the confirmed M-PESA message, and continue finalizing the sale after all split rows are correct.
 
+### POS Inactivity Lock By Business Location
+
+Purpose: Allow each business location to lock unattended POS screens after a configured period of inactivity without destroying the current session, cart, register context, or selected location.
+
+Files added:
+
+- `database/migrations/2026_06_18_000001_add_pos_inactivity_logout_minutes_to_business_locations_table.php`
+
+Files changed:
+
+- `app/BusinessLocation.php`
+- `app/Http/Controllers/Auth/LoginController.php`
+- `app/Http/Controllers/BusinessLocationController.php`
+- `app/Http/Controllers/Install/InstallController.php`
+- `app/Http/Controllers/SellPosController.php`
+- `app/Utils/InstallUtil.php`
+- `public/js/pos.js`
+- `resources/views/business_location/create.blade.php`
+- `resources/views/business_location/edit.blade.php`
+- `resources/views/layouts/app.blade.php`
+- `resources/views/sale_pos/create.blade.php`
+- `resources/views/sale_pos/edit.blade.php`
+- `routes/web.php`
+- `readme.md`
+
+Database field added to `business_locations`:
+
+- `pos_inactivity_logout_minutes`: unsigned small integer, default `0`.
+
+What changed:
+
+- Business Location create/edit now includes `POS inactivity lock (minutes)`.
+- `0` disables automatic POS locking for that location.
+- Values are validated server-side as integers from `0` to `65535`.
+- The browser input also uses `min="0"`, `max="65535"`, and whole-minute steps.
+- POS pages receive the selected location's timeout value through `data-pos_inactivity_logout_minutes`.
+- POS pages also receive `data-enable_numeric_login` so the lock screen can prefer PIN unlock for numeric-login locations.
+- When a cashier changes the selected POS location, the inactivity timer refreshes to use the new location setting.
+- POS layout pages show a full-screen lock overlay after the configured inactivity period.
+- POS header includes a `Lock POS` button for immediate manual locking without waiting for inactivity.
+- Lock state is stored in browser `sessionStorage`, so refreshing the POS page keeps the screen locked until the current user unlocks or logs out.
+- The locked POS screen can be unlocked with the current user's PIN when numeric login is enabled for the location.
+- The locked POS screen can also be unlocked with the current user's password.
+- Unlock is verified server-side through `POST /pos/unlock`.
+- PIN unlock verifies only the currently authenticated user's staff PIN. It does not switch the session to another user.
+- A `Log out` button remains available from the lock screen for shift changes or deliberate sign-out.
+- Manual lock works even when the automatic inactivity lock is disabled with `0`.
+- Manual logout still redirects to `/login?location_id={location_id}` so the login page can preselect the same location.
+- `InstallUtil::addPosInactivityLogoutMinutesToBusinessLocations()` was added as an idempotent fallback for updater flows. The normal updater already runs `php artisan migrate --force`, so the migration remains the primary upgrade path.
+
+Setup:
+
+1. Run migrations.
+2. Open Business Settings > Business Locations.
+3. Edit the target location.
+4. Set `POS inactivity lock (minutes)` to the desired timeout.
+5. Use `0` for locations where automatic lock should stay disabled.
+6. For PIN unlock, enable `Enable Numeric Login` on the location and make sure the current cashier user has a staff PIN.
+
+Server action:
+
+```bash
+php artisan migrate
+php artisan optimize:clear
+```
+
+### Log Triage Fixes For Recurring Errors
+
+Purpose: Reduce the most common errors found in `storage/logs`, especially issues caused by partially upgraded database schemas and stale transaction/product references.
+
+Files changed:
+
+- `app/AccountTransaction.php`
+- `app/Http/Controllers/ReportController.php`
+- `app/Http/Controllers/SellController.php`
+- `app/Http/Controllers/SellPosController.php`
+- `app/Utils/CashRegisterUtil.php`
+- `app/Utils/ProductUtil.php`
+- `app/Utils/TransactionUtil.php`
+- `readme.md`
+
+Issues reviewed from logs:
+
+- `No query results for model [App\Variation]`
+- `Call to undefined method App\Utils\CashRegisterUtil::getRegisterMpesaAuditTrail()`
+- `SQLSTATE[HY000]: General error: 1205 Lock wait timeout exceeded`
+- `Division by zero`
+- `Class "PaymentAccountController" does not exist`
+- Missing column errors for `enable_mpesa_verification`, `enable_numeric_login`, and `offline_sale_uuid`
+
+What changed:
+
+- Confirmed `CashRegisterUtil::getRegisterMpesaAuditTrail()` exists in the current codebase. The logged failures are from an older build.
+- Sale edit and POS edit screens now tolerate transaction lines whose variation record no longer exists while loading media. Missing variation media becomes an empty collection instead of throwing a 500 error.
+- Combo product calculations now skip missing component variations.
+- Combo calculations now guard against empty quantities and zero unit multipliers.
+- M-PESA verification logic now checks whether `business_locations.enable_mpesa_verification` exists before querying it.
+- If the M-PESA verification column is missing, register totals fall back to normal/plain M-PESA totals.
+- If the M-PESA verification column is missing, M-PESA audit reports return an empty result instead of crashing.
+- If the M-PESA verification column is missing, account posting does not skip M-PESA payments for manual verification.
+- The `PaymentAccountController` error does not map to the current routes. Current routes use `AccountController` and `AccountReportsController`; if this appears again, clear route/config cache and confirm the deployed route file is current.
+- The logged `Division by zero` at `ReportController.php` stock value calculation is already guarded in the current code.
+
+Operational notes:
+
+- `No query results for model [App\Variation]` usually means old sale lines or combo definitions reference variations that were deleted or no longer exist.
+- These fixes prevent common display/calculation crashes, but they do not repair historical data. Review affected products/combo definitions if the issue keeps appearing.
+- `Lock wait timeout exceeded` is a database concurrency issue, commonly around stock or purchase-line updates. It was not patched here because it needs transaction-flow review and database workload analysis.
+- Missing column errors generally mean migrations were not run, route/config cache is stale, or code was deployed before the database schema update.
+
+Server action:
+
+```bash
+php artisan migrate
+php artisan optimize:clear
+```
+
 ### Recommended Online Deployment Steps
 
 1. Upload all changed controller files.

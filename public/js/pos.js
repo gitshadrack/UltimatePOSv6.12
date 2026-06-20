@@ -25,6 +25,7 @@ $(document).ready(function() {
 
     $('select#select_location_id').change(function() {
         reset_pos_form();
+        set_location();
 
         var default_price_group = $(this).find(':selected').data('default_price_group')
         if (default_price_group) {
@@ -2719,6 +2720,18 @@ function set_location() {
                 .find(':selected')
                 .data('default_payment_accounts')
         );
+        $('input#location_id').data(
+            'pos_inactivity_logout_minutes',
+            $('select#select_location_id')
+                .find(':selected')
+                .data('pos_inactivity_logout_minutes')
+        );
+        $('input#location_id').data(
+            'enable_numeric_login',
+            $('select#select_location_id')
+                .find(':selected')
+                .data('enable_numeric_login')
+        );
 
         $('input#location_id').attr(
             'data-default_price_group',
@@ -2726,6 +2739,10 @@ function set_location() {
                 .find(':selected')
                 .data('default_price_group')
         );
+
+        if (typeof window.resetPosInactivityLogoutTimer === 'function') {
+            window.resetPosInactivityLogoutTimer();
+        }
     }
 
     if ($('input#location_id').val()) {

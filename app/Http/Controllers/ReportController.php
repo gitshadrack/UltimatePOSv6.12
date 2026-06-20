@@ -30,6 +30,7 @@ use App\Variation;
 use Datatables;
 use DB;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Spatie\Activitylog\Models\Activity;
 
 class ReportController extends Controller
@@ -1691,6 +1692,10 @@ class ReportController extends Controller
         $business_id = $request->session()->get('user.business_id');
 
         if ($request->ajax()) {
+            if (! Schema::hasColumn('business_locations', 'enable_mpesa_verification')) {
+                return Datatables::of(collect())->make(true);
+            }
+
             $query = TransactionPayment::join('transactions as t', 'transaction_payments.transaction_id', '=', 't.id')
                 ->leftJoin('contacts as c', 't.contact_id', '=', 'c.id')
                 ->leftJoin('users as cashier', 't.created_by', '=', 'cashier.id')
@@ -1825,6 +1830,10 @@ class ReportController extends Controller
         ]);
 
         try {
+            if (! Schema::hasColumn('business_locations', 'enable_mpesa_verification')) {
+                abort(404);
+            }
+
             $business_id = $request->session()->get('user.business_id');
             $payment = TransactionPayment::join('transactions as t', 'transaction_payments.transaction_id', '=', 't.id')
                 ->join('business_locations as bl', 't.location_id', '=', 'bl.id')

@@ -56,6 +56,7 @@ use App\Variation;
 use App\Warranty;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Razorpay\Api\Api;
@@ -996,8 +997,8 @@ class SellPosController extends Controller
             ->get();
         if (!empty($sell_details)) {
             foreach ($sell_details as $key => $value) {
-                $variation = Variation::with('media')->findOrFail($value->variation_id);
-                $sell_details[$key]->media = $variation->media;
+                $variation = Variation::with('media')->find($value->variation_id);
+                $sell_details[$key]->media = ! empty($variation) ? $variation->media : collect();
 
                 //If modifier or combo sell line then unset
                 if (!empty($sell_details[$key]->parent_sell_line_id)) {
@@ -1758,6 +1759,59 @@ class SellPosController extends Controller
 
         return view('sale_pos.partials.payment_row')
             ->with(compact('payment_types', 'row_index', 'removable', 'payment_line', 'accounts', 'enabled_modules', 'is_intasend_enabled'));
+    }
+
+    public function unlock(Request $request)
+    {
+        $request->validate([
+            'location_id' => 'required|integer',
+            'credential_type' => 'required|in:pin,password',
+            'credential' => 'required|string',
+        ]);
+
+        $user = auth()->user();
+        $location = BusinessLocation::Active()
+            ->where('business_id', $user->business_id)
+            ->find($request->input('location_id'));
+
+        if (empty($location) || ! $this->userCanAccessLocation($user, $location->id)) {
+            return response()->json([
+                'success' => false,
+                'msg' => __('messages.something_went_wrong'),
+            ], 403);
+        }
+
+        $credential = (string) $request->input('credential');
+        $credential_type = $request->input('credential_type');
+        $unlocked = false;
+
+        if ($credential_type == 'pin') {
+            $stored_pin = (string) $user->service_staff_pin;
+            $unlocked = ! empty($location->enable_numeric_login)
+                && ! empty($user->is_enable_service_staff_pin)
+                && $stored_pin !== ''
+                && (hash_equals($stored_pin, $credential)
+                    || ((strpos($stored_pin, '$2y$') === 0 || strpos($stored_pin, '$argon2') === 0)
+                        && Hash::check($credential, $stored_pin)));
+        } else {
+            $unlocked = Hash::check($credential, $user->password);
+        }
+
+        if (! $unlocked) {
+            return response()->json([
+                'success' => false,
+                'msg' => __('auth.failed'),
+            ], 422);
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    private function userCanAccessLocation($user, $location_id)
+    {
+        $permitted_locations = $user->permitted_locations();
+
+        return $permitted_locations == 'all' || in_array($location_id, $permitted_locations);
     }
 
     /**

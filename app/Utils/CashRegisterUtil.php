@@ -7,6 +7,7 @@ use App\CashRegisterTransaction;
 use App\Transaction;
 use App\TransactionPayment;
 use DB;
+use Illuminate\Support\Facades\Schema;
 
 class CashRegisterUtil extends Util
 {
@@ -486,6 +487,17 @@ class CashRegisterUtil extends Util
     private function setRegisterMpesaVerificationTotals($register_details)
     {
         if (empty($register_details)) {
+            return;
+        }
+
+        if (! Schema::hasColumn('business_locations', 'enable_mpesa_verification')) {
+            $mpesa_totals = $this->getStandardPlainTotals($register_details->id);
+            $register_details->total_mpesa = $mpesa_totals->total ?? 0;
+            $register_details->verified_mpesa = $mpesa_totals->verified ?? 0;
+            $register_details->pending_mpesa = $mpesa_totals->pending ?? 0;
+            $register_details->rejected_mpesa = $mpesa_totals->rejected ?? 0;
+            $register_details->total_custom_pay_1 = $register_details->total_mpesa;
+
             return;
         }
 

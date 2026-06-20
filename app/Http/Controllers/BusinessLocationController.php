@@ -174,6 +174,9 @@ class BusinessLocationController extends Controller
             if (Schema::hasColumn('business_locations', 'enable_numeric_login')) {
                 $input['enable_numeric_login'] = $request->input('enable_numeric_login', 0);
             }
+            if (Schema::hasColumn('business_locations', 'pos_inactivity_logout_minutes')) {
+                $input['pos_inactivity_logout_minutes'] = $this->getPosInactivityLogoutMinutes($request);
+            }
             if (Schema::hasColumn('business_locations', 'login_domain')) {
                 $input['login_domain'] = $request->input('login_domain');
             }
@@ -291,6 +294,9 @@ class BusinessLocationController extends Controller
             if (Schema::hasColumn('business_locations', 'enable_numeric_login')) {
                 $input['enable_numeric_login'] = $request->input('enable_numeric_login', 0);
             }
+            if (Schema::hasColumn('business_locations', 'pos_inactivity_logout_minutes')) {
+                $input['pos_inactivity_logout_minutes'] = $this->getPosInactivityLogoutMinutes($request);
+            }
             if (Schema::hasColumn('business_locations', 'login_domain')) {
                 $input['login_domain'] = $request->input('login_domain');
             }
@@ -398,5 +404,14 @@ class BusinessLocationController extends Controller
         }
 
         return $output;
+    }
+
+    private function getPosInactivityLogoutMinutes(Request $request)
+    {
+        $request->validate([
+            'pos_inactivity_logout_minutes' => 'nullable|integer|min:0|max:65535',
+        ]);
+
+        return min(65535, max(0, (int) $request->input('pos_inactivity_logout_minutes', 0)));
     }
 }

@@ -55,6 +55,13 @@
                 </div>
                 <div class="col-sm-6">
                     <div class="form-group">
+                        {!! Form::label('pos_inactivity_logout_minutes', 'POS inactivity lock (minutes):') !!}
+                        {!! Form::number('pos_inactivity_logout_minutes', $location->pos_inactivity_logout_minutes ?? 0, ['class' => 'form-control', 'min' => 0, 'max' => 65535, 'step' => 1]); !!}
+                        <p class="help-block">Set to 0 to disable. When enabled, inactive POS screens are locked and the current user must unlock with PIN or password.</p>
+                    </div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="form-group">
                         {!! Form::label('landmark', __( 'business.landmark' ) . ':') !!}
                         {!! Form::text('landmark', $location->landmark, ['class' => 'form-control', 'placeholder' => __( 'business.landmark' ) ]); !!}
                     </div>

@@ -4,6 +4,7 @@ namespace App;
 
 use DB;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class BusinessLocation extends Model
 {
@@ -23,6 +24,7 @@ class BusinessLocation extends Model
         'featured_products' => 'array',
         'enable_mpesa_verification' => 'boolean',
         'enable_numeric_login' => 'boolean',
+        'pos_inactivity_logout_minutes' => 'integer',
     ];
 
     /**
@@ -44,8 +46,11 @@ class BusinessLocation extends Model
             }
         }
 
+        $has_pos_inactivity_logout_minutes = Schema::hasColumn('business_locations', 'pos_inactivity_logout_minutes');
+        $has_enable_numeric_login = Schema::hasColumn('business_locations', 'enable_numeric_login');
+
         if ($append_id) {
-            $query->select(
+            $select = [
                 DB::raw("IF(location_id IS NULL OR location_id='', name, CONCAT(name, ' (', location_id, ')')) AS name"),
                 'id',
                 'receipt_printer_type',
@@ -53,8 +58,17 @@ class BusinessLocation extends Model
                 'default_payment_accounts',
                 'invoice_scheme_id',
                 'invoice_layout_id',
-                'sale_invoice_scheme_id'
-            );
+                'sale_invoice_scheme_id',
+            ];
+
+            if ($has_pos_inactivity_logout_minutes) {
+                $select[] = 'pos_inactivity_logout_minutes';
+            }
+            if ($has_enable_numeric_login) {
+                $select[] = 'enable_numeric_login';
+            }
+
+            $query->select($select);
         }
 
         $result = $query->get();
@@ -68,7 +82,7 @@ class BusinessLocation extends Model
         }
 
         if ($receipt_printer_type_attribute) {
-            $attributes = collect($result)->mapWithKeys(function ($item) use ($price_groups) {
+            $attributes = collect($result)->mapWithKeys(function ($item) use ($price_groups, $has_pos_inactivity_logout_minutes, $has_enable_numeric_login) {
                 $default_payment_accounts = json_decode($item->default_payment_accounts, true);
                 $default_payment_accounts['advance'] = [
                     'is_enabled' => 1,
@@ -82,6 +96,8 @@ class BusinessLocation extends Model
                     'data-default_sale_invoice_scheme_id' => $item->sale_invoice_scheme_id,
                     'data-default_invoice_scheme_id' => $item->invoice_scheme_id,
                     'data-default_invoice_layout_id' => $item->invoice_layout_id,
+                    'data-pos_inactivity_logout_minutes' => $has_pos_inactivity_logout_minutes ? $item->pos_inactivity_logout_minutes : 0,
+                    'data-enable_numeric_login' => $has_enable_numeric_login ? (int) $item->enable_numeric_login : 0,
                 ],
                 ];
             })->all();

@@ -23,7 +23,7 @@
 				<div class="tw-px-3 tw-w-full  lg:tw-px-0 lg:tw-pr-0 @if(empty($pos_settings['hide_product_suggestion'])) lg:tw-w-[60%]  @else lg:tw-w-[100%] @endif">
 					<div class="tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-rounded-2xl tw-bg-white tw-mb-2 md:tw-mb-8 tw-p-2">
 						<div class="box-body pb-0">
-							{!! Form::hidden('location_id', $transaction->location_id, ['id' => 'location_id', 'data-receipt_printer_type' => !empty($location_printer_type) ? $location_printer_type : 'browser', 'data-default_payment_accounts' => $transaction->location->default_payment_accounts]); !!}
+							{!! Form::hidden('location_id', $transaction->location_id, ['id' => 'location_id', 'data-receipt_printer_type' => !empty($location_printer_type) ? $location_printer_type : 'browser', 'data-default_payment_accounts' => $transaction->location->default_payment_accounts, 'data-pos_inactivity_logout_minutes' => $transaction->location->pos_inactivity_logout_minutes ?? 0, 'data-enable_numeric_login' => $transaction->location->enable_numeric_login ?? 0]); !!}
 							<!-- sub_type -->
 							{!! Form::hidden('sub_type', isset($sub_type) ? $sub_type : null) !!}
 							<input type="hidden" id="item_addition_method" value="{{$business_details->item_addition_method}}">

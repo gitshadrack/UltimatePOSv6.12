@@ -344,6 +344,7 @@ class InstallController extends Controller
                     $this->installSettings();
                     DB::statement('SET default_storage_engine=INNODB;');
                     Artisan::call('migrate', ['--force' => true]);
+                    $installUtil->addPosInactivityLogoutMinutesToBusinessLocations();
                     Artisan::call('module:publish');
                     Artisan::call('passport:install', ['--force' => true]);
 

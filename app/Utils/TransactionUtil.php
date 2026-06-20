@@ -25,6 +25,7 @@ use App\TransactionSellLinesPurchaseLines;
 use App\Variation;
 use App\VariationLocationDetails;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use App\CashRegister;
 
@@ -919,6 +920,10 @@ class TransactionUtil extends Util
      */
     private function shouldSkipMpesaAccountPosting($payment_data, $location_id = null)
     {
+        if (! Schema::hasColumn('business_locations', 'enable_mpesa_verification')) {
+            return false;
+        }
+
         if (($payment_data['method'] ?? null) != 'custom_pay_1'
             || ($payment_data['mpesa_verification_status'] ?? 'pending') == 'verified') {
             return false;

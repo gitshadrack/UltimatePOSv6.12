@@ -72,6 +72,8 @@ class LoginController extends Controller
 
     public function logout(Request $request)
     {
+        $location_id = $request->query('location_id');
+
         if (auth()->check()) {
             $this->businessUtil->activityLog(auth()->user(), 'logout');
         }
@@ -80,7 +82,12 @@ class LoginController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect('/login');
+        $redirect_url = '/login';
+        if (! empty($location_id)) {
+            $redirect_url .= '?location_id='.urlencode($location_id);
+        }
+
+        return redirect($redirect_url);
     }
 
     /**

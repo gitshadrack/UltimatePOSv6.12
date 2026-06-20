@@ -4,6 +4,7 @@ namespace App;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Schema;
 
 class AccountTransaction extends Model
 {
@@ -136,6 +137,10 @@ class AccountTransaction extends Model
      */
     public static function isUnverifiedMpesaPayment($payment)
     {
+        if (! Schema::hasColumn('business_locations', 'enable_mpesa_verification')) {
+            return false;
+        }
+
         if (! $payment instanceof TransactionPayment) {
             $payment = TransactionPayment::find($payment);
         }

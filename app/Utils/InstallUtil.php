@@ -9,7 +9,9 @@ use App\VariationLocationDetails;
 use App\VariationTemplate;
 use App\VariationValueTemplate;
 use DB;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Schema;
 
 class InstallUtil extends Util
 {
@@ -109,6 +111,21 @@ class InstallUtil extends Util
         if ($db_version == 1.3 && $app_version == 2.0) {
             //Fix for purchase_lines table, copy data from  purchase_price to pp_without_discount
             DB::update('UPDATE `purchase_lines` set pp_without_discount=purchase_price');
+        }
+
+        return true;
+    }
+
+    public function addPosInactivityLogoutMinutesToBusinessLocations()
+    {
+        if (! Schema::hasColumn('business_locations', 'pos_inactivity_logout_minutes')) {
+            Schema::table('business_locations', function (Blueprint $table) {
+                $column = $table->unsignedSmallInteger('pos_inactivity_logout_minutes')->default(0);
+
+                if (Schema::hasColumn('business_locations', 'enable_numeric_login')) {
+                    $column->after('enable_numeric_login');
+                }
+            });
         }
 
         return true;

@@ -578,7 +578,11 @@ class ProductUtil extends Util
         foreach ($combo_variations as $key => $value) {
             $variation = Variation::with(['product', 'variation_location_details' => function ($q) use ($location_id) {
                 $q->where('location_id', $location_id);
-            }])->findOrFail($value['variation_id']);
+            }])->find($value['variation_id']);
+
+            if (empty($variation) || empty($variation->product) || empty($value['quantity'])) {
+                continue;
+            }
 
             $product = $variation->product;
 
@@ -592,6 +596,9 @@ class ProductUtil extends Util
 
             $variation_qty = ! empty($vld) ? $vld->qty_available : 0;
             $multiplier = $this->getMultiplierOf2Units($product->unit_id, $value['unit_id']);
+            if (empty($multiplier)) {
+                continue;
+            }
 
             if ($combo_qty == 0) {
                 $combo_qty = ($variation_qty / $multiplier) / $combo_variations[$key]['quantity'];
@@ -618,12 +625,19 @@ class ProductUtil extends Util
         foreach ($combo_variations as $key => $value) {
             $variation = Variation::with(['product', 'variation_location_details' => function ($q) use ($location_id) {
                 $q->where('location_id', $location_id);
-            }])->findOrFail($value['variation_id']);
+            }])->find($value['variation_id']);
+
+            if (empty($variation) || empty($variation->product)) {
+                continue;
+            }
 
             $vld = $variation->variation_location_details->first();
 
             $variation_qty = ! empty($vld) ? $vld->qty_available : 0;
             $multiplier = $this->getMultiplierOf2Units($variation->product->unit_id, $value['unit_id']);
+            if (empty($multiplier)) {
+                continue;
+            }
 
             $details[] = [
                 'variation_id' => $value['variation_id'],

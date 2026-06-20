@@ -129,6 +129,330 @@
         @endif
 
         @include('layouts.partials.javascripts')
+
+        @if ($pos_layout)
+            <style>
+                .pos-screen-lock {
+                    display: none;
+                    position: fixed;
+                    inset: 0;
+                    z-index: 99999;
+                    background: rgba(17, 24, 39, 0.96);
+                    color: #fff;
+                }
+
+                .pos-screen-lock.is-active {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 24px;
+                }
+
+                .pos-screen-lock-panel {
+                    width: 100%;
+                    max-width: 380px;
+                    border-radius: 8px;
+                    background: #fff;
+                    color: #111827;
+                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+                    padding: 24px;
+                }
+
+                .pos-screen-lock-title {
+                    margin: 0 0 6px;
+                    font-size: 22px;
+                    font-weight: 700;
+                }
+
+                .pos-screen-lock-subtitle {
+                    margin-bottom: 18px;
+                    color: #6b7280;
+                    font-size: 13px;
+                }
+
+                .pos-screen-lock-error {
+                    display: none;
+                    margin-bottom: 12px;
+                }
+
+                .pos-screen-lock-keypad {
+                    display: grid;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 8px;
+                    margin-top: 10px;
+                }
+
+                .pos-screen-lock-keypad button {
+                    height: 48px;
+                    border: 1px solid #d1d5db;
+                    border-radius: 6px;
+                    background: #f9fafb;
+                    font-size: 18px;
+                    font-weight: 700;
+                }
+
+                .pos-screen-is-locked {
+                    overflow: hidden;
+                }
+            </style>
+            <div id="pos_screen_lock" class="pos-screen-lock" role="dialog" aria-modal="true" aria-labelledby="pos_screen_lock_title">
+                <div class="pos-screen-lock-panel">
+                    <h3 id="pos_screen_lock_title" class="pos-screen-lock-title">POS locked</h3>
+                    <div class="pos-screen-lock-subtitle">
+                        {{ auth()->user()->username ?? '' }}
+                    </div>
+                    <div class="alert alert-danger pos-screen-lock-error" id="pos_screen_lock_error"></div>
+                    <form id="pos_screen_lock_form" autocomplete="off">
+                        <input type="hidden" id="pos_screen_lock_credential_type" value="password">
+                        <div id="pos_screen_lock_pin_group" class="form-group hide">
+                            <label for="pos_screen_lock_pin">PIN</label>
+                            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" class="form-control input-lg text-center" id="pos_screen_lock_pin">
+                            <div class="pos-screen-lock-keypad">
+                                @foreach([1, 2, 3, 4, 5, 6, 7, 8, 9] as $key)
+                                    <button type="button" data-pos-lock-key="{{ $key }}">{{ $key }}</button>
+                                @endforeach
+                                <button type="button" data-pos-lock-action="clear">Clear</button>
+                                <button type="button" data-pos-lock-key="0">0</button>
+                                <button type="button" data-pos-lock-action="backspace">Back</button>
+                            </div>
+                        </div>
+                        <div id="pos_screen_lock_password_group" class="form-group">
+                            <label for="pos_screen_lock_password">Password</label>
+                            <input type="password" class="form-control input-lg" id="pos_screen_lock_password">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block btn-lg" id="pos_screen_lock_unlock">Unlock</button>
+                        <div class="row" style="margin-top: 12px;">
+                            <div class="col-xs-6">
+                                <button type="button" class="btn btn-default btn-block" id="pos_screen_lock_switch">Use PIN</button>
+                            </div>
+                            <div class="col-xs-6">
+                                <button type="button" class="btn btn-default btn-block" id="pos_screen_lock_logout">Log out</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <script type="text/javascript">
+                (function () {
+                    var logoutUrl = @json(action([\App\Http\Controllers\Auth\LoginController::class, 'logout']));
+                    var unlockUrl = @json(route('pos.unlock'));
+                    var lockTimer = null;
+                    var timerEnabled = false;
+                    var locked = false;
+                    var lockStorageKey = 'ultimate_pos_screen_locked_' + (APP.USER_ID || 'guest');
+                    var activityEvents = [
+                        'click',
+                        'keydown',
+                        'mousemove',
+                        'mousedown',
+                        'scroll',
+                        'touchstart',
+                        'touchmove'
+                    ];
+
+                    function getTimeoutMinutes() {
+                        var timeoutMinutes = parseInt($('#location_id').data('pos_inactivity_logout_minutes'), 10);
+
+                        return isNaN(timeoutMinutes) ? 0 : timeoutMinutes;
+                    }
+
+                    function locationUsesPin() {
+                        return $('#location_id').data('enable_numeric_login') == 1;
+                    }
+
+                    function clearTimers() {
+                        clearTimeout(lockTimer);
+                    }
+
+                    function persistLock() {
+                        try {
+                            sessionStorage.setItem(lockStorageKey, '1');
+                        } catch (e) {}
+                    }
+
+                    function clearPersistedLock() {
+                        try {
+                            sessionStorage.removeItem(lockStorageKey);
+                        } catch (e) {}
+                    }
+
+                    function hasPersistedLock() {
+                        try {
+                            return sessionStorage.getItem(lockStorageKey) === '1';
+                        } catch (e) {
+                            return false;
+                        }
+                    }
+
+                    function logout() {
+                        clearPersistedLock();
+                        var locationId = $('#location_id').val();
+                        var separator = logoutUrl.indexOf('?') === -1 ? '?' : '&';
+                        window.location.href = logoutUrl + (locationId ? separator + 'location_id=' + encodeURIComponent(locationId) : '');
+                    }
+
+                    function setCredentialType(type) {
+                        $('#pos_screen_lock_credential_type').val(type);
+                        $('#pos_screen_lock_pin_group').toggleClass('hide', type !== 'pin');
+                        $('#pos_screen_lock_password_group').toggleClass('hide', type !== 'password');
+                        $('#pos_screen_lock_switch').text(type === 'pin' ? 'Use password' : 'Use PIN');
+                        $('#pos_screen_lock_pin, #pos_screen_lock_password').val('');
+                        $('#pos_screen_lock_error').hide().text('');
+
+                        setTimeout(function () {
+                            if (type === 'pin') {
+                                $('#pos_screen_lock_pin').focus();
+                            } else {
+                                $('#pos_screen_lock_password').focus();
+                            }
+                        }, 100);
+                    }
+
+                    function showLock(force) {
+                        if (!timerEnabled && !force) {
+                            return;
+                        }
+
+                        clearTimers();
+                        locked = true;
+                        persistLock();
+                        setCredentialType(locationUsesPin() ? 'pin' : 'password');
+                        $('body').addClass('pos-screen-is-locked');
+                        $('#pos_screen_lock').addClass('is-active');
+                    }
+
+                    function hideLock() {
+                        locked = false;
+                        $('#pos_screen_lock').removeClass('is-active');
+                        $('body').removeClass('pos-screen-is-locked');
+                        $('#pos_screen_lock_pin, #pos_screen_lock_password').val('');
+                        $('#pos_screen_lock_error').hide().text('');
+                        clearPersistedLock();
+                        resetTimer();
+                    }
+
+                    function showUnlockError(message) {
+                        $('#pos_screen_lock_error').text(message || 'Unable to unlock POS.').show();
+                    }
+
+                    function resetTimer() {
+                        if (locked) {
+                            return;
+                        }
+
+                        clearTimers();
+
+                        var timeoutMinutes = getTimeoutMinutes();
+                        timerEnabled = timeoutMinutes > 0;
+
+                        if (!timerEnabled) {
+                            return;
+                        }
+
+                        lockTimer = setTimeout(showLock, timeoutMinutes * 60 * 1000);
+                    }
+
+                    activityEvents.forEach(function (eventName) {
+                        document.addEventListener(eventName, function () {
+                            if (!locked) {
+                                resetTimer();
+                            }
+                        }, { passive: true });
+                    });
+
+                    $('#pos_screen_lock_switch').on('click', function () {
+                        var currentType = $('#pos_screen_lock_credential_type').val();
+                        setCredentialType(currentType === 'pin' ? 'password' : 'pin');
+                    });
+
+                    $('[data-pos-lock-key]').on('click', function () {
+                        var pinInput = $('#pos_screen_lock_pin');
+                        if (pinInput.val().length < 6) {
+                            pinInput.val(pinInput.val() + $(this).data('pos-lock-key')).focus();
+                        }
+                    });
+
+                    $('[data-pos-lock-action]').on('click', function () {
+                        var pinInput = $('#pos_screen_lock_pin');
+                        var action = $(this).data('pos-lock-action');
+
+                        if (action === 'clear') {
+                            pinInput.val('').focus();
+                        } else if (action === 'backspace') {
+                            pinInput.val(pinInput.val().slice(0, -1)).focus();
+                        }
+                    });
+
+                    $('#pos_screen_lock_logout').on('click', function () {
+                        logout();
+                    });
+
+                    $('#pos_manual_lock').on('click', function () {
+                        showLock(true);
+                    });
+
+                    $('#pos_screen_lock_pin, #pos_screen_lock_password').on('keydown', function (event) {
+                        if (event.key === 'Enter' || event.which === 13) {
+                            event.preventDefault();
+                            $('#pos_screen_lock_form').trigger('submit');
+                        }
+                    });
+
+                    $('#pos_screen_lock_form').on('submit', function (event) {
+                        event.preventDefault();
+
+                        var credentialType = $('#pos_screen_lock_credential_type').val();
+                        var credential = credentialType === 'pin'
+                            ? $('#pos_screen_lock_pin').val()
+                            : $('#pos_screen_lock_password').val();
+
+                        if (!credential) {
+                            showUnlockError('Enter your ' + (credentialType === 'pin' ? 'PIN' : 'password') + '.');
+                            return;
+                        }
+
+                        $('#pos_screen_lock_unlock').prop('disabled', true);
+                        $('#pos_screen_lock_error').hide().text('');
+
+                        $.ajax({
+                            method: 'POST',
+                            url: unlockUrl,
+                            data: {
+                                location_id: $('#location_id').val(),
+                                credential_type: credentialType,
+                                credential: credential
+                            },
+                            success: function (response) {
+                                if (response.success) {
+                                    hideLock();
+                                } else {
+                                    showUnlockError(response.msg);
+                                }
+                            },
+                            error: function (xhr) {
+                                var message = xhr.responseJSON && xhr.responseJSON.msg
+                                    ? xhr.responseJSON.msg
+                                    : 'Unable to unlock POS.';
+                                showUnlockError(message);
+                            },
+                            complete: function () {
+                                $('#pos_screen_lock_unlock').prop('disabled', false);
+                            }
+                        });
+                    });
+
+                    window.resetPosInactivityLogoutTimer = resetTimer;
+                    window.lockPosScreen = function () {
+                        showLock(true);
+                    };
+                    if (hasPersistedLock()) {
+                        showLock(true);
+                    } else {
+                        resetTimer();
+                    }
+                })();
+            </script>
+        @endif
         
         {{-- Module JS --}}
         @include('layouts.module-assets')

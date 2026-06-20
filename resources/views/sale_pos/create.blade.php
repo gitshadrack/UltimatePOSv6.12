@@ -36,6 +36,8 @@
                                             ? $default_location->receipt_printer_type
                                             : 'browser',
                                         'data-default_payment_accounts' => $default_location->default_payment_accounts ?? '',
+                                        'data-pos_inactivity_logout_minutes' => $default_location->pos_inactivity_logout_minutes ?? 0,
+                                        'data-enable_numeric_login' => $default_location->enable_numeric_login ?? 0,
                                     ]) !!}
                                     <!-- sub_type -->
                                     {!! Form::hidden('sub_type', isset($sub_type) ? $sub_type : null) !!}
