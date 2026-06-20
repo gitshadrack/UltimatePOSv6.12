@@ -412,24 +412,49 @@ class IntaSendController extends Controller
             return ['success' => false, 'msg' => __('lang_v1.intasend_stk_missing_secret')];
         }
 
+        $till_or_paybill_number = $this->normalizeTillOrPaybillNumber($setting->till_or_paybill_number ?? null);
         $api_ref = 'pos_stk_'.$business_id.'_'.auth()->id().'_'.time();
+        if ($till_or_paybill_number !== '') {
+            $api_ref .= '_till_'.$till_or_paybill_number;
+        }
         if ($request->filled('contact_id')) {
             $api_ref .= '_customer_id_'.$request->input('contact_id');
         }
 
-        $payload = [
+        $base_payload = [
             'amount' => (float) $request->input('amount'),
             'currency' => 'KES',
             'phone_number' => trim((string) $request->input('phone_number')),
             'api_ref' => $api_ref,
             'comment' => 'UltimatePOS POS STK Push',
         ];
+        $payload = $base_payload;
+
+        if ($till_or_paybill_number !== '') {
+            $payload['till_identifier'] = $till_or_paybill_number;
+            $payload['till_number'] = $till_or_paybill_number;
+            $payload['metadata'] = [
+                'till_identifier' => $till_or_paybill_number,
+                'till_number' => $till_or_paybill_number,
+                'business_location_id' => $setting->business_location_id,
+                'source' => 'ultimate_pos',
+            ];
+        }
 
         try {
-            $response = Http::withToken($setting->intasend_secret_key)
-                ->asJson()
-                ->timeout(20)
-                ->post($this->stkEndpoint($setting), $payload);
+            $response = $this->postStkPush($setting, $payload);
+
+            if (! $response->successful() && $payload !== $base_payload && in_array($response->status(), [400, 422], true)) {
+                Log::warning('IntaSend STK push with till/paybill metadata failed; retrying with minimal payload.', [
+                    'business_id' => $business_id,
+                    'location_id' => $request->input('location_id'),
+                    'endpoint' => $this->stkEndpoint($setting),
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+
+                $response = $this->postStkPush($setting, $base_payload);
+            }
 
             if ($response->successful()) {
                 return [
@@ -505,6 +530,19 @@ class IntaSendController extends Controller
     protected function stkEndpoint(IntaSendSetting $setting)
     {
         return 'https://api.intasend.com/api/v1/payment/mpesa-stk-push/';
+    }
+
+    protected function postStkPush(IntaSendSetting $setting, array $payload)
+    {
+        return Http::withToken($setting->intasend_secret_key)
+            ->asJson()
+            ->timeout(20)
+            ->post($this->stkEndpoint($setting), $payload);
+    }
+
+    protected function normalizeTillOrPaybillNumber($value)
+    {
+        return trim(preg_replace('/[^A-Za-z0-9-]/', '', (string) $value));
     }
 
     protected function phoneVariants($phone_number)

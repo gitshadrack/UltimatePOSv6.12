@@ -1027,6 +1027,8 @@ What changed:
 - Dynamically added payment rows also receive the IntaSend row action when the IntaSend module is enabled for the business.
 - IntaSend gross/net handling is explicit: `intasend_payments.amount` stores the customer-paid gross amount from `value`, while `net_amount`, `charges`, and `currency` store settlement details from IntaSend. Customer dues and POS M-PESA payments use the gross amount; finance reports can compare gross collected, charges, and net received.
 - POS transaction-code linking trusts the unique M-PESA/IntaSend code and does not require the POS gross amount to equal the IntaSend `net_amount`, because IntaSend may send `value` as the paid amount and `net_amount` after charges.
+- POS STK Push now carries the configured branch till/paybill in the outgoing `api_ref`, common till fields, and metadata. If IntaSend rejects the extended STK payload with a validation error, the sender retries once with the previous minimal payload so cashier checkout is not blocked by unsupported optional fields.
+- Webhook normalization accepts the till/paybill from common direct fields such as `till_identifier`, `till_number`, `paybill_number`, `business_shortcode`, and matching nested `metadata`/`data` fields. It can also recover the branch till/paybill from POS-generated `api_ref` values like `..._till_4012345...`.
 - Manual linking creates an Ultimate POS customer due payment, distributes it to unpaid sales/opening balance through the existing `payAtOnce()` utility, and posts to the configured M-PESA account when account module/payment account settings allow it.
 - Explicitly set model table names to `intasend_settings` and `intasend_payments` so Laravel does not infer `inta_send_settings` / `inta_send_payments`.
 - Added a migration-required warning on IntaSend screens so missing tables show a clear message instead of a 500 error.
@@ -1041,6 +1043,7 @@ Important limitations:
 - `PENDING` IntaSend callbacks stay ignored. A later `COMPLETE` callback with the same final M-PESA reference is required before the system can link, attach, or verify the collection.
 - Sandbox environments may not expose a till/paybill number. Keep only one active configured IntaSend location during sandbox testing, or add real till/paybill mapping before testing multiple locations.
 - POS STK Push requires an IntaSend secret key on the active location setting. The modal search can only select payments after IntaSend has sent a `COMPLETE` webhook into the local holding pool.
+- The exact official IntaSend STK field for choosing a merchant till/paybill should still be confirmed with IntaSend. The code sends likely fields and metadata, then falls back to the original minimal payload on validation failure.
 
 Server action:
 

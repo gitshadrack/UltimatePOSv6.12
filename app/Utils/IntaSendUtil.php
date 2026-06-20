@@ -195,6 +195,7 @@ class IntaSendUtil
             ?? $payload['tracking_id']
             ?? $payload['invoice_id']
             ?? null;
+        $api_ref = $payload['api_ref'] ?? data_get($payload, 'metadata.api_ref');
 
         return [
             'status' => $payload['state'] ?? $payload['status'] ?? null,
@@ -204,8 +205,8 @@ class IntaSendUtil
             'charges' => $payload['charges'] ?? 0,
             'currency' => $payload['currency'] ?? null,
             'phone_number' => $this->normalizePhone($payload['account'] ?? $payload['phone_number'] ?? ''),
-            'api_ref' => $payload['api_ref'] ?? data_get($payload, 'metadata.api_ref'),
-            'till_number' => $payload['till_identifier'] ?? data_get($payload, 'metadata.till_number') ?? data_get($payload, 'metadata.till'),
+            'api_ref' => $api_ref,
+            'till_number' => $this->extractTillOrPaybillNumber($payload, $api_ref),
         ];
     }
 
@@ -304,10 +305,26 @@ class IntaSendUtil
     public function resolveSetting(array $normalized)
     {
         if (! empty($normalized['till_number'])) {
-            return IntaSendSetting::with('location')
-                ->where('till_or_paybill_number', $normalized['till_number'])
+            $till_number = $this->normalizeTillOrPaybillNumber($normalized['till_number']);
+
+            $setting = IntaSendSetting::with('location')
+                ->where(function ($query) use ($normalized, $till_number) {
+                    $query->where('till_or_paybill_number', $normalized['till_number'])
+                        ->orWhere('till_or_paybill_number', $till_number);
+                })
                 ->where('is_active', 1)
                 ->first();
+
+            if (! empty($setting)) {
+                return $setting;
+            }
+
+            return IntaSendSetting::with('location')
+                ->where('is_active', 1)
+                ->get()
+                ->first(function ($setting) use ($till_number) {
+                    return $this->normalizeTillOrPaybillNumber($setting->till_or_paybill_number) === $till_number;
+                });
         }
 
         $configured_settings = IntaSendSetting::with('location')
@@ -432,6 +449,51 @@ class IntaSendUtil
     protected function normalizePhone($phone)
     {
         return preg_replace('/[^0-9]/', '', (string) $phone);
+    }
+
+    protected function extractTillOrPaybillNumber(array $payload, $api_ref = null)
+    {
+        $fields = [
+            'till_identifier',
+            'till_number',
+            'till',
+            'paybill_number',
+            'paybill',
+            'business_shortcode',
+            'shortcode',
+            'merchant_shortcode',
+            'metadata.till_identifier',
+            'metadata.till_number',
+            'metadata.till',
+            'metadata.paybill_number',
+            'metadata.paybill',
+            'metadata.business_shortcode',
+            'metadata.shortcode',
+            'metadata.merchant_shortcode',
+            'data.till_identifier',
+            'data.till_number',
+            'data.paybill_number',
+            'data.business_shortcode',
+        ];
+
+        foreach ($fields as $field) {
+            $value = data_get($payload, $field);
+            if ($value !== null && trim((string) $value) !== '') {
+                return $this->normalizeTillOrPaybillNumber($value);
+            }
+        }
+
+        $api_ref = (string) $api_ref;
+        if ($api_ref !== '' && preg_match('/(?:^|_)till_([A-Za-z0-9-]+)/', $api_ref, $matches)) {
+            return $this->normalizeTillOrPaybillNumber($matches[1]);
+        }
+
+        return null;
+    }
+
+    protected function normalizeTillOrPaybillNumber($value)
+    {
+        return trim(preg_replace('/[^A-Za-z0-9-]/', '', (string) $value));
     }
 
     protected function toLocalPhone($phone)
