@@ -67,9 +67,11 @@
 
 			if($hide_tax == 'hide'){
 				$tax_id = null;
-				$unit_price_inc_tax = $product->default_sell_price;
 			}
 			$default_unit_price_inc_tax = $unit_price_inc_tax;
+			$base_unit_sell_price = $hide_tax == 'hide'
+				? $product->sell_price_inc_tax
+				: $product->default_sell_price;
 
 			if(!empty($so_line) && $action !== 'edit') {
 				$tax_id = $so_line->tax_id;
@@ -312,7 +314,7 @@
 
 		<input type="hidden" class="base_unit_multiplier" name="products[{{$row_count}}][base_unit_multiplier]" value="{{$multiplier}}">
 
-		<input type="hidden" class="hidden_base_unit_sell_price" value="{{$product->default_sell_price / $multiplier}}">
+		<input type="hidden" class="hidden_base_unit_sell_price" value="{{$base_unit_sell_price / $multiplier}}">
 		<input type="hidden" class="default_unit_price_inc_tax" value="{{$default_unit_price_inc_tax}}">
 		<input type="hidden" class="hidden_base_unit_cost_price_inc_tax" value="{{!empty($product->dpp_inc_tax) ? $product->dpp_inc_tax : 0}}">
 		<input type="hidden" class="hidden_base_unit_min_price_inc_tax" value="{{$min_price_inc_tax / $multiplier}}">
@@ -368,7 +370,7 @@
 			</td>
 		@endif
 		@php
-			$pos_unit_price = !empty($product->unit_price_before_discount) ? $product->unit_price_before_discount : $product->default_sell_price;
+			$pos_unit_price = !empty($product->unit_price_before_discount) ? $product->unit_price_before_discount : $base_unit_sell_price;
 
 			if(!empty($so_line) && $action !== 'edit') {
 				$pos_unit_price = $so_line->unit_price_before_discount;

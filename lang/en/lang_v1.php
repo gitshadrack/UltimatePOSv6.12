@@ -1057,6 +1057,8 @@ return [
     'repeat_on' => 'Repeat on',
     'access_tables' => 'Access tables',
     'access_printers' => 'Access printers',
+    'open_cash_drawer' => 'Open cash drawer from POS',
+    'open_drawer' => 'Open Drawer',
     'access_types_of_service' => 'Access types of service',
     'search_address' => 'Search address',
     'contact_locations' => 'Contact Locations',

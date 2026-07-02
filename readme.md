@@ -1228,6 +1228,77 @@ php artisan migrate
 php artisan optimize:clear
 ```
 
+### POS Open Cash Drawer Button
+
+Purpose: Allow a cashier to open a printer-connected cash drawer without completing a sale or printing a receipt.
+
+Files changed:
+
+- `config/constants.php`
+- `database/migrations/2026_07_02_000001_add_open_cash_drawer_permission.php`
+- `lang/en/lang_v1.php`
+- `resources/views/sale_pos/partials/pos_form_actions.blade.php`
+- `resources/views/role/create.blade.php`
+- `resources/views/role/edit.blade.php`
+- `public/js/printer.js`
+- `public/js/pos.js`
+- `public/service-worker.js`
+- `readme.md`
+
+What changed:
+
+- Added a green `Open Drawer` button immediately to the left of `Recent Transactions` on the desktop POS action bar.
+- Added the `open_cash_drawer` role permission. Only users with this permission, administrators, and super administrators see the button.
+- Added `Open cash drawer from POS` to the role create/edit screens under the sales/POS permissions.
+- The two buttons use a compact, non-collapsing inline action group so the drawer button remains visible without hiding the payment buttons or `Total Payable`.
+- Added explicit inline visibility and sizing styles to protect the button from stale or incomplete Tailwind utility builds.
+- The button connects to the existing local printer WebSocket service at `ws://127.0.0.1:6441`.
+- It sends the following message to the printer connector:
+
+```json
+{"type":"open-cash-drawer"}
+```
+
+- The button is temporarily disabled while the command is being sent.
+- A success notification is displayed after the command is delivered to the local connector.
+- If the connector cannot be reached, the cashier sees `Printer connector is not available.`
+- Increased `config('constants.asset_version')` from `613` to `614` so browsers request the updated POS and printer JavaScript files.
+- Increased the PWA cache name from `sysnettechs-pos-pwa-v1` to `sysnettechs-pos-pwa-v2`, which removes the previous cached JavaScript/CSS assets when the new service worker activates.
+
+Hardware and connector requirements:
+
+1. Connect the cash drawer to the receipt printer's drawer/DK port using the correct RJ11/RJ12 drawer cable.
+2. Keep the receipt printer powered on and correctly configured on the POS computer.
+3. Start the Ultimate POS printer connector and confirm that it listens on port `6441`.
+4. The installed connector must support the `open-cash-drawer` message and send the appropriate drawer-kick command to the configured receipt printer.
+5. A drawer connected directly by USB or serial requires compatible connector support and may not work with this printer-driven command.
+
+Troubleshooting:
+
+- The local URL configured for this installation is `http://localhost/UltimatePOSV6.12/public`.
+- If the button is missing, run `php artisan optimize:clear`, open the configured local URL, and reload twice with `Ctrl+F5`. Two reloads may be needed for the updated service worker to activate and clear its old cache.
+- Confirm the browser is loading this exact project folder. The local Apache configuration currently contains duplicate `UltimatePOS.local` virtual hosts pointing to `c:/wamp/www/...`, while this project is stored under `C:/wamp64/www/UltimatePOSV6.12`. Changes made here will not appear if the browser is serving another Ultimate POS copy.
+- If using `UltimatePOS.local`, correct its Apache `DocumentRoot` and matching `<Directory>` path to `C:/wamp64/www/UltimatePOSV6.12`, remove the duplicate host entry, and restart Apache.
+- If `Printer connector is not available` appears, start or restart the local printer connector.
+- If the success message appears but the drawer stays closed, check that the connector supports `open-cash-drawer`, the drawer cable is connected to the printer's drawer port, and the drawer is physically unlocked.
+- Confirm normal receipt printing works from the same POS computer before testing the drawer.
+
+Role setup:
+
+1. Run the migration to create the `open_cash_drawer` permission.
+2. Go to User Management > Roles.
+3. Create or edit the required cashier role.
+4. Enable `Open cash drawer from POS` and save the role.
+5. Sign the cashier out and back in so the refreshed role permissions are applied.
+
+Server action:
+
+```bash
+php artisan optimize:clear
+```
+
+No migration is needed.
+
 ### Recommended Online Deployment Steps
 
 1. Upload all changed controller files.

@@ -815,6 +815,14 @@
               <div class="col-md-12">
                 <div class="checkbox">
                   <label>
+                    {!! Form::checkbox('permissions[]', 'open_cash_drawer', false, ['class' => 'input-icheck']); !!}
+                    {{ __('lang_v1.open_cash_drawer') }}
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-12">
+                <div class="checkbox">
+                  <label>
                     {!! Form::checkbox('permissions[]', 'disable_pay_checkout', false, ['class' => 'input-icheck']); !!}
                     {{ __('lang_v1.disable_pay_checkout') }}
                   </label>
