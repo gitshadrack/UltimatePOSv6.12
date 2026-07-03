@@ -577,6 +577,9 @@ class ModuleUtil extends Util
             'intasend' => ['name' => __('lang_v1.intasend_integration'),
                 'tooltip' => __('lang_v1.intasend_module_tooltip'),
             ],
+            'daraja' => ['name' => __('lang_v1.daraja_integration'),
+                'tooltip' => __('lang_v1.daraja_module_tooltip'),
+            ],
         ];
     }
 

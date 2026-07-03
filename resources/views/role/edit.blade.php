@@ -1730,8 +1730,17 @@
           <div class="col-md-12">
             <div class="checkbox">
               <label>
-                {!! Form::checkbox('permissions[]', 'intasend.manage', in_array('intasend.manage', $role_permissions),
-                [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.manage_intasend' ) }}
+                {!! Form::checkbox('permissions[]', 'intasend.settings', in_array('intasend.settings', $role_permissions),
+                [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.manage_intasend_settings' ) }}
+                <br>
+                {!! Form::checkbox('permissions[]', 'intasend.transactions', in_array('intasend.transactions', $role_permissions),
+                [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.view_intasend_transactions' ) }}
+                <br>
+                {!! Form::checkbox('permissions[]', 'daraja.settings', in_array('daraja.settings', $role_permissions),
+                [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.manage_mpesa_settings' ) }}
+                <br>
+                {!! Form::checkbox('permissions[]', 'daraja.transactions', in_array('daraja.transactions', $role_permissions),
+                [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.view_mpesa_transactions' ) }}
               </label>
             </div>
           </div>

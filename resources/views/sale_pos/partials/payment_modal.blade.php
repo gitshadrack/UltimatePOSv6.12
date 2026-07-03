@@ -220,10 +220,18 @@
             <div class="modal-body">
                 @php
                     $is_intasend_enabled = $is_intasend_enabled ?? (!empty($enabled_modules) && in_array('intasend', $enabled_modules));
+                    $is_daraja_enabled = $is_daraja_enabled ?? (!empty($enabled_modules) && in_array('daraja', $enabled_modules));
+                    $is_mpesa_gateway_enabled = $is_intasend_enabled || $is_daraja_enabled;
                 @endphp
-                @if($is_intasend_enabled)
-                    <input type="hidden" id="intasend_pos_search_url" value="{{ route('intasend.pos_search') }}">
-                    <input type="hidden" id="intasend_stk_push_url" value="{{ route('intasend.stk_push') }}">
+                @if($is_mpesa_gateway_enabled)
+                    @if($is_intasend_enabled)
+                        <input type="hidden" id="intasend_pos_search_url" value="{{ route('intasend.pos_search') }}">
+                        <input type="hidden" id="intasend_stk_push_url" value="{{ route('intasend.stk_push') }}">
+                    @endif
+                    @if($is_daraja_enabled)
+                        <input type="hidden" id="daraja_pos_search_url" value="{{ route('daraja.pos_search') }}">
+                        <input type="hidden" id="daraja_stk_push_url" value="{{ route('daraja.stk_push') }}">
+                    @endif
                     <div class="row">
                         <div class="col-sm-6">
                             <div class="form-group">
@@ -249,12 +257,14 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <button type="button" class="btn btn-primary" id="send-intasend-stk-push">
-                            <i class="fa fa-mobile"></i> @lang('lang_v1.send_intasend_stk_push')
-                        </button>
-                        <button type="button" class="btn btn-default" id="search-intasend-collections">
-                            <i class="fa fa-search"></i> @lang('lang_v1.search_mpesa_messages')
-                        </button>
+                        @if($is_intasend_enabled)
+                            <button type="button" class="btn btn-primary mpesa-stk-action" data-provider="intasend"><i class="fa fa-mobile"></i> @lang('lang_v1.send_intasend_stk_push')</button>
+                            <button type="button" class="btn btn-default mpesa-search-action" data-provider="intasend"><i class="fa fa-search"></i> @lang('lang_v1.search_intasend_collections')</button>
+                        @endif
+                        @if($is_daraja_enabled)
+                            <button type="button" class="btn btn-success mpesa-stk-action" data-provider="daraja"><i class="fa fa-mobile"></i> @lang('lang_v1.send_daraja_stk_push')</button>
+                            <button type="button" class="btn btn-default mpesa-search-action" data-provider="daraja"><i class="fa fa-search"></i> @lang('lang_v1.search_daraja_payments')</button>
+                        @endif
                     </div>
                     <div id="intasend_pos_candidates" class="table-responsive hide">
                         <table class="table table-condensed table-bordered">
@@ -279,7 +289,7 @@
                         'id' => 'express_transaction_no',
                         'autocomplete' => 'off',
                     ]) !!}
-                    @if($is_intasend_enabled)
+                    @if($is_mpesa_gateway_enabled)
                         <p class="help-block">@lang('lang_v1.intasend_pos_transaction_code_help')</p>
                     @endif
                 </div>

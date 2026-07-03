@@ -851,8 +851,9 @@ $(document).ready(function() {
         container.removeClass('hide');
     }
 
-    function search_intasend_pos_collections() {
-        var search_url = $('#intasend_pos_search_url').val();
+    function search_intasend_pos_collections(provider) {
+        provider = provider || 'intasend';
+        var search_url = $('#' + provider + '_pos_search_url').val();
         if (!search_url) {
             return false;
         }
@@ -996,10 +997,11 @@ $(document).ready(function() {
     });
 
     $(document)
-        .off('click.intasendStk', 'button#send-intasend-stk-push')
-        .on('click.intasendStk', 'button#send-intasend-stk-push', function() {
+        .off('click.mpesaStk', '.mpesa-stk-action')
+        .on('click.mpesaStk', '.mpesa-stk-action', function() {
         var button = $(this);
-        var stk_url = $('#intasend_stk_push_url').val();
+        var provider = button.data('provider');
+        var stk_url = $('#' + provider + '_stk_push_url').val();
         var phone_number = $.trim($('#intasend_stk_phone_number').val());
         var amount = __read_number($('#intasend_stk_amount'));
 
@@ -1032,7 +1034,9 @@ $(document).ready(function() {
             success: function(result) {
                 if (result.success) {
                     toastr.success(result.msg || LANG.intasend_stk_push_sent || 'STK push sent');
-                    setTimeout(search_intasend_pos_collections, 3000);
+                    setTimeout(function() {
+                        search_intasend_pos_collections(provider);
+                    }, 3000);
                 } else {
                     toastr.error(result.msg || LANG.something_went_wrong);
                 }
@@ -1047,9 +1051,9 @@ $(document).ready(function() {
     });
 
     $(document)
-        .off('click.intasendSearch', 'button#search-intasend-collections')
-        .on('click.intasendSearch', 'button#search-intasend-collections', function() {
-        search_intasend_pos_collections();
+        .off('click.mpesaSearch', '.mpesa-search-action')
+        .on('click.mpesaSearch', '.mpesa-search-action', function() {
+        search_intasend_pos_collections($(this).data('provider'));
     });
 
     $(document).on('click', '.select-intasend-pos-payment', function() {

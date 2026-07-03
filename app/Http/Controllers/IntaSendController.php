@@ -85,7 +85,7 @@ class IntaSendController extends Controller
 
     public function settings()
     {
-        $this->authorizeManage();
+        $this->authorizeSettings();
 
         $business_id = request()->session()->get('user.business_id');
         $locations = BusinessLocation::where('business_id', $business_id)
@@ -106,7 +106,7 @@ class IntaSendController extends Controller
 
     public function updateSettings(Request $request)
     {
-        $this->authorizeManage();
+        $this->authorizeSettings();
 
         $business_id = $request->session()->get('user.business_id');
 
@@ -149,7 +149,7 @@ class IntaSendController extends Controller
 
     public function pool(Request $request)
     {
-        $this->authorizeManage();
+        $this->authorizeTransactions();
 
         $business_id = $request->session()->get('user.business_id');
         $migration_required = ! $this->hasIntaSendPaymentsSchema();
@@ -228,7 +228,7 @@ class IntaSendController extends Controller
 
     public function collections(Request $request)
     {
-        $this->authorizeManage();
+        $this->authorizeTransactions();
 
         $business_id = $request->session()->get('user.business_id');
         $migration_required = ! $this->hasIntaSendPaymentsSchema();
@@ -291,7 +291,7 @@ class IntaSendController extends Controller
 
     public function attach(Request $request, $id)
     {
-        $this->authorizeManage();
+        $this->authorizeTransactions();
 
         $request->validate([
             'contact_id' => 'required|integer',
@@ -489,11 +489,26 @@ class IntaSendController extends Controller
         }
     }
 
-    protected function authorizeManage()
+    protected function authorizeSettings()
     {
-        if (! (auth()->user()->can('intasend.manage') || auth()->user()->can('superadmin'))) {
+        if (! (auth()->user()->can('intasend.settings') || auth()->user()->can('intasend.manage') || auth()->user()->can('superadmin'))) {
             abort(403, 'Unauthorized action.');
         }
+
+        $this->authorizeModule();
+    }
+
+    protected function authorizeTransactions()
+    {
+        if (! (auth()->user()->can('intasend.transactions') || auth()->user()->can('intasend.manage') || auth()->user()->can('superadmin'))) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $this->authorizeModule();
+    }
+
+    protected function authorizeModule()
+    {
 
         $business_id = request()->session()->get('user.business_id');
         if (! $this->moduleUtil->isModuleEnabled('intasend', $business_id)) {

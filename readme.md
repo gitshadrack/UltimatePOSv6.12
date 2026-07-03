@@ -1056,7 +1056,7 @@ Setup:
 
 1. Run migrations.
 2. Open Business Settings > Modules and enable `IntaSend Integration`.
-3. Grant `Manage IntaSend` to trusted admin roles.
+3. Grant `Manage IntaSend Settings` to users who configure credentials/webhooks and `View IntaSend Transactions` to users who reconcile collections. Existing roles with the legacy `Manage IntaSend` permission receive both automatically during migration.
 4. Open Settings > IntaSend Settings.
 5. For each live location, enter the till/paybill number exactly as IntaSend sends it in the webhook payload. In sandbox, this can be left blank only if there is exactly one active configured IntaSend location.
 6. Optionally enter a webhook secret and enable `Require webhook signature` after confirming the signing header with IntaSend.
@@ -1228,6 +1228,137 @@ php artisan migrate
 php artisan optimize:clear
 ```
 
+### Direct Safaricom Daraja M-PESA Integration
+
+Purpose: Provide a direct Safaricom M-PESA alternative to IntaSend for businesses that do not want a third-party payment provider. IntaSend remains available and both providers use the existing `custom_pay_1` M-PESA accounting and verification workflow.
+
+Files added:
+
+- `app/DarajaPayment.php`
+- `app/DarajaSetting.php`
+- `app/Http/Controllers/DarajaController.php`
+- `app/Utils/DarajaUtil.php`
+- `app/Utils/MpesaVerificationUtil.php`
+- `database/migrations/2026_07_02_000002_create_daraja_integration_tables.php`
+- `database/migrations/2026_07_02_000003_add_callback_token_to_daraja_settings.php`
+- `database/migrations/2026_07_03_000001_add_payment_provider_settings_and_transaction_permissions.php`
+- `resources/views/daraja/settings.blade.php`
+- `resources/views/daraja/transactions.blade.php`
+
+Main files updated:
+
+- `app/Http/Middleware/AdminSidebarMenu.php`
+- `app/Utils/ModuleUtil.php`
+- `app/Utils/TransactionUtil.php`
+- `config/constants.php`
+- `lang/en/lang_v1.php`
+- `public/js/pos.js`
+- `public/service-worker.js`
+- `resources/views/role/create.blade.php`
+- `resources/views/role/edit.blade.php`
+- `resources/views/sale_pos/partials/payment_modal.blade.php`
+- `resources/views/sale_pos/partials/payment_type_details.blade.php`
+- `routes/web.php`
+- `routes/webhooks.php`
+
+Phase 1 - Direct STK Push:
+
+- Added per-location sandbox or production Daraja settings.
+- Added encrypted-at-rest consumer key, consumer secret, and Lipa na M-PESA passkey fields.
+- Added support for Paybill (`CustomerPayBillOnline`) and Buy Goods/Till (`CustomerBuyGoodsOnline`).
+- Added Daraja OAuth token generation and short-lived token caching.
+- Added direct STK Push through Safaricom's sandbox or production endpoint.
+- Each accepted STK request is saved before waiting for its asynchronous callback.
+- Successful callbacks are matched to an initiated request using `CheckoutRequestID`.
+- Callback metadata stores the M-PESA receipt number, actual amount, phone number, transaction date, and result details.
+- Callback URLs contain a random per-location token. The system verifies this token and the stored `CheckoutRequestID` before accepting an STK result.
+- POS searches can find successful, unattached Daraja payments using receipt number, phone number, or amount.
+- Exact receipt number and amount matching verifies the existing `custom_pay_1` transaction payment.
+- Verified Daraja payments reuse the existing M-PESA audit trail, cash-register totals, payment account posting, and manual verification controls.
+- Late callbacks can verify and post a POS payment that was initially held as pending.
+
+Phase 2 - C2B Manual Payments:
+
+- Added C2B validation and confirmation callback endpoints.
+- Added a `Register C2B URLs` action on each saved Daraja location setting.
+- Manual Paybill/Till confirmations are stored in the same Daraja transaction pool with source `c2b`.
+- Duplicate confirmations are idempotent by unique M-PESA transaction code.
+- The system conservatively matches customers using a `customer_id` account reference or a unique exact phone-number match.
+- A matched C2B collection can automatically pay an outstanding customer sale/opening balance.
+- Unmatched collections remain in the Daraja transaction pool for manual customer attachment.
+
+Database and permission setup:
+
+```bash
+php artisan migrate
+php artisan optimize:clear
+```
+
+The migrations create:
+
+- `daraja_settings`
+- `daraja_payments`
+- Granular provider permissions: `intasend.settings`, `intasend.transactions`, `daraja.settings`, and `daraja.transactions`
+- Existing `intasend.manage` and `daraja.manage` roles are migrated to both corresponding granular permissions for backward compatibility.
+
+Enable and assign Daraja:
+
+1. Go to Business Settings and enable `Direct M-PESA Integration` under enabled modules.
+2. Go to User Management > Roles.
+3. Enable `Manage M-PESA Settings` for users who configure credentials and callback URLs.
+4. Enable `View M-PESA Transactions` for users who view, filter, and reconcile payments.
+5. Sign out and back in to refresh enabled modules and permissions.
+6. Open Settings > M-PESA Settings.
+
+Per-location Daraja settings:
+
+1. Select `Sandbox` while testing and `Production` only after Safaricom approves the live app.
+2. Enter the Daraja consumer key and consumer secret.
+3. Enter the Paybill or Till shortcode.
+4. Enter the Lipa na M-PESA Online passkey.
+5. Select Paybill or Buy Goods/Till transaction type.
+6. Enter an account reference of at most 12 characters.
+7. Keep the location active and save.
+
+Callback requirements:
+
+- Production callbacks must be publicly reachable over HTTPS. `localhost`, private LAN addresses, and self-signed certificates cannot receive Safaricom callbacks.
+- If the application's configured `APP_URL` is already the public HTTPS URL, callback fields may remain blank and the generated URLs shown below each field will be used.
+- If the application is behind a proxy or uses a different public hostname, enter the public STK, confirmation, and validation URLs in the corresponding fields.
+- Do not remove the generated `token` query parameter. It protects the callback route from accepting arbitrary public requests.
+- After saving a setting, click `Register C2B URLs` to submit the confirmation and validation URLs to Safaricom.
+- Confirm C2B URL registration rules for the merchant shortcode in the Safaricom Daraja portal before production activation.
+
+POS workflow:
+
+1. Select M-PESA (`custom_pay_1`) on express checkout or a multiple-payment row.
+2. Open M-PESA Tools.
+3. Enter the customer's phone number and amount.
+4. Click `Send M-PESA STK Push`. Daraja remains the technical provider name on the administrator settings screens, while the POS uses the customer-facing M-PESA name.
+5. Ask the customer to approve the prompt on their phone.
+6. Click `Search M-PESA Payments` and select the successful M-PESA receipt.
+7. Finalize the sale. The receipt and exact amount are verified against `daraja_payments`.
+
+Transaction reconciliation:
+
+- Open Settings > M-PESA Transactions.
+- Filter by location, source (`stk` or `c2b`), or status.
+- Successful unmatched payments can be linked manually to a customer.
+- `PENDING` means Safaricom has accepted the STK request but no callback has completed it.
+- `COMPLETE` means a successful callback with an M-PESA receipt was received.
+- `FAILED` includes rejected, cancelled, timed-out, or otherwise unsuccessful STK requests.
+
+Security and operational notes:
+
+- Daraja credentials are encrypted using the application's `APP_KEY`. Back up this key; changing it prevents stored credentials from being decrypted.
+- The application never marks an STK collection successful from the initial API response. Only the callback completes it.
+- The callback amount must equal the POS payment amount before automatic verification.
+- Safaricom callback endpoints do not use the normal authenticated web middleware, so they rely on the random callback token, setting ID, shortcode checks, request IDs, and unique transaction codes.
+- Do not enable both sandbox and production credentials on the same location simultaneously; each location has one active environment.
+- IntaSend and Daraja can coexist. The POS modal shows controls for each enabled provider.
+- Live API calls were not executed during development because merchant Daraja credentials were not supplied. Callback parsing and C2B idempotency were verified with rollback-only database smoke tests.
+- Official onboarding, sandbox apps, and production approval are managed through the [Safaricom Daraja portal](https://developer.safaricom.co.ke/).
+
 ### POS Open Cash Drawer Button
 
 Purpose: Allow a cashier to open a printer-connected cash drawer without completing a sale or printing a receipt.
@@ -1262,8 +1393,8 @@ What changed:
 - The button is temporarily disabled while the command is being sent.
 - A success notification is displayed after the command is delivered to the local connector.
 - If the connector cannot be reached, the cashier sees `Printer connector is not available.`
-- Increased `config('constants.asset_version')` from `613` to `614` so browsers request the updated POS and printer JavaScript files.
-- Increased the PWA cache name from `sysnettechs-pos-pwa-v1` to `sysnettechs-pos-pwa-v2`, which removes the previous cached JavaScript/CSS assets when the new service worker activates.
+- Increased `config('constants.asset_version')` from `613` to `615` so browsers request the updated POS and printer/Daraja JavaScript files.
+- Increased the PWA cache name from `sysnettechs-pos-pwa-v1` to `sysnettechs-pos-pwa-v3`, which removes previous cached JavaScript/CSS assets when the new service worker activates.
 
 Hardware and connector requirements:
 

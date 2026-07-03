@@ -69,13 +69,14 @@
 			{!! Form::label("transaction_no_{$i}_{$row_index}", __('lang_v1.transaction_no')) !!}
 			@php
 				$is_intasend_enabled = $is_intasend_enabled ?? (!empty($enabled_modules) && in_array('intasend', $enabled_modules));
+                $is_daraja_enabled = $is_daraja_enabled ?? (!empty($enabled_modules) && in_array('daraja', $enabled_modules));
 			@endphp
-			@if ($i == 1 && $is_intasend_enabled && $row_index !== 'change_return')
+			@if ($i == 1 && ($is_intasend_enabled || $is_daraja_enabled) && $row_index !== 'change_return')
 				<div class="input-group">
 					{!! Form::text("payment[$row_index][transaction_no_{$i}]", $payment_line['transaction_no'], ['class' => 'form-control', 'placeholder' => __('lang_v1.transaction_no'), 'id' => "transaction_no_{$i}_{$row_index}"]); !!}
 					<span class="input-group-btn">
 						<button type="button" class="btn btn-primary intasend-row-action" data-row_index="{{ $row_index }}" data-transaction_no_index="{{ $i }}">
-							<i class="fa fa-mobile"></i> @lang('lang_v1.send_intasend_stk_push')
+							<i class="fa fa-mobile"></i> @lang('lang_v1.open_mpesa_tools')
 						</button>
 					</span>
 				</div>
