@@ -159,6 +159,7 @@
                 @if (auth()->user()->can('open_cash_drawer') || auth()->user()->can('superadmin') || auth()->user()->can('admin'))
                 <button type="button"
                     class="open-cash-drawer tw-font-bold tw-bg-[#28B77B] hover:tw-bg-[#209763] tw-rounded-full tw-text-white tw-px-5 tw-h-11 tw-cursor-pointer tw-text-xs md:tw-text-sm no-print"
+                    data-printer-config="{{ json_encode($cash_drawer_printer_config ?? []) }}"
                     style="display: inline-flex !important; align-items: center; gap: 6px; visibility: visible !important; opacity: 1 !important; background-color: #28B77B; color: #ffffff; border: 0; border-radius: 9999px; padding: 0 20px; height: 44px;"
                     title="Open cash drawer">
                     <i class="fas fa-cash-register" aria-hidden="true"></i> @lang('lang_v1.open_drawer')

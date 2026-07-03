@@ -16,8 +16,11 @@ initializeSocket = function() {
     }
 };
 
-function openCashDrawer() {
-    var message = JSON.stringify({ type: 'open-cash-drawer' });
+function openCashDrawer(printerConfig) {
+    var message = JSON.stringify({
+        type: 'open-cashdrawer',
+        printer_config: printerConfig || null
+    });
 
     if (socket != null && socket.readyState === WebSocket.OPEN) {
         socket.send(message);
@@ -37,7 +40,7 @@ function openCashDrawer() {
                 resolve();
             } else if (attempts >= 10) {
                 clearInterval(timer);
-                reject(new Error('Printer connector is not available.'));
+                reject(new Error('POS Print Server is not running on this computer (port 6441). Start it and try again.'));
             }
         }, 200);
     });
@@ -45,9 +48,16 @@ function openCashDrawer() {
 
 $(document).on('click', '.open-cash-drawer', function() {
     var button = $(this);
+    var printerConfig = {};
+    try {
+        printerConfig = JSON.parse(button.attr('data-printer-config') || '{}');
+    } catch (e) {
+        toastr.error('The configured receipt printer details are invalid.');
+        return;
+    }
     button.prop('disabled', true);
 
-    openCashDrawer()
+    openCashDrawer(printerConfig)
         .then(function() {
             toastr.success('Cash drawer command sent.');
         })

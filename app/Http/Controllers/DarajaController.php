@@ -48,19 +48,46 @@ class DarajaController extends Controller
             return back()->with('status', ['success' => false, 'msg' => __('lang_v1.run_daraja_migration')]);
         }
 
+        $settings_to_save = [];
         foreach ($request->input('locations', []) as $location_id => $input) {
             $location = BusinessLocation::where('business_id', $business_id)->findOrFail($location_id);
+            $existing = DarajaSetting::where('business_id', $business_id)
+                ->where('business_location_id', $location->id)->first();
+            $is_active = ! empty($input['is_active']);
+            $credentials = [];
+            foreach (['consumer_key', 'consumer_secret', 'passkey'] as $secret) {
+                $credentials[$secret] = trim((string) ($input[$secret] ?? '')) ?: optional($existing)->{$secret};
+            }
+            $shortcode = trim((string) ($input['business_shortcode'] ?? ''));
+            $c2b_shortcode = trim((string) ($input['c2b_shortcode'] ?? ''));
+
+            // Do not create empty settings simply because a location is shown
+            // on the form. New locations now remain disabled by default.
+            if (empty($existing) && ! $is_active && $shortcode === ''
+                && empty($credentials['consumer_key']) && empty($credentials['consumer_secret']) && empty($credentials['passkey'])) {
+                continue;
+            }
+
+            if ($is_active && ($shortcode === '' || empty($credentials['consumer_key'])
+                || empty($credentials['consumer_secret']) || empty($credentials['passkey']))) {
+                return back()->withInput()->with('status', [
+                    'success' => false,
+                    'msg' => __('lang_v1.daraja_active_settings_incomplete', ['location' => $location->name]),
+                ]);
+            }
+
             $data = [
                 'business_id' => $business_id,
                 'environment' => in_array($input['environment'] ?? null, ['sandbox', 'production']) ? $input['environment'] : 'sandbox',
-                'business_shortcode' => trim((string) ($input['business_shortcode'] ?? '')),
+                'business_shortcode' => $shortcode,
+                'c2b_shortcode' => $c2b_shortcode ?: $shortcode,
                 'transaction_type' => in_array($input['transaction_type'] ?? null, ['CustomerPayBillOnline', 'CustomerBuyGoodsOnline']) ? $input['transaction_type'] : 'CustomerPayBillOnline',
                 'account_reference' => trim((string) ($input['account_reference'] ?? 'UltimatePOS')),
                 'callback_url' => trim((string) ($input['callback_url'] ?? '')),
                 'confirmation_url' => trim((string) ($input['confirmation_url'] ?? '')),
                 'validation_url' => trim((string) ($input['validation_url'] ?? '')),
                 'c2b_response_type' => ($input['c2b_response_type'] ?? null) === 'Cancelled' ? 'Cancelled' : 'Completed',
-                'is_active' => ! empty($input['is_active']),
+                'is_active' => $is_active,
             ];
             foreach (['consumer_key', 'consumer_secret', 'passkey'] as $secret) {
                 if (! empty($input[$secret])) {
@@ -68,6 +95,10 @@ class DarajaController extends Controller
                 }
             }
 
+            $settings_to_save[] = [$location, $data];
+        }
+
+        foreach ($settings_to_save as [$location, $data]) {
             DarajaSetting::updateOrCreate(['business_location_id' => $location->id], $data);
         }
 
@@ -216,7 +247,8 @@ class DarajaController extends Controller
     {
         $setting = DarajaSetting::findOrFail($setting);
         $this->verifyCallbackToken($request, $setting);
-        $shortcode_matches = empty($request->input('BusinessShortCode')) || (string) $request->input('BusinessShortCode') === (string) $setting->business_shortcode;
+        $c2b_shortcode = $setting->c2b_shortcode ?: $setting->business_shortcode;
+        $shortcode_matches = empty($request->input('BusinessShortCode')) || (string) $request->input('BusinessShortCode') === (string) $c2b_shortcode;
 
         return response()->json([
             'ResultCode' => $shortcode_matches ? 0 : 1,
@@ -229,8 +261,9 @@ class DarajaController extends Controller
         try {
             $setting = DarajaSetting::findOrFail($setting);
             $this->verifyCallbackToken($request, $setting);
+            $c2b_shortcode = $setting->c2b_shortcode ?: $setting->business_shortcode;
             if (! empty($request->input('BusinessShortCode'))
-                && (string) $request->input('BusinessShortCode') !== (string) $setting->business_shortcode) {
+                && (string) $request->input('BusinessShortCode') !== (string) $c2b_shortcode) {
                 throw new \Exception('Invalid Daraja business shortcode.');
             }
             $this->darajaUtil->recordC2bPayment($setting, $request->all());
@@ -246,10 +279,31 @@ class DarajaController extends Controller
         $this->authorizeSettings($request);
         $business_id = $request->session()->get('user.business_id');
         $setting = DarajaSetting::where('business_id', $business_id)->findOrFail($setting_id);
+        if (empty($setting->consumer_key) || empty($setting->consumer_secret)
+            || empty($setting->c2b_shortcode ?: $setting->business_shortcode)) {
+            return ['success' => false, 'msg' => __('lang_v1.daraja_credentials_missing')];
+        }
         try {
             $result = $this->darajaUtil->registerC2bUrls($setting);
-            return ['success' => $result['successful'], 'msg' => $result['successful'] ? __('lang_v1.daraja_urls_registered') : __('lang_v1.daraja_urls_registration_failed'), 'data' => $result['data']];
+            if (! $result['successful']) {
+                Log::warning('M-PESA C2B URL registration rejected.', [
+                    'setting_id' => $setting->id,
+                    'environment' => $setting->environment,
+                    'http_status' => $result['status'],
+                    'response' => $result['data'],
+                ]);
+            }
+            $message = $result['successful']
+                ? (! empty($result['already_registered']) ? __('lang_v1.daraja_urls_already_registered') : __('lang_v1.daraja_urls_registered'))
+                : ($result['data']['errorMessage'] ?? $result['data']['ResponseDescription'] ?? __('lang_v1.daraja_urls_registration_failed'));
+
+            return ['success' => $result['successful'], 'msg' => $message, 'data' => $result['data']];
         } catch (\Exception $e) {
+            Log::error('M-PESA C2B URL registration failed.', [
+                'setting_id' => $setting->id,
+                'environment' => $setting->environment,
+                'error' => $e->getMessage(),
+            ]);
             return ['success' => false, 'msg' => $e->getMessage()];
         }
     }

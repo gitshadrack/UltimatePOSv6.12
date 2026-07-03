@@ -1314,11 +1314,19 @@ Per-location Daraja settings:
 
 1. Select `Sandbox` while testing and `Production` only after Safaricom approves the live app.
 2. Enter the Daraja consumer key and consumer secret.
-3. Enter the Paybill or Till shortcode.
-4. Enter the Lipa na M-PESA Online passkey.
-5. Select Paybill or Buy Goods/Till transaction type.
-6. Enter an account reference of at most 12 characters.
-7. Keep the location active and save.
+3. Enter the Paybill or Till shortcode used for M-PESA Express/STK Push.
+4. Enter the separate C2B shortcode assigned to the Daraja app. In Sandbox this is commonly `600000`, while the STK test shortcode is `174379`; use the values shown in the Safaricom test credentials. In Production, the two values may be the same merchant shortcode.
+5. Enter the Lipa na M-PESA Online passkey.
+6. Select Paybill or Buy Goods/Till transaction type.
+7. Enter an account reference of at most 12 characters.
+8. Keep the location active and save.
+
+Windows/WAMP HTTPS certificate setup:
+
+- If PHP reports `cURL error 60` or an SSL certificate-chain error, set `DARAJA_CA_BUNDLE` in `.env` to a current, readable CA bundle. Example: `DARAJA_CA_BUNDLE="C:/wamp64/bin/php/php8.4.15/extras/ssl/cacert.pem"`.
+- Run `php artisan config:clear` after changing the value. Do not disable SSL verification.
+- The CA bundle is applied only to direct Safaricom API requests. Invalid or unreadable paths now produce a specific configuration error.
+- New locations are inactive by default. An active location must have a consumer key, consumer secret, shortcode, and passkey; blank location panels are no longer saved as active settings.
 
 Callback requirements:
 
@@ -1327,6 +1335,8 @@ Callback requirements:
 - If the application is behind a proxy or uses a different public hostname, enter the public STK, confirmation, and validation URLs in the corresponding fields.
 - Do not remove the generated `token` query parameter. It protects the callback route from accepting arbitrary public requests.
 - After saving a setting, click `Register C2B URLs` to submit the confirmation and validation URLs to Safaricom.
+- C2B registration now reports Safaricom's returned error message and logs the HTTP status/response for troubleshooting. Secrets are not included in those logs.
+- Safaricom Sandbox may return HTTP 500 with `Duplicate notification info` when the shortcode is already registered. The application treats this specific response as a successful, idempotent registration.
 - Confirm C2B URL registration rules for the merchant shortcode in the Safaricom Daraja portal before production activation.
 
 POS workflow:
@@ -1356,7 +1366,7 @@ Security and operational notes:
 - Safaricom callback endpoints do not use the normal authenticated web middleware, so they rely on the random callback token, setting ID, shortcode checks, request IDs, and unique transaction codes.
 - Do not enable both sandbox and production credentials on the same location simultaneously; each location has one active environment.
 - IntaSend and Daraja can coexist. The POS modal shows controls for each enabled provider.
-- Live API calls were not executed during development because merchant Daraja credentials were not supplied. Callback parsing and C2B idempotency were verified with rollback-only database smoke tests.
+- On 3 July 2026, the configured sandbox credentials successfully completed Safaricom OAuth after the WAMP CA bundle was configured. A C2B registration test reached Safaricom but Sandbox returned HTTP 500 / `500.003.1001` (`Service is currently unreachable. Please try again later.`); this is a Safaricom service response and can be retried from M-PESA Settings. Callback parsing and C2B idempotency were also verified with rollback-only database smoke tests.
 - Official onboarding, sandbox apps, and production approval are managed through the [Safaricom Daraja portal](https://developer.safaricom.co.ke/).
 
 ### POS Open Cash Drawer Button
@@ -1387,12 +1397,12 @@ What changed:
 - It sends the following message to the printer connector:
 
 ```json
-{"type":"open-cash-drawer"}
+{"type":"open-cashdrawer","printer_config":{"connection_type":"windows","path":"smb://localhost/receipt_printer"}}
 ```
 
 - The button is temporarily disabled while the command is being sent.
 - A success notification is displayed after the command is delivered to the local connector.
-- If the connector cannot be reached, the cashier sees `Printer connector is not available.`
+- If the connector cannot be reached, the cashier sees `POS Print Server is not running on this computer (port 6441). Start it and try again.`
 - Increased `config('constants.asset_version')` from `613` to `615` so browsers request the updated POS and printer/Daraja JavaScript files.
 - Increased the PWA cache name from `sysnettechs-pos-pwa-v1` to `sysnettechs-pos-pwa-v3`, which removes previous cached JavaScript/CSS assets when the new service worker activates.
 
@@ -1411,6 +1421,7 @@ Troubleshooting:
 - Confirm the browser is loading this exact project folder. The local Apache configuration currently contains duplicate `UltimatePOS.local` virtual hosts pointing to `c:/wamp/www/...`, while this project is stored under `C:/wamp64/www/UltimatePOSV6.12`. Changes made here will not appear if the browser is serving another Ultimate POS copy.
 - If using `UltimatePOS.local`, correct its Apache `DocumentRoot` and matching `<Directory>` path to `C:/wamp64/www/UltimatePOSV6.12`, remove the duplicate host entry, and restart Apache.
 - If `Printer connector is not available` appears, start or restart the local printer connector.
+- The cash-drawer command uses the official POS Print Server message name `open-cashdrawer` and includes the receipt-printer configuration assigned to the current business location.
 - If the success message appears but the drawer stays closed, check that the connector supports `open-cash-drawer`, the drawer cable is connected to the printer's drawer port, and the drawer is physically unlocked.
 - Confirm normal receipt printing works from the same POS computer before testing the drawer.
 

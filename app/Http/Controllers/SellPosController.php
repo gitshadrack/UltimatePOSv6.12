@@ -309,6 +309,9 @@ class SellPosController extends Controller
 
         //Added check because $users is of no use if enable_contact_assign if false
         $users = config('constants.enable_contact_assign') ? User::forDropdown($business_id, false, false, false, true) : [];
+        $cash_drawer_printer_config = ! empty($default_location)
+            ? $this->businessUtil->printerConfig($business_id, $default_location->printer_id)
+            : [];
 
         return view('sale_pos.create')
             ->with(compact(
@@ -344,6 +347,7 @@ class SellPosController extends Controller
                 'invoice_layouts',
                 'users',
                 'is_intasend_enabled',
+                'cash_drawer_printer_config',
             ));
     }
 
@@ -1174,6 +1178,7 @@ class SellPosController extends Controller
         //Added check because $users is of no use if enable_contact_assign if false
         $users = config('constants.enable_contact_assign') ? User::forDropdown($business_id, false, false, false, true) : [];
         $only_payment = request()->segment(2) == 'payment';
+        $cash_drawer_printer_config = $this->businessUtil->printerConfig($business_id, $transaction->location->printer_id);
 
         return view('sale_pos.edit')
             ->with(compact('business_details', 'taxes', 'payment_types', 'walk_in_customer',
@@ -1182,7 +1187,7 @@ class SellPosController extends Controller
                 'brands', 'accounts', 'waiters', 'redeem_details', 'edit_price', 'edit_discount',
                 'shipping_statuses', 'warranties', 'sub_type', 'pos_module_data', 'invoice_schemes',
                 'default_invoice_schemes', 'invoice_layouts', 'featured_products', 'customer_due',
-                'users', 'only_payment', 'is_intasend_enabled'));
+                'users', 'only_payment', 'is_intasend_enabled', 'cash_drawer_printer_config'));
     }
 
     /**

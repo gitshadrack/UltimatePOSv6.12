@@ -46,11 +46,15 @@
                                 {!! Form::label("locations[$location->id][transaction_type]", __('lang_v1.daraja_transaction_type')) !!}
                                 {!! Form::select("locations[$location->id][transaction_type]", ['CustomerPayBillOnline' => __('lang_v1.paybill'), 'CustomerBuyGoodsOnline' => __('lang_v1.buy_goods')], optional($setting)->transaction_type ?: 'CustomerPayBillOnline', ['class' => 'form-control']) !!}
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
+                                {!! Form::label("locations[$location->id][c2b_shortcode]", __('lang_v1.c2b_shortcode')) !!}
+                                {!! Form::text("locations[$location->id][c2b_shortcode]", optional($setting)->c2b_shortcode, ['class' => 'form-control', 'placeholder' => optional($setting)->environment === 'sandbox' ? '600000' : '']) !!}
+                            </div>
+                            <div class="col-md-2">
                                 {!! Form::label("locations[$location->id][account_reference]", __('lang_v1.account_reference')) !!}
                                 {!! Form::text("locations[$location->id][account_reference]", optional($setting)->account_reference ?: 'UltimatePOS', ['class' => 'form-control', 'maxlength' => 12]) !!}
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-5">
                                 {!! Form::label("locations[$location->id][callback_url]", __('lang_v1.stk_callback_url')) !!}
                                 {!! Form::text("locations[$location->id][callback_url]", optional($setting)->callback_url, ['class' => 'form-control']) !!}
                                 @if(!empty($setting))<p class="help-block"><code>{{ route('daraja.callback', ['setting' => $setting->id, 'token' => $setting->callback_token]) }}</code></p>@endif
@@ -73,7 +77,14 @@
                                 {!! Form::select("locations[$location->id][c2b_response_type]", ['Completed' => 'Completed', 'Cancelled' => 'Cancelled'], optional($setting)->c2b_response_type ?: 'Completed', ['class' => 'form-control']) !!}
                             </div>
                         </div>
-                        <div class="checkbox"><label>{!! Form::checkbox("locations[$location->id][is_active]", 1, empty($setting) || !empty($setting->is_active), ['class' => 'input-icheck']) !!} @lang('business.is_active')</label></div>
+                        @php
+                            $settingIsComplete = !empty($setting)
+                                && !empty($setting->consumer_key)
+                                && !empty($setting->consumer_secret)
+                                && !empty($setting->business_shortcode)
+                                && !empty($setting->passkey);
+                        @endphp
+                        <div class="checkbox"><label>{!! Form::checkbox("locations[$location->id][is_active]", 1, $settingIsComplete && !empty($setting->is_active), ['class' => 'input-icheck']) !!} @lang('business.is_active')</label></div>
                         @if(!empty($setting))
                             <button type="button" class="btn btn-default register-daraja-urls" data-url="{{ route('daraja.register_urls', $setting->id) }}"><i class="fa fa-link"></i> @lang('lang_v1.register_c2b_urls')</button>
                         @endif

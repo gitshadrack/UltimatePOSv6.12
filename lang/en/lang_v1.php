@@ -1731,6 +1731,7 @@ return [
     'consumer_key' => 'Consumer Key',
     'consumer_secret' => 'Consumer Secret',
     'business_shortcode' => 'Business Shortcode',
+    'c2b_shortcode' => 'C2B Shortcode',
     'daraja_passkey' => 'Lipa na M-PESA Passkey',
     'daraja_transaction_type' => 'Transaction Type',
     'paybill' => 'Paybill',
@@ -1746,6 +1747,10 @@ return [
     'run_daraja_migration' => 'Run php artisan migrate before using the direct M-PESA integration.',
     'daraja_credentials_missing' => 'M-PESA credentials are incomplete for this location.',
     'daraja_oauth_failed' => 'M-PESA authentication failed. Check the consumer key, consumer secret, environment, and network connection.',
+    'daraja_oauth_connection_failed' => 'Could not connect to Safaricom. Check the server network connection and try again.',
+    'daraja_ssl_failed' => 'Safaricom SSL verification failed. Configure DARAJA_CA_BUNDLE with a readable CA certificate file, then try again.',
+    'daraja_ca_bundle_invalid' => 'The configured DARAJA_CA_BUNDLE file does not exist or is not readable.',
+    'daraja_active_settings_incomplete' => 'M-PESA cannot be enabled for :location until the consumer key, consumer secret, shortcode, and passkey are provided.',
     'daraja_stk_push_sent' => 'M-PESA STK Push sent. Ask the customer to approve it on their phone.',
     'daraja_stk_push_failed' => 'M-PESA STK Push failed. Check the phone number or contact an administrator.',
     'send_daraja_stk_push' => 'Send M-PESA STK Push',
@@ -1754,6 +1759,7 @@ return [
     'daraja_payment_not_attachable' => 'Only an unattached successful M-PESA payment can be linked.',
     'daraja_urls_registered' => 'M-PESA C2B URLs registered successfully.',
     'daraja_urls_registration_failed' => 'M-PESA rejected the C2B URL registration request.',
+    'daraja_urls_already_registered' => 'M-PESA C2B URLs are already registered for this shortcode.',
     'open_mpesa_tools' => 'M-PESA Tools',
 
 ];

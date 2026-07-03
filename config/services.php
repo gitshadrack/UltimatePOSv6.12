@@ -31,4 +31,10 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'daraja' => [
+        // Optional CA bundle used only for Safaricom requests. This is useful on
+        // Windows/WAMP installations whose PHP build has no curl.cainfo value.
+        'ca_bundle' => env('DARAJA_CA_BUNDLE'),
+    ],
+
 ];

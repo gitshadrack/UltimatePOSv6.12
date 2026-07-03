@@ -38,7 +38,7 @@ class DarajaUtil
             'TransactionDesc' => 'UltimatePOS',
         ];
 
-        $response = Http::withToken($this->accessToken($setting))
+        $response = $this->httpClient()->withToken($this->accessToken($setting))
             ->asJson()
             ->timeout(30)
             ->post($this->baseUrl($setting).'/mpesa/stkpush/v1/processrequest', $payload);
@@ -131,7 +131,7 @@ class DarajaUtil
             'transaction_code' => $transaction_code,
             'phone_number' => $phone,
             'amount' => (float) ($payload['TransAmount'] ?? 0),
-            'business_shortcode' => $payload['BusinessShortCode'] ?? $setting->business_shortcode,
+            'business_shortcode' => $payload['BusinessShortCode'] ?? ($setting->c2b_shortcode ?: $setting->business_shortcode),
             'account_reference' => $payload['BillRefNumber'] ?? null,
             'status' => 'COMPLETE',
             'result_code' => 0,
@@ -157,18 +157,28 @@ class DarajaUtil
 
     public function registerC2bUrls(DarajaSetting $setting)
     {
+        $c2b_shortcode = trim((string) ($setting->c2b_shortcode ?: $setting->business_shortcode));
         $payload = [
-            'ShortCode' => $setting->business_shortcode,
+            'ShortCode' => $c2b_shortcode,
             'ResponseType' => $setting->c2b_response_type ?: 'Completed',
             'ConfirmationURL' => $this->callbackUrl($setting, $setting->confirmation_url, 'daraja.c2b_confirmation'),
             'ValidationURL' => $this->callbackUrl($setting, $setting->validation_url, 'daraja.c2b_validation'),
         ];
 
-        $response = Http::withToken($this->accessToken($setting))
+        $response = $this->httpClient()->withToken($this->accessToken($setting))
             ->asJson()->timeout(30)
             ->post($this->baseUrl($setting).'/mpesa/c2b/v1/registerurl', $payload);
 
-        return ['successful' => $response->successful(), 'data' => $response->json() ?: [], 'status' => $response->status()];
+        $data = $response->json() ?: [];
+        $already_registered = (string) ($data['errorCode'] ?? '') === '500.003.1001'
+            && stripos((string) ($data['errorMessage'] ?? ''), 'Duplicate notification info') !== false;
+
+        return [
+            'successful' => $response->successful() || $already_registered,
+            'already_registered' => $already_registered,
+            'data' => $data,
+            'status' => $response->status(),
+        ];
     }
 
     public function hasCompletePayment($business_id, $transaction_code, $amount = null)
@@ -328,15 +338,52 @@ class DarajaUtil
         $key = 'daraja_token_'.$setting->id.'_'.sha1($setting->environment.$setting->consumer_key.$setting->consumer_secret);
 
         return Cache::remember($key, now()->addMinutes(50), function () use ($setting) {
-            $response = Http::withBasicAuth($setting->consumer_key, $setting->consumer_secret)
-                ->timeout(20)
-                ->get($this->baseUrl($setting).'/oauth/v1/generate', ['grant_type' => 'client_credentials']);
+            try {
+                $response = $this->httpClient()
+                    ->withBasicAuth($setting->consumer_key, $setting->consumer_secret)
+                    ->timeout(20)
+                    ->get($this->baseUrl($setting).'/oauth/v1/generate', ['grant_type' => 'client_credentials']);
+            } catch (\Throwable $e) {
+                Log::error('M-PESA OAuth connection failed.', [
+                    'setting_id' => $setting->id,
+                    'environment' => $setting->environment,
+                    'error' => $e->getMessage(),
+                ]);
+
+                if (stripos($e->getMessage(), 'cURL error 60') !== false || stripos($e->getMessage(), 'certificate') !== false) {
+                    throw new \Exception(__('lang_v1.daraja_ssl_failed'));
+                }
+
+                throw new \Exception(__('lang_v1.daraja_oauth_connection_failed'));
+            }
             if (! $response->successful() || empty($response->json('access_token'))) {
+                Log::warning('M-PESA OAuth rejected.', [
+                    'setting_id' => $setting->id,
+                    'environment' => $setting->environment,
+                    'http_status' => $response->status(),
+                    'error_code' => $response->json('errorCode') ?: $response->json('error'),
+                    'error_message' => $response->json('errorMessage') ?: $response->json('message'),
+                ]);
                 throw new \Exception(__('lang_v1.daraja_oauth_failed'));
             }
 
             return $response->json('access_token');
         });
+    }
+
+    protected function httpClient()
+    {
+        $client = Http::acceptJson();
+        $ca_bundle = trim((string) config('services.daraja.ca_bundle'));
+
+        if ($ca_bundle !== '') {
+            if (! is_file($ca_bundle) || ! is_readable($ca_bundle)) {
+                throw new \RuntimeException(__('lang_v1.daraja_ca_bundle_invalid'));
+            }
+            $client = $client->withOptions(['verify' => $ca_bundle]);
+        }
+
+        return $client;
     }
 
     protected function baseUrl(DarajaSetting $setting)
