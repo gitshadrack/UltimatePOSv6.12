@@ -22,7 +22,8 @@
         <input type="hidden" id="reward_point_enabled">
     @endif
 	<div class="row">
-		<div class="@if(!empty($pos_settings['hide_product_suggestion']) && !empty($pos_settings['hide_recent_trans'])) col-md-10 col-md-offset-1 @else col-md-7 @endif col-sm-12">
+		<div class="@if(!empty($pos_settings['hide_product_suggestion'])) col-md-9 @else col-md-7 @endif col-sm-12"
+			@if(!empty($pos_settings['hide_product_suggestion'])) style="float: none; margin-left: auto; margin-right: auto;" @endif>
 			<div class="box box-success">
 
 				<div class="box-header with-border">
@@ -251,9 +252,11 @@
 			<!-- /.box -->
 		</div>
 
-		<div class="col-md-5 col-sm-12">
-			@include('sale_pos.partials.right_div')
-		</div>
+		@if(empty($pos_settings['hide_product_suggestion']))
+			<div class="col-md-5 col-sm-12">
+				@include('sale_pos.partials.right_div')
+			</div>
+		@endif
 	</div>
 </section>
 

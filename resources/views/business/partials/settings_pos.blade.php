@@ -140,9 +140,11 @@
                 <div class="checkbox">
                 <br>
                   <label>
-                    {!! Form::checkbox('pos_settings[hide_product_suggestion]', 1,  $pos_settings['hide_product_suggestion'] , 
-                    [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.hide_product_suggestion' ) }}
+                    {!! Form::checkbox('pos_settings[hide_product_suggestion]', 1,
+                        !empty($pos_settings['hide_product_suggestion']),
+                        [ 'class' => 'input-icheck']); !!} {{ __('lang_v1.hide_pos_products_section') }}
                   </label>
+                  @show_tooltip(__('lang_v1.hide_pos_products_section_help'))
                 </div>
             </div>
         </div>

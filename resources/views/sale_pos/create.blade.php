@@ -3,6 +3,19 @@
 @section('title', __('sale.pos_sale'))
 
 @section('content')
+    @if(!empty($pos_settings['hide_product_suggestion']))
+        <style>
+            @media (min-width: 992px) {
+                .pos-cart-centered {
+                    width: 75% !important;
+                    max-width: 75% !important;
+                    flex: 0 1 75% !important;
+                    margin-left: auto;
+                    margin-right: auto;
+                }
+            }
+        </style>
+    @endif
     <section class="content no-print">
         <input type="hidden" id="amount_rounding_method" value="{{ $pos_settings['amount_rounding_method'] ?? '' }}">
         @if (!empty($pos_settings['allow_overselling']))
@@ -24,7 +37,7 @@
             <div class="col-md-12 tw-pt-0 tw-mb-14">
                 <div class="row tw-flex lg:tw-flex-row md:tw-flex-col sm:tw-flex-col tw-flex-col tw-items-start md:tw-gap-4">
                     {{-- <div class="@if (empty($pos_settings['hide_product_suggestion'])) col-md-7 @else col-md-10 col-md-offset-1 @endif no-padding pr-12"> --}}
-                    <div class="tw-px-3 tw-w-full  lg:tw-px-0 lg:tw-pr-0 @if(empty($pos_settings['hide_product_suggestion'])) lg:tw-w-[60%]  @else lg:tw-w-[100%] @endif">
+                    <div class="tw-px-3 tw-w-full lg:tw-px-0 lg:tw-pr-0 @if(empty($pos_settings['hide_product_suggestion'])) lg:tw-w-[60%] @else pos-cart-centered @endif">
 
                         <div class="tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-rounded-2xl tw-bg-white tw-mb-2 md:tw-mb-8 tw-p-2">
 
@@ -98,7 +111,7 @@
 
     @include('sale_pos.partials.weighing_scale_modal')
 
-    @if (!empty($pos_settings['enable_virtual_keyboard']))
+    @if (!empty($pos_settings['enable_virtual_keyboard']) && !isMobile())
         @include('sale_pos.partials.virtual_keyboard')
     @endif
 
@@ -115,7 +128,7 @@
 @stop
 @section('javascript')
     <script src="{{ asset('js/pos.js?v=' . $asset_v) }}"></script>
-    @if (!empty($pos_settings['enable_virtual_keyboard']))
+    @if (!empty($pos_settings['enable_virtual_keyboard']) && !isMobile())
         <script src="{{ asset('js/pos_virtual_keyboard.js?v=' . $asset_v) }}"></script>
     @endif
     <script src="{{ asset('js/printer.js?v=' . $asset_v) }}"></script>

@@ -255,6 +255,11 @@ class SellPosController extends Controller
         //Shortcuts
         $shortcuts = json_decode($business_details->keyboard_shortcuts, true);
         $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings, true);
+        $can_access_pos_products = auth()->user()->getAllPermissions()
+            ->contains('name', 'access_pos_products_section');
+        if (!empty($pos_settings['hide_product_suggestion']) && $can_access_pos_products) {
+            $pos_settings['hide_product_suggestion'] = 0;
+        }
 
         $commsn_agnt_setting = $business_details->sales_cmsn_agnt;
         $commission_agent = [];
@@ -1103,6 +1108,11 @@ class SellPosController extends Controller
         $shortcuts = json_decode($business_details->keyboard_shortcuts, true);
 
         $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings, true);
+        $can_access_pos_products = auth()->user()->getAllPermissions()
+            ->contains('name', 'access_pos_products_section');
+        if (!empty($pos_settings['hide_product_suggestion']) && $can_access_pos_products) {
+            $pos_settings['hide_product_suggestion'] = 0;
+        }
 
         $commsn_agnt_setting = $business_details->sales_cmsn_agnt;
         $commission_agent = [];
@@ -1792,8 +1802,7 @@ class SellPosController extends Controller
 
         if ($credential_type == 'pin') {
             $stored_pin = (string) $user->service_staff_pin;
-            $unlocked = ! empty($location->enable_numeric_login)
-                && ! empty($user->is_enable_service_staff_pin)
+            $unlocked = ! empty($user->is_enable_service_staff_pin)
                 && $stored_pin !== ''
                 && (hash_equals($stored_pin, $credential)
                     || ((strpos($stored_pin, '$2y$') === 0 || strpos($stored_pin, '$argon2') === 0)

@@ -783,6 +783,14 @@
               <div class="col-md-12">
                 <div class="checkbox">
                   <label>
+                    {!! Form::checkbox('permissions[]', 'access_pos_products_section', false, ['class' => 'input-icheck']); !!}
+                    {{ __('lang_v1.access_pos_products_section') }}
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-12">
+                <div class="checkbox">
+                  <label>
                     {!! Form::checkbox('permissions[]', 'view_default_purchase_price_from_pos_screen', false, ['class' => 'input-icheck']); !!}
                     View default purchase price on POS screen
                   </label>

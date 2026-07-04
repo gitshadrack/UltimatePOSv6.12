@@ -206,7 +206,7 @@
                         <input type="hidden" id="pos_screen_lock_credential_type" value="password">
                         <div id="pos_screen_lock_pin_group" class="form-group hide">
                             <label for="pos_screen_lock_pin">PIN</label>
-                            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" class="form-control input-lg text-center" id="pos_screen_lock_pin">
+                            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="20" class="form-control input-lg text-center" id="pos_screen_lock_pin">
                             <div class="pos-screen-lock-keypad">
                                 @foreach([1, 2, 3, 4, 5, 6, 7, 8, 9] as $key)
                                     <button type="button" data-pos-lock-key="{{ $key }}">{{ $key }}</button>
@@ -236,6 +236,7 @@
                 (function () {
                     var logoutUrl = @json(action([\App\Http\Controllers\Auth\LoginController::class, 'logout']));
                     var unlockUrl = @json(route('pos.unlock'));
+                    var pinUnlockAvailable = @json(!empty(auth()->user()->is_enable_service_staff_pin) && !empty(auth()->user()->service_staff_pin));
                     var lockTimer = null;
                     var timerEnabled = false;
                     var locked = false;
@@ -254,10 +255,6 @@
                         var timeoutMinutes = parseInt($('#location_id').data('pos_inactivity_logout_minutes'), 10);
 
                         return isNaN(timeoutMinutes) ? 0 : timeoutMinutes;
-                    }
-
-                    function locationUsesPin() {
-                        return $('#location_id').data('enable_numeric_login') == 1;
                     }
 
                     function clearTimers() {
@@ -316,7 +313,7 @@
                         clearTimers();
                         locked = true;
                         persistLock();
-                        setCredentialType(locationUsesPin() ? 'pin' : 'password');
+                        setCredentialType(pinUnlockAvailable ? 'pin' : 'password');
                         $('body').addClass('pos-screen-is-locked');
                         $('#pos_screen_lock').addClass('is-active');
                     }
@@ -365,9 +362,14 @@
                         setCredentialType(currentType === 'pin' ? 'password' : 'pin');
                     });
 
+                    if (!pinUnlockAvailable) {
+                        $('#pos_screen_lock_switch').closest('.col-xs-6').hide();
+                        $('#pos_screen_lock_logout').closest('.col-xs-6').removeClass('col-xs-6').addClass('col-xs-12');
+                    }
+
                     $('[data-pos-lock-key]').on('click', function () {
                         var pinInput = $('#pos_screen_lock_pin');
-                        if (pinInput.val().length < 6) {
+                        if (pinInput.val().length < 20) {
                             pinInput.val(pinInput.val() + $(this).data('pos-lock-key')).focus();
                         }
                     });
