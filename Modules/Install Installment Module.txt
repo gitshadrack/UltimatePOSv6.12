@@ -1,0 +1,11 @@
+To install Partner Module
+
+Go to main POS Dir and look for:
+modules_statuses.json
+
+and add this line:
+ "Installment": true,
+
+This will enable the Partners Module Installation
+
+Modified modules_statuses.json is also attach you can replace this it has compatibility for all modules Developed by PNN Solutions

@@ -2027,6 +2027,27 @@ function get_recent_transactions(status, element_obj) {
 
 //variation_id is null when weighing_scale_barcode is used.
 
+// Return the price group that will be used for the next POS line. Keep the
+// value as a string because values from row inputs and select elements are
+// strings as well. The default selling price is represented by 0.
+function pos_get_effective_price_group() {
+    var price_group = '';
+
+    if ($('#price_group').length > 0) {
+        price_group = $('#price_group').val();
+    }
+
+    if ($('#default_price_group').length > 0 && (price_group === '' || price_group === null)) {
+        price_group = $('#default_price_group').val();
+    }
+
+    if ($('#types_of_service_price_group').length > 0 && $('#types_of_service_price_group').val()) {
+        price_group = $('#types_of_service_price_group').val();
+    }
+
+    return String(price_group || 0);
+}
+
 /**
  * Common function to insert product row into POS table
  * @param {object} result - The result object containing html_content and other data
@@ -2098,12 +2119,14 @@ function pos_add_product_row_from_data(result) {
         // If item_addtn_method != 0, check for duplicate products
         if (item_addtn_method != 0 && variation_id) {
             var is_added = false;
+            var current_price_group = pos_get_effective_price_group();
             
             // Search for variation id in each row of pos table
             $('#pos_table tbody')
                 .find('tr')
                 .each(function() {
                     var row_v_id = $(this).find('.row_variation_id').val();
+                    var row_price_group = String($(this).find('.row_price_group').val() || 0);
                     var enable_sr_no = $(this).find('.enable_sr_no').val();
                     var modifiers_exist = false;
                     if ($(this).find('input.modifiers_exist').length > 0) {
@@ -2112,6 +2135,7 @@ function pos_add_product_row_from_data(result) {
                     
                     if (
                         row_v_id == variation_id &&
+                        row_price_group === current_price_group &&
                         enable_sr_no !== '1' &&
                         !modifiers_exist &&
                         !is_added
@@ -2155,6 +2179,7 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
     //Get item addition method
     var item_addtn_method = 0;
     var add_via_ajax = true;
+    var current_price_group = pos_get_effective_price_group();
 
     if (variation_id != null && $('#item_addition_method').length) {
         item_addtn_method = $('#item_addition_method').val();
@@ -2172,6 +2197,7 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
                 var row_v_id = $(this)
                     .find('.row_variation_id')
                     .val();
+                var row_price_group = String($(this).find('.row_price_group').val() || 0);
                 var enable_sr_no = $(this)
                     .find('.enable_sr_no')
                     .val();
@@ -2182,6 +2208,7 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
 
                 if (
                     row_v_id == variation_id &&
+                    row_price_group === current_price_group &&
                     enable_sr_no !== '1' &&
                     !modifiers_exist &&
                     !is_added
@@ -2226,22 +2253,7 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
 
         var is_sales_order = $('#sale_type').length && $('#sale_type').val() == 'sales_order' ? true : false;
 
-        var price_group = '';
-        if ($('#price_group').length > 0) {
-            price_group = parseInt($('#price_group').val());
-        }
-
-        //If default price group present
-        if ($('#default_price_group').length > 0 && 
-            price_group === '') {
-            price_group = $('#default_price_group').val();
-        }
-
-        //If types of service selected give more priority
-        if ($('#types_of_service_price_group').length > 0 && 
-            $('#types_of_service_price_group').val()) {
-            price_group = $('#types_of_service_price_group').val();
-        }
+        var price_group = current_price_group;
 
         var is_draft=false;
         if($('#status') && ($('#status').val()=='quotation' || 

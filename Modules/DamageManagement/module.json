@@ -1,0 +1,15 @@
+{
+    "name": "DamageManagement",
+    "alias": "damagemanagement",
+    "description": "Comprehensive Damage Management Module - Track damaged products, manage dispatches to suppliers, and handle compensation claims with full documentation and reporting. This is a complete free module for non commercial use.",
+    "keywords": ["damage", "dispatch", "compensation", "supplier", "returns", "inventory"],
+    "author": "Hackermiind",
+    "active": 1,
+    "order": 0,
+    "priority": 1,
+    "providers": ["Modules\\DamageManagement\\Providers\\DamageManagementServiceProvider"],
+    "aliases": {},
+    "files": [],
+    "requires": []
+}
+

@@ -1,0 +1,36 @@
+{
+    "name": "munshi/damagemanagement",
+    "description": "Comprehensive Damage Management Module for Ultimate POS - Track damaged products, manage dispatches to suppliers, and handle compensation claims",
+    "version": "1.0.0",
+    "type": "ultimatepos-module",
+    "license": "Commercial",
+    "authors": [
+        {
+            "name": "Munshi Sohag Hossen",
+            "email": "info@example.com"
+        }
+    ],
+    "keywords": [
+        "ultimatepos",
+        "damage",
+        "dispatch",
+        "compensation",
+        "supplier",
+        "returns",
+        "inventory"
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\DamageManagement\\Providers\\DamageManagementServiceProvider"
+            ],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\DamageManagement\\": ""
+        }
+    }
+}
+

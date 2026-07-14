@@ -20,5 +20,8 @@
     "CustomDashboard": true,
     "Gym": true,
     "ZatcaIntegrationKsa": true,
-    "PageSpeed": true
+    "PageSpeed": true,
+    "DamageManagement": true,
+    "Installment": true
+    
 }

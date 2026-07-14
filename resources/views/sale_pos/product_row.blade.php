@@ -225,6 +225,13 @@
 		<input type="hidden" value="{{$product->variation_id}}" 
 			name="products[{{$row_count}}][variation_id]" class="row_variation_id">
 
+		@php
+			$row_price_group = isset($price_group) && $price_group !== ''
+				? $price_group
+				: (!empty($transaction->selling_price_group_id) ? $transaction->selling_price_group_id : 0);
+		@endphp
+		<input type="hidden" value="{{$row_price_group}}" class="row_price_group">
+
 		<input type="hidden" value="{{$product->enable_stock}}" 
 			name="products[{{$row_count}}][enable_stock]">
 		

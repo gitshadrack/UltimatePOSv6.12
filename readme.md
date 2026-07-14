@@ -1441,6 +1441,79 @@ php artisan optimize:clear
 
 No migration is needed.
 
+### Mixed Retail and Wholesale Prices on One POS Sale (2026-07-14)
+
+Purpose: Allow the same customer invoice to contain products added from different selling price groups, including separate Retail and Wholesale lines for the same product.
+
+Files changed:
+
+- `public/js/pos.js`
+- `app/Utils/ProductUtil.php`
+- `resources/views/sale_pos/product_row.blade.php`
+- `config/constants.php`
+- `readme.md`
+
+What changed:
+
+- Each POS product row now retains the selling price group that was active when the item was added.
+- The duplicate-item check now compares both the product variation and its selling price group.
+- Adding the same product again with the same price group continues to increase its quantity.
+- Adding the same product under a different price group creates a separate row with that group's price.
+- Both barcode/search auto-add and normal POS product selection use the same mixed-price behavior.
+- Existing line prices are not changed when the cashier selects another price group; the new group applies to subsequently added items.
+- Increased the asset version from `616` to `617` so cashier browsers request the updated POS JavaScript.
+- No database migration is required because the calculated unit price is already stored on each sale line.
+
+Cashier workflow:
+
+1. Select `Retail` in the POS selling-price-group field and add the retail items.
+2. Select `Wholesale` and add the wholesale items.
+3. If the same product is sold at both prices, it appears as two separate invoice lines.
+4. Adding it again under the same group increments only the matching line.
+
+Server action:
+
+```bash
+php artisan optimize:clear
+```
+
+After deployment, force-refresh the POS page so the browser loads the updated `public/js/pos.js`.
+
+### Damage Management Installation Detection Fix (2026-07-14)
+
+Purpose: Correct a version-key case mismatch that caused the installed Damage Management module to be omitted from module hooks and menus.
+
+Files changed:
+
+- `Modules/DamageManagement/Http/Controllers/InstallController.php`
+- `Modules/DamageManagement/Http/Controllers/DataController.php`
+- `readme.md`
+
+What changed:
+
+- Standardized the module version key as `damagemanagement_version`.
+- Updated install, update, uninstall, and menu checks to use the same lowercase key expected by the application's module loader.
+- Normalized the existing installation's `system` table key from `DamageManagement_version` to `damagemanagement_version`.
+- Confirmed that the Damage Management tables and schema changes were already installed.
+
+Existing installations may normalize the key with:
+
+```sql
+UPDATE `system`
+SET `key` = 'damagemanagement_version'
+WHERE `key` = 'DamageManagement_version';
+```
+
+Back up the database before running SQL on another installation. New installations use the corrected key automatically.
+
+Server action:
+
+```bash
+php artisan optimize:clear
+```
+
+No migration is needed.
+
 ### Recommended Online Deployment Steps
 
 1. Upload all changed controller files.
