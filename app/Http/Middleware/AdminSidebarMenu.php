@@ -23,7 +23,7 @@ class AdminSidebarMenu
         }
 
         Menu::create('admin-sidebar-menu', function ($menu) {
-            $enabled_modules = !empty(session('business.enabled_modules')) ? session('business.enabled_modules') : [];
+            $enabled_modules = ! empty(session('business.enabled_modules')) ? session('business.enabled_modules') : [];
 
             $common_settings = !empty(session('business.common_settings')) ? session('business.common_settings') : [];
             $pos_settings = !empty(session('business.pos_settings')) ? json_decode(session('business.pos_settings'), true) : [];
@@ -46,6 +46,46 @@ class AdminSidebarMenu
             <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" />
             <path d="M10 12h4v4h-4z" />
           </svg>', 'active' => request()->segment(1) == 'home'])->order(5);
+
+            // Dedicated M-PESA menu is available when either payment provider module is enabled.
+            $intasend_enabled = in_array('intasend', $enabled_modules);
+            $daraja_enabled = in_array('daraja', $enabled_modules);
+            $mpesa_permissions = auth()->user()->getAllPermissions()->pluck('name')->flip();
+            $is_superadmin = auth()->user()->can('superadmin');
+            $has_mpesa_permission = function (array $permissions) use ($mpesa_permissions, $is_superadmin) {
+                return $is_superadmin || collect($permissions)->contains(function ($permission) use ($mpesa_permissions) {
+                    return $mpesa_permissions->has($permission);
+                });
+            };
+            $can_view_intasend = $intasend_enabled && $has_mpesa_permission(['intasend.transactions', 'intasend.manage']);
+            $can_view_daraja = $daraja_enabled && $has_mpesa_permission(['daraja.transactions', 'daraja.manage']);
+            $can_configure_intasend = $intasend_enabled && $has_mpesa_permission(['intasend.settings', 'intasend.manage']);
+            $can_configure_daraja = $daraja_enabled && $has_mpesa_permission(['daraja.settings', 'daraja.manage']);
+
+            if ($can_view_intasend || $can_view_daraja || $can_configure_intasend || $can_configure_daraja) {
+                $menu->dropdown(
+                    __('lang_v1.mpesa'),
+                    function ($sub) use ($can_view_intasend, $can_view_daraja, $can_configure_intasend, $can_configure_daraja) {
+                        if ($can_view_intasend || $can_view_daraja) {
+                            $sub->url(action([\App\Http\Controllers\MpesaDashboardController::class, 'index']), __('lang_v1.mpesa_dashboard'), ['icon' => '', 'active' => request()->is('mpesa/dashboard*')]);
+                        }
+                        if ($can_view_daraja) {
+                            $sub->url(action([\App\Http\Controllers\DarajaController::class, 'transactions']), __('lang_v1.daraja_transactions'), ['icon' => '', 'active' => request()->is('daraja/transactions*')]);
+                        }
+                        if ($can_view_intasend) {
+                            $sub->url(action([\App\Http\Controllers\IntaSendController::class, 'pool']), __('lang_v1.intasend_holding_pool'), ['icon' => '', 'active' => request()->is('intasend/payments*')]);
+                            $sub->url(action([\App\Http\Controllers\IntaSendController::class, 'collections']), __('lang_v1.intasend_collections_report'), ['icon' => '', 'active' => request()->is('intasend/collections*')]);
+                        }
+                        if ($can_configure_daraja) {
+                            $sub->url(action([\App\Http\Controllers\DarajaController::class, 'settings']), __('lang_v1.daraja_settings'), ['icon' => '', 'active' => request()->is('daraja/settings*')]);
+                        }
+                        if ($can_configure_intasend) {
+                            $sub->url(action([\App\Http\Controllers\IntaSendController::class, 'settings']), __('lang_v1.intasend_settings'), ['icon' => '', 'active' => request()->is('intasend/settings*')]);
+                        }
+                    },
+                    ['icon' => 'fas fa-mobile-alt', 'active' => request()->is('mpesa/*') || request()->is('daraja/*') || request()->is('intasend/*')]
+                )->order(86);
+            }
 
             //User management dropdown
             if (auth()->user()->can('user.view') || auth()->user()->can('user.create') || auth()->user()->can('roles.view')) {
@@ -870,8 +910,6 @@ class AdminSidebarMenu
             if (auth()->user()->can('business_settings.access') ||
                 auth()->user()->can('barcode_settings.access') ||
                 auth()->user()->can('invoice_settings.access') ||
-                (in_array('intasend', $enabled_modules) && auth()->user()->canAny(['intasend.settings', 'intasend.transactions', 'intasend.manage'])) ||
-                (in_array('daraja', $enabled_modules) && auth()->user()->canAny(['daraja.settings', 'daraja.transactions', 'daraja.manage'])) ||
                 auth()->user()->can('tax_rate.view') ||
                 auth()->user()->can('tax_rate.create') ||
                 auth()->user()->can('access_package_subscriptions')) {
@@ -896,43 +934,6 @@ class AdminSidebarMenu
                                 __('invoice.invoice_settings'),
                                 ['icon' => '', 'active' => in_array(request()->segment(1), ['invoice-schemes', 'invoice-layouts'])]
                             );
-                        }
-                        if (in_array('intasend', $enabled_modules)) {
-                            if (auth()->user()->canAny(['intasend.settings', 'intasend.manage'])) {
-                                $sub->url(
-                                    action([\App\Http\Controllers\IntaSendController::class, 'settings']),
-                                    __('lang_v1.intasend_settings'),
-                                    ['icon' => '', 'active' => request()->segment(1) == 'intasend' && request()->segment(2) == 'settings']
-                                );
-                            }
-                            if (auth()->user()->canAny(['intasend.transactions', 'intasend.manage'])) {
-                                $sub->url(
-                                    action([\App\Http\Controllers\IntaSendController::class, 'pool']),
-                                    __('lang_v1.intasend_holding_pool'),
-                                    ['icon' => '', 'active' => request()->segment(1) == 'intasend' && request()->segment(2) == 'payments']
-                                );
-                                $sub->url(
-                                    action([\App\Http\Controllers\IntaSendController::class, 'collections']),
-                                    __('lang_v1.intasend_collections_report'),
-                                    ['icon' => '', 'active' => request()->segment(1) == 'intasend' && request()->segment(2) == 'collections']
-                                );
-                            }
-                        }
-                        if (in_array('daraja', $enabled_modules)) {
-                            if (auth()->user()->canAny(['daraja.settings', 'daraja.manage'])) {
-                                $sub->url(
-                                    action([\App\Http\Controllers\DarajaController::class, 'settings']),
-                                    __('lang_v1.daraja_settings'),
-                                    ['icon' => '', 'active' => request()->segment(1) == 'daraja' && request()->segment(2) == 'settings']
-                                );
-                            }
-                            if (auth()->user()->canAny(['daraja.transactions', 'daraja.manage'])) {
-                                $sub->url(
-                                    action([\App\Http\Controllers\DarajaController::class, 'transactions']),
-                                    __('lang_v1.daraja_transactions'),
-                                    ['icon' => '', 'active' => request()->segment(1) == 'daraja' && request()->segment(2) == 'transactions']
-                                );
-                            }
                         }
                         if (auth()->user()->can('barcode_settings.access')) {
                             $sub->url(

@@ -14,6 +14,8 @@ class DarajaPayment extends Model
         'auto_attached' => 'boolean',
         'attached_at' => 'datetime',
         'transaction_date' => 'datetime',
+        'reversal_requested_at' => 'datetime',
+        'reversed_at' => 'datetime',
         'request_payload' => 'array',
         'payload' => 'array',
     ];

@@ -1441,9 +1441,9 @@ php artisan optimize:clear
 
 No migration is needed.
 
-### Mixed Retail and Wholesale Prices on One POS Sale (2026-07-14)
+### Mixed Customer Group Prices on POS (Updated 2026-07-15)
 
-Purpose: Allow the same customer invoice to contain products added from different selling price groups, including separate Retail and Wholesale lines for the same product.
+Purpose: Allow the same product to be added as separate Retail, Wholesale, Family, or other selling-price-group lines instead of incorrectly increasing the quantity of a line created under a different price group.
 
 Files changed:
 
@@ -1457,27 +1457,42 @@ What changed:
 
 - Each POS product row now retains the selling price group that was active when the item was added.
 - The duplicate-item check now compares both the product variation and its selling price group.
-- Adding the same product again with the same price group continues to increase its quantity.
-- Adding the same product under a different price group creates a separate row with that group's price.
-- Both barcode/search auto-add and normal POS product selection use the same mixed-price behavior.
-- Existing line prices are not changed when the cashier selects another price group; the new group applies to subsequently added items.
-- Increased the asset version from `616` to `617` so cashier browsers request the updated POS JavaScript.
+- Selecting a customer whose customer group uses `Selling Price Group` changes the active price used for subsequently added items.
+- Existing lines retain the price and selling price group under which they were added.
+- Switching from a selling-price customer group to a percentage/default group resets the previous customer's selling price group instead of retaining it.
+- Product selection now requests the priced row from the server before performing duplicate detection.
+- Duplicate detection uses the selling price group embedded in the server-generated row, rather than relying only on the browser's current dropdown value.
+- Adding the same product again only increases the quantity of a row whose product variation and server-confirmed price group both match.
+- Adding the same product after selecting a different price group creates a separate line at that group's price.
+- Both barcode/search auto-add and normal POS product selection use the same price-group-aware duplicate check.
+- Increased the asset version from `618` to `619` so cashier browsers request the corrected POS JavaScript.
 - No database migration is required because the calculated unit price is already stored on each sale line.
+
+Required setup:
+
+1. Create the required groups under Selling Price Groups, such as `Retail`, `Wholesale`, and `Family`.
+2. Open each product and save its price for every selling price group.
+3. Create or edit the corresponding customer group.
+4. Set `Price calculation type` to `Selling Price Group` and select the matching selling price group. Alternatively, select `Percentage` and enter the applicable percentage.
+5. Assign each customer to the correct customer group.
+6. Ensure the cashier's role can access the required selling price groups.
 
 Cashier workflow:
 
-1. Select `Retail` in the POS selling-price-group field and add the retail items.
-2. Select `Wholesale` and add the wholesale items.
-3. If the same product is sold at both prices, it appears as two separate invoice lines.
-4. Adding it again under the same group increments only the matching line.
+1. Select the Retail customer or price group and add a product.
+2. Select the Wholesale, Family, or another configured customer/price group.
+3. Add the same product again and confirm that it appears on a separate line at the newly selected price.
+4. Add it once more without changing the group and confirm that only the matching line's quantity increases.
 
 Server action:
 
 ```bash
 php artisan optimize:clear
+php artisan config:cache
+php artisan view:cache
 ```
 
-After deployment, force-refresh the POS page so the browser loads the updated `public/js/pos.js`.
+After deployment, purge PageSpeed/CDN caches if enabled and force-refresh the POS page with `Ctrl+F5` so the browser loads `public/js/pos.js?v=619`.
 
 ### Damage Management Installation Detection Fix (2026-07-14)
 
@@ -1513,6 +1528,132 @@ php artisan optimize:clear
 ```
 
 No migration is needed.
+
+### Unified M-PESA Dashboard and Dedicated Sidebar (2026-07-16)
+
+Purpose: Provide one operational dashboard and one dedicated navigation section for both IntaSend and direct Safaricom M-PESA (Daraja), without duplicating provider links under the general Settings menu.
+
+Files added:
+
+- `app/Http/Controllers/MpesaDashboardController.php`
+- `database/migrations/2026_07_16_000001_add_reversal_tracking_to_mpesa_payments.php`
+- `resources/views/mpesa/dashboard.blade.php`
+- `resources/views/mpesa/records.blade.php`
+
+Files changed:
+
+- `app/DarajaPayment.php`
+- `app/IntaSendPayment.php`
+- `app/Http/Middleware/AdminSidebarMenu.php`
+- `routes/web.php`
+- `lang/en/lang_v1.php`
+- `readme.md`
+
+What changed:
+
+- Added the authenticated `GET /mpesa/dashboard` route named `mpesa.dashboard`.
+- Added the authenticated `GET /mpesa/records/{metric}` route named `mpesa.records`.
+- Added a dedicated M-PESA sidebar immediately below Settings.
+- The M-PESA sidebar appears only when `IntaSend Integration` or `Direct M-PESA Integration` is enabled in Business Settings > Modules.
+- Sidebar links remain permission-aware and only show the enabled provider's tools.
+- Moved IntaSend Settings, Holding Pool, Collections, direct M-PESA Settings, and M-PESA Transactions into the dedicated M-PESA section.
+- Removed all IntaSend and direct M-PESA duplicates from the general Settings dropdown.
+- The sidebar reuses the current business module configuration stored in the session; saving Business Settings refreshes that session without an extra business query on every page.
+- Added a unified business-scoped dashboard with location and date filters.
+- Made every dashboard card open its corresponding unified records report while preserving the selected location and date filters.
+- Card reports combine enabled IntaSend and direct Safaricom records and show provider, reference, phone, status, reconciliation state, linked sale invoice, amount, and reversal state.
+- Matched the Damage Management dashboard presentation: gradient statistic cards, large background icons, responsive Bootstrap columns, shadows, and hover movement.
+- Added reversal audit fields to both `daraja_payments` and `intasend_payments`.
+
+Dashboard metric definitions:
+
+- `Total Records`: all provider records in the selected business, location, and date range.
+- `Linked to Sales`: records with an Ultimate POS `transaction_payment_id`.
+- `Unlinked Ready`: successful, unattached records still available for reconciliation.
+- `Picked`: successful records selected, matched, or attached outside a direct sale link.
+- `Pending`: records whose provider status is `PENDING`.
+- `Failed / Cancelled`: failed, cancelled, canceled, rejected, or timed-out provider records.
+- `Linked Amount`: sum of provider amounts linked to Ultimate POS sales.
+- `Reversal Pending / Requested`: records with reversal state `requested` or `pending`.
+- `Successful Reversal`: records with reversal state `successful`; the dashboard also shows the reversed amount.
+
+Reversal fields added to each provider payment table:
+
+- `reversal_status`: `none`, `requested`, `pending`, `successful`, or `failed`.
+- `reversal_request_id`
+- `reversal_note`
+- `reversal_requested_at`
+- `reversed_at`
+
+The migration provides auditable reversal tracking for dashboard reporting. It does not by itself submit a reversal request to IntaSend or Safaricom; provider-specific reversal API actions remain a separate implementation.
+
+Server action:
+
+```bash
+php artisan migrate
+php artisan optimize
+php artisan event:cache
+php artisan view:cache
+```
+
+When PHP is installed through WAMP but is not available on the Windows PATH, use:
+
+```powershell
+& 'C:\wamp64\bin\php\php8.2.29\php.exe' artisan migrate
+& 'C:\wamp64\bin\php\php8.2.29\php.exe' artisan optimize
+& 'C:\wamp64\bin\php\php8.2.29\php.exe' artisan event:cache
+& 'C:\wamp64\bin\php\php8.2.29\php.exe' artisan view:cache
+```
+
+### POS Runtime Performance Optimizations (2026-07-17)
+
+Purpose: Reduce normal page latency, especially on the unified M-PESA dashboard, and make Laravel's production caches build reliably.
+
+Application files changed:
+
+- `app/Http/Controllers/MpesaDashboardController.php`
+- `app/Http/Middleware/AdminSidebarMenu.php`
+- `Modules/Accounting/Helpers/general_helper.php`
+- `Modules/Installment/Helpers/general_helper.php`
+- `Modules/WhatsApp/Helpers/Helpers.php`
+- `Modules/Accounting/Providers/AccountingServiceProvider.php`
+- `Modules/Installment/Providers/InstallmentServiceProvider.php`
+- `Modules/PageSpeed/Providers/PageSpeedServiceProvider.php`
+- `Modules/Superadmin/Providers/SuperadminServiceProvider.php`
+- `Modules/Woocommerce/Providers/WoocommerceServiceProvider.php`
+- `Modules/Hms/Routes/web.php`
+- `Modules/Superadmin/Routes/web.php`
+- `routes/web.php`
+- `readme.md`
+
+What changed:
+
+- Consolidated all enabled M-PESA providers into one unioned conditional aggregate SQL query, returning both provider-level figures and combined dashboard totals in one database round trip.
+- Reused the session's enabled-module list and loaded the current user's permission names once while constructing the M-PESA sidebar.
+- Disabled Xdebug for Apache's normal POS runtime with `xdebug.mode = off` and `xdebug.log_level = 0`. The Apache service was restarted after the change. This is server configuration in WAMP's Apache PHP INI and is not a repository file.
+- Added duplicate-function guards to module helper files so Laravel can safely bootstrap them while generating caches.
+- Namespaced conflicting legacy resource route names for HMS bookings and Superadmin coupons. Their URLs and controllers are unchanged.
+- Ignored nonexistent optional module view-override directories, allowing Blade view caching on a clean installation.
+- Built Laravel configuration, route, event, and Blade caches. The resulting files under `bootstrap/cache` and `storage/framework/views` are generated deployment artifacts and should not be committed.
+
+Production cache command:
+
+```bash
+php artisan optimize
+php artisan event:cache
+php artisan view:cache
+```
+
+When deploying new code or changing `.env`, clear old caches first, then rebuild them:
+
+```bash
+php artisan optimize:clear
+php artisan optimize
+php artisan event:cache
+php artisan view:cache
+```
+
+Keep Xdebug off during normal POS use. Enable it temporarily only for an active debugging session, then turn it off and restart Apache again.
 
 ### Recommended Online Deployment Steps
 

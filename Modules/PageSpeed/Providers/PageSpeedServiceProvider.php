@@ -123,9 +123,11 @@ class PageSpeedServiceProvider extends ServiceProvider
             $sourcePath => $viewPath,
         ], 'views');
 
-        $this->loadViewsFrom(array_merge(array_map(function ($path) {
+        $overridePaths = array_filter(array_map(function ($path) {
             return $path . '/modules/pagespeed';
-        }, config('view.paths')), [$sourcePath]), 'pagespeed');
+        }, config('view.paths')), 'is_dir');
+
+        $this->loadViewsFrom(array_merge($overridePaths, [$sourcePath]), 'pagespeed');
     }
 
     /**

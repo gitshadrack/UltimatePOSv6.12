@@ -143,12 +143,16 @@ $(document).ready(function() {
 
         if (data.price_calculation_type == 'selling_price_group') {
             $('#price_group').val(data.selling_price_group_id);
-            $('#price_group').change();
+        } else {
+            // Do not retain the previous customer's selling price group.
+            var base_price_group = $('#default_price_group').val() || 0;
+            if ($('#price_group option[value="' + base_price_group + '"]').length == 0) {
+                base_price_group = $('#price_group option:first').val() || 0;
+            }
+            $('#price_group').val(base_price_group);
         }
-        //  else {
-        //     $('#price_group').val(0);
-        //     $('#price_group').change();
-        // }
+
+        $('#price_group').trigger('change');
         if ($('.contact_due_text').length) {
             get_contact_due(data.id);
             // store on customer change
@@ -1702,7 +1706,7 @@ $(document).ready(function() {
         $('span#total_payable').text(__currency_trans_from_en(shown_total, false));
     });
 
-    $('select#price_group').change(function() {
+    $('#price_group').change(function() {
         $('input#hidden_price_group').val($(this).val());
     });
 
@@ -2109,6 +2113,13 @@ function pos_add_product_row_from_data(result) {
     if (result.success) {
         var variation_id = result.variation_id;
         var add_new_row = true;
+        var incoming_row = $('<tbody></tbody>')
+            .html(result.html_content)
+            .find('tr.product_row')
+            .first();
+        var incoming_price_group = String(
+            incoming_row.find('.row_price_group').val() || pos_get_effective_price_group()
+        );
         
         // Check item addition method setting
         var item_addtn_method = 0;
@@ -2119,7 +2130,6 @@ function pos_add_product_row_from_data(result) {
         // If item_addtn_method != 0, check for duplicate products
         if (item_addtn_method != 0 && variation_id) {
             var is_added = false;
-            var current_price_group = pos_get_effective_price_group();
             
             // Search for variation id in each row of pos table
             $('#pos_table tbody')
@@ -2135,7 +2145,7 @@ function pos_add_product_row_from_data(result) {
                     
                     if (
                         row_v_id == variation_id &&
-                        row_price_group === current_price_group &&
+                        row_price_group === incoming_price_group &&
                         enable_sr_no !== '1' &&
                         !modifiers_exist &&
                         !is_added
@@ -2175,133 +2185,66 @@ function pos_add_product_row_from_data(result) {
 }
 
 function pos_product_row(variation_id = null, purchase_line_id = null, weighing_scale_barcode = null, quantity = 1) {
-
-    //Get item addition method
-    var item_addtn_method = 0;
-    var add_via_ajax = true;
     var current_price_group = pos_get_effective_price_group();
-
-    if (variation_id != null && $('#item_addition_method').length) {
-        item_addtn_method = $('#item_addition_method').val();
+    var product_row = $('input#product_row_count').val();
+    var location_id = $('input#location_id').val();
+    var customer_id = $('select#customer_id').val();
+    var is_direct_sell = false;
+    if (
+        $('input[name="is_direct_sale"]').length > 0 &&
+        $('input[name="is_direct_sale"]').val() == 1
+    ) {
+        is_direct_sell = true;
     }
 
-    if (item_addtn_method == 0) {
-        add_via_ajax = true;
-    } else {
-        var is_added = false;
+    var disable_qty_alert = false;
 
-        //Search for variation id in each row of pos table
-        $('#pos_table tbody')
-            .find('tr')
-            .each(function() {
-                var row_v_id = $(this)
-                    .find('.row_variation_id')
-                    .val();
-                var row_price_group = String($(this).find('.row_price_group').val() || 0);
-                var enable_sr_no = $(this)
-                    .find('.enable_sr_no')
-                    .val();
-                var modifiers_exist = false;
-                if ($(this).find('input.modifiers_exist').length > 0) {
-                    modifiers_exist = true;
-                }
-
-                if (
-                    row_v_id == variation_id &&
-                    row_price_group === current_price_group &&
-                    enable_sr_no !== '1' &&
-                    !modifiers_exist &&
-                    !is_added
-                ) {
-                    add_via_ajax = false;
-                    is_added = true;
-
-                    //Increment product quantity
-                    qty_element = $(this).find('.pos_quantity');
-                    var qty = __read_number(qty_element);
-                    __write_number(qty_element, qty + 1);
-                    qty_element.change();
-
-                    round_row_to_iraqi_dinnar($(this));
-
-                    if (!$('#__is_mobile').length) {
-                        $('input#search_product')
-                            .focus()
-                            .select();
-                    }
-                }
-        });
+    if ($('#disable_qty_alert').length) {
+        disable_qty_alert = true;
     }
 
-    if (add_via_ajax) {
-        var product_row = $('input#product_row_count').val();
-        var location_id = $('input#location_id').val();
-        var customer_id = $('select#customer_id').val();
-        var is_direct_sell = false;
-        if (
-            $('input[name="is_direct_sale"]').length > 0 &&
-            $('input[name="is_direct_sale"]').val() == 1
-        ) {
-            is_direct_sell = true;
-        }
+    var is_sales_order = $('#sale_type').length && $('#sale_type').val() == 'sales_order' ? true : false;
 
-        var disable_qty_alert = false;
+    var price_group = current_price_group;
 
-        if ($('#disable_qty_alert').length) {
-            disable_qty_alert = true;
-        }
-
-        var is_sales_order = $('#sale_type').length && $('#sale_type').val() == 'sales_order' ? true : false;
-
-        var price_group = current_price_group;
-
-        var is_draft=false;
-        if($('#status') && ($('#status').val()=='quotation' || 
+    var is_draft=false;
+    if($('#status') && ($('#status').val()=='quotation' ||
         $('#status').val()=='draft')) {
-            is_draft=true;
-        }
-
-        var is_serial_no = false;
-
-        if (
-            $('input[name="is_serial_no"]').length > 0 &&
-            $('input[name="is_serial_no"]').val() == 1
-        ) {
-            is_serial_no = true;
-        }
-        
-        $.ajax({
-            method: 'GET',
-            url: '/sells/pos/get_product_row/' + variation_id + '/' + location_id,
-            async: false,
-            data: {
-                product_row: product_row,
-                customer_id: customer_id,
-                is_direct_sell: is_direct_sell,
-                is_serial_no: is_serial_no,
-                price_group: price_group,
-                purchase_line_id: purchase_line_id,
-                weighing_scale_barcode: weighing_scale_barcode,
-                quantity: quantity,
-                is_sales_order: is_sales_order,
-                disable_qty_alert: disable_qty_alert,
-                is_draft: is_draft
-            },
-            dataType: 'json',
-            success: function(result) {
-                if (result.success) {
-                    pos_insert_product_row(result);
-                } else {
-                    toastr.error(result.msg);
-                    if (!$('#__is_mobile').length) {
-                        $('input#search_product')
-                            .focus()
-                            .select();
-                    }
-                }
-            },
-        });
+        is_draft=true;
     }
+
+    var is_serial_no = false;
+
+    if (
+        $('input[name="is_serial_no"]').length > 0 &&
+        $('input[name="is_serial_no"]').val() == 1
+    ) {
+        is_serial_no = true;
+    }
+
+    $.ajax({
+        method: 'GET',
+        url: '/sells/pos/get_product_row/' + variation_id + '/' + location_id,
+        async: false,
+        data: {
+            product_row: product_row,
+            customer_id: customer_id,
+            is_direct_sell: is_direct_sell,
+            is_serial_no: is_serial_no,
+            price_group: price_group,
+            purchase_line_id: purchase_line_id,
+            weighing_scale_barcode: weighing_scale_barcode,
+            quantity: quantity,
+            is_sales_order: is_sales_order,
+            disable_qty_alert: disable_qty_alert,
+            is_draft: is_draft
+        },
+        dataType: 'json',
+        success: function(result) {
+            result.variation_id = variation_id;
+            pos_add_product_row_from_data(result);
+        },
+    });
 }
 
 //Update values for each row

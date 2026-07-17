@@ -32,6 +32,7 @@ use App\Http\Controllers\LabelsController;
 use App\Http\Controllers\LedgerDiscountController;
 use App\Http\Controllers\LocationSettingsController;
 use App\Http\Controllers\ManageUserController;
+use App\Http\Controllers\MpesaDashboardController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NotificationTemplateController;
 use App\Http\Controllers\OpeningStockController;
@@ -130,6 +131,8 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::get('/business/settings', [BusinessController::class, 'getBusinessSettings'])->name('business.getBusinessSettings');
     Route::post('/business/update', [BusinessController::class, 'postBusinessSettings'])->name('business.postBusinessSettings');
     Route::get('/intasend/settings', [IntaSendController::class, 'settings'])->name('intasend.settings');
+    Route::get('/mpesa/dashboard', [MpesaDashboardController::class, 'index'])->name('mpesa.dashboard');
+    Route::get('/mpesa/records/{metric}', [MpesaDashboardController::class, 'records'])->name('mpesa.records');
     Route::post('/intasend/settings', [IntaSendController::class, 'updateSettings'])->name('intasend.settings.update');
     Route::get('/intasend/payments', [IntaSendController::class, 'pool'])->name('intasend.payments');
     Route::post('/intasend/payments/{id}/attach', [IntaSendController::class, 'attach'])->name('intasend.payments.attach');
@@ -540,7 +543,7 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
 
 //common route
 Route::middleware(['auth'])->group(function () {
-    Route::get('/logout', [App\Http\Controllers\Auth\LoginController::class, 'logout'])->name('logout');
+    Route::get('/logout', [App\Http\Controllers\Auth\LoginController::class, 'logout'])->name('logout.get');
 });
 
 Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone'])->group(function () {

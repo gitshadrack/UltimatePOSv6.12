@@ -18,6 +18,8 @@ class IntaSendPayment extends Model
         'net_amount' => 'decimal:4',
         'charges' => 'decimal:4',
         'attached_at' => 'datetime',
+        'reversal_requested_at' => 'datetime',
+        'reversed_at' => 'datetime',
     ];
 
     public function location()

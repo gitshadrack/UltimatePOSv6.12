@@ -29,7 +29,8 @@ Route::middleware('web', 'auth', 'language', 'AdminSidebarMenu', 'superadmin')->
     Route::resource('/packages', 'Modules\Superadmin\Http\Controllers\PackagesController');
     Route::get('/packages/{id}/destroy', [Modules\Superadmin\Http\Controllers\PackagesController::class, 'destroy']);
 
-    Route::resource('/coupons', 'Modules\Superadmin\Http\Controllers\CouponController');
+    Route::resource('/coupons', 'Modules\Superadmin\Http\Controllers\CouponController')
+        ->names('superadmin.coupons');
     Route::get('/coupons/{id}/destroy', [Modules\Superadmin\Http\Controllers\CouponController::class, 'destroy']);
     
     Route::get('/settings', [Modules\Superadmin\Http\Controllers\SuperadminSettingsController::class, 'edit']);
