@@ -836,11 +836,21 @@ $(document).ready(function() {
         }
 
         $.each(payments, function(index, payment) {
+            var transaction_code = $.trim(payment.transaction_code || '').toUpperCase();
+            var is_selected = is_mpesa_transaction_selected(transaction_code);
             var select_btn = $('<button>')
                 .attr('type', 'button')
                 .addClass('btn btn-xs btn-primary select-intasend-pos-payment')
-                .data('transaction_code', payment.transaction_code || '')
-                .text(LANG.select_mpesa_message || LANG.select_collection || 'Select');
+                .data('transaction_code', transaction_code)
+                .data('amount', payment.amount)
+                .data('selected', is_selected)
+                .toggleClass('btn-primary', !is_selected)
+                .toggleClass('btn-danger', is_selected)
+                .text(
+                    is_selected
+                        ? (LANG.deselect_mpesa_message || 'Deselect')
+                        : (LANG.select_mpesa_message || LANG.select_collection || 'Select')
+                );
 
             tbody.append(
                 $('<tr>')
@@ -853,6 +863,224 @@ $(document).ready(function() {
         });
 
         container.removeClass('hide');
+    }
+
+    function is_mpesa_transaction_selected(transaction_code) {
+        var normalized_code = $.trim(transaction_code || '').toUpperCase();
+        var is_selected = false;
+
+        if (normalized_code === '') {
+            return false;
+        }
+
+        $('#payment_rows_div .payment_row').each(function() {
+            var payment_row = $(this);
+            if (payment_row.find('.payment_types_dropdown').val() !== 'custom_pay_1') {
+                return;
+            }
+
+            var row_code = $.trim(payment_row.find('input[id^="transaction_no_1_"]').val() || '').toUpperCase();
+            if (row_code === normalized_code) {
+                is_selected = true;
+                return false;
+            }
+        });
+
+        return is_selected;
+    }
+
+    function set_mpesa_payment_row(payment_row, transaction_code, amount) {
+        var payment_method = payment_row.find('.payment_types_dropdown').first();
+        payment_method.val('custom_pay_1').trigger('change');
+        __write_number(payment_row.find('.payment-amount'), amount);
+        payment_row.find('input[id^="transaction_no_1_"]').val(transaction_code);
+        payment_row.find('.payment-amount').trigger('change');
+    }
+
+    function remember_mpesa_payment_row(payment_row, is_created) {
+        if (!is_created && !payment_row.data('mpesa_original_payment')) {
+            payment_row.data('mpesa_original_payment', {
+                method: payment_row.find('.payment_types_dropdown').first().val(),
+                amount: __read_number(payment_row.find('.payment-amount')),
+                transaction_code: payment_row.find('input[id^="transaction_no_1_"]').val() || '',
+            });
+        }
+
+        payment_row.data('mpesa_selection_created', is_created);
+    }
+
+    function restore_mpesa_payment_row(payment_row) {
+        var original_payment = payment_row.data('mpesa_original_payment');
+
+        if (original_payment) {
+            payment_row
+                .find('.payment_types_dropdown')
+                .first()
+                .val(original_payment.method)
+                .trigger('change');
+            __write_number(payment_row.find('.payment-amount'), original_payment.amount);
+            payment_row
+                .find('input[id^="transaction_no_1_"]')
+                .val(original_payment.transaction_code);
+        } else {
+            payment_row.find('input[id^="transaction_no_1_"]').val('');
+        }
+
+        payment_row
+            .removeData('mpesa_original_payment')
+            .removeData('mpesa_selection_created');
+        payment_row.find('.payment-amount').trigger('change');
+    }
+
+    function find_mpesa_payment_row(transaction_code) {
+        var normalized_code = $.trim(transaction_code || '').toUpperCase();
+        var matching_row = $();
+
+        $('#payment_rows_div .payment_row').each(function() {
+            var payment_row = $(this);
+            var row_code = $.trim(payment_row.find('input[id^="transaction_no_1_"]').val() || '').toUpperCase();
+            if (row_code === normalized_code) {
+                matching_row = payment_row;
+                return false;
+            }
+        });
+
+        return matching_row;
+    }
+
+    function update_mpesa_candidate_button(button, is_selected) {
+        button
+            .data('selected', is_selected)
+            .prop('disabled', false)
+            .toggleClass('btn-primary', !is_selected)
+            .toggleClass('btn-danger', is_selected)
+            .text(
+                is_selected
+                    ? (LANG.deselect_mpesa_message || 'Deselect')
+                    : (LANG.select_mpesa_message || LANG.select_collection || 'Select')
+            );
+    }
+
+    function sync_mpesa_candidate_buttons() {
+        $('.select-intasend-pos-payment').each(function() {
+            var candidate_button = $(this);
+            update_mpesa_candidate_button(
+                candidate_button,
+                is_mpesa_transaction_selected(candidate_button.data('transaction_code'))
+            );
+        });
+    }
+
+    function deselect_mpesa_payment(button, transaction_code) {
+        var transaction_modal = $('div#transaction_no_modal');
+        var payment_row = find_mpesa_payment_row(transaction_code);
+
+        if (!payment_row.length) {
+            update_mpesa_candidate_button(button, false);
+            return;
+        }
+
+        if (payment_row.data('mpesa_selection_created')) {
+            payment_row.parent().remove();
+            calculate_balance_due();
+        } else {
+            var replacement_row = $();
+            $('#payment_rows_div .payment_row').each(function() {
+                var candidate_row = $(this);
+                if (candidate_row.data('mpesa_selection_created')) {
+                    replacement_row = candidate_row;
+                    return false;
+                }
+            });
+
+            if (replacement_row.length && payment_row.data('mpesa_original_payment')) {
+                var replacement_code = $.trim(
+                    replacement_row.find('input[id^="transaction_no_1_"]').val() || ''
+                ).toUpperCase();
+                var replacement_amount = __read_number(replacement_row.find('.payment-amount'));
+                replacement_row.parent().remove();
+                restore_mpesa_payment_row(payment_row);
+                remember_mpesa_payment_row(payment_row, false);
+                set_mpesa_payment_row(payment_row, replacement_code, replacement_amount);
+            } else {
+                restore_mpesa_payment_row(payment_row);
+            }
+        }
+
+        var selected_count = Math.max(
+            (parseInt(transaction_modal.data('mpesa_selected_count'), 10) || 0) - 1,
+            0
+        );
+        transaction_modal.data('mpesa_selected_count', selected_count);
+        sync_mpesa_candidate_buttons();
+
+        var remaining_selected_row = $('#payment_rows_div .payment_row').filter(function() {
+            return $(this).find('.payment_types_dropdown').first().val() === 'custom_pay_1' &&
+                $.trim($(this).find('input[id^="transaction_no_1_"]').val() || '') !== '';
+        }).last();
+        $('input#express_transaction_no').val(
+            remaining_selected_row.length
+                ? remaining_selected_row.find('input[id^="transaction_no_1_"]').val()
+                : ''
+        );
+
+        if (selected_count === 0 && transaction_modal.data('fill_only')) {
+            $('button#pos-save-transaction-no').text(LANG.use_mpesa_message || 'Use M-PESA Message');
+        }
+
+        toastr.info(LANG.mpesa_message_deselected || 'M-PESA message deselected');
+    }
+
+    function rollback_mpesa_selection_session() {
+        $('#payment_rows_div .payment_row').each(function() {
+            var payment_row = $(this);
+
+            if (payment_row.data('mpesa_selection_created')) {
+                payment_row.parent().remove();
+            } else if (payment_row.data('mpesa_original_payment')) {
+                restore_mpesa_payment_row(payment_row);
+            }
+        });
+
+        calculate_balance_due();
+        $('input#express_transaction_no').val('');
+        sync_mpesa_candidate_buttons();
+    }
+
+    function commit_mpesa_selection_session() {
+        $('#payment_rows_div .payment_row')
+            .removeData('mpesa_original_payment')
+            .removeData('mpesa_selection_created');
+    }
+
+    function add_mpesa_payment_row(callback) {
+        var row_index = $('#payment_row_index').val();
+
+        $.ajax({
+            method: 'POST',
+            url: '/sells/pos/get_payment_row',
+            data: {
+                row_index: row_index,
+                location_id: $('input#location_id').val(),
+            },
+            dataType: 'html',
+            success: function(result) {
+                if (!result || !$('div#transaction_no_modal').hasClass('in')) {
+                    callback(false);
+                    return;
+                }
+
+                var new_row = $(result);
+                $('#payment_rows_div').append(new_row);
+                __select2(new_row.find('.select2'));
+                $('#payment_row_index').val(parseInt(row_index, 10) + 1);
+                callback(true, new_row.find('.payment_row').first());
+            },
+            error: function() {
+                toastr.error(LANG.something_went_wrong || 'Something went wrong');
+                callback(false);
+            },
+        });
     }
 
     function search_intasend_pos_collections(provider) {
@@ -934,6 +1162,9 @@ $(document).ready(function() {
     }
 
     $('div#transaction_no_modal').on('shown.bs.modal', function(e) {
+        $(this)
+            .data('mpesa_selected_count', 0)
+            .data('mpesa_selection_committed', false);
         set_transaction_no_modal_from_payment_row();
         reset_intasend_pos_candidates();
         if ($('input#intasend_stk_phone_number').length) {
@@ -946,9 +1177,16 @@ $(document).ready(function() {
     $('div#transaction_no_modal').on('hidden.bs.modal', function(e) {
         var save_button = $('button#pos-save-transaction-no');
 
+        if (!$(this).data('mpesa_selection_committed')) {
+            rollback_mpesa_selection_session();
+        }
+
         $(this)
             .removeData('payment_row_index')
-            .removeData('fill_only');
+            .removeData('fill_only')
+            .removeData('mpesa_selected_count')
+            .removeData('mpesa_selection_committed')
+            .removeData('mpesa_adding_payment');
         save_button.text(save_button.data('default_text') || save_button.text());
     });
 
@@ -973,6 +1211,20 @@ $(document).ready(function() {
     });
 
     $('button#pos-save-transaction-no').click(function() {
+        var transaction_modal = $('div#transaction_no_modal');
+        var has_selected_mpesa_messages = (parseInt(transaction_modal.data('mpesa_selected_count'), 10) || 0) > 0;
+
+        if (has_selected_mpesa_messages) {
+            var fill_only = transaction_modal.data('fill_only');
+            commit_mpesa_selection_session();
+            transaction_modal.data('mpesa_selection_committed', true);
+            transaction_modal.modal('hide');
+            if (!fill_only) {
+                pos_form_obj.submit();
+            }
+            return true;
+        }
+
         var transaction_no = $.trim($('input#express_transaction_no').val());
         if (transaction_no === '') {
             toastr.error(LANG.required || 'This field is required');
@@ -1061,12 +1313,75 @@ $(document).ready(function() {
     });
 
     $(document).on('click', '.select-intasend-pos-payment', function() {
-        var transaction_code = $(this).data('transaction_code');
+        var button = $(this);
+        var transaction_code = $.trim(button.data('transaction_code') || '').toUpperCase();
+        var amount = parseFloat($(this).data('amount'));
         if (transaction_code) {
-            $('input#express_transaction_no').val(transaction_code);
-            toastr.success(LANG.mpesa_message_selected || LANG.intasend_collection_selected || 'M-PESA message selected');
-            if ($('div#transaction_no_modal').data('fill_only')) {
-                $('button#pos-save-transaction-no').click();
+            var transaction_modal = $('div#transaction_no_modal');
+            if (transaction_modal.data('mpesa_adding_payment')) {
+                return false;
+            }
+
+            if (button.data('selected') || is_mpesa_transaction_selected(transaction_code)) {
+                deselect_mpesa_payment(button, transaction_code);
+                return false;
+            }
+
+            if (isNaN(amount) || amount <= 0) {
+                toastr.error(LANG.invalid_payment_amount || 'Invalid payment amount');
+                return false;
+            }
+
+            var selected_count = parseInt(transaction_modal.data('mpesa_selected_count'), 10) || 0;
+            var payment_row = get_transaction_no_modal_payment_row();
+            var expected_amount = selected_count === 0
+                ? __read_number(payment_row.find('.payment-amount'))
+                : Math.max(__read_number($('input#in_balance_due')), 0);
+
+            var apply_selection = function(row, is_created) {
+                remember_mpesa_payment_row(row, is_created);
+                set_mpesa_payment_row(row, transaction_code, amount);
+                transaction_modal.data('mpesa_selected_count', selected_count + 1);
+                $('input#express_transaction_no').val(transaction_code);
+                sync_mpesa_candidate_buttons();
+
+                if (expected_amount > 0 && amount < expected_amount) {
+                    var warning_message =
+                        LANG.mpesa_selected_amount_is_less ||
+                        'The selected M-PESA amount (:selected) is less than the required amount (:required). Remaining balance: :balance.';
+
+                    warning_message = warning_message
+                        .replace(':selected', __currency_trans_from_en(amount, true))
+                        .replace(':required', __currency_trans_from_en(expected_amount, true))
+                        .replace(':balance', __currency_trans_from_en(expected_amount - amount, true));
+                    toastr.warning(warning_message);
+                } else {
+                    toastr.success(
+                        LANG.mpesa_message_selected_more_allowed ||
+                        'M-PESA message selected. You can select another message.'
+                    );
+                }
+
+                if (transaction_modal.data('fill_only')) {
+                    $('button#pos-save-transaction-no').text(
+                        LANG.use_selected_mpesa_messages || 'Use Selected M-PESA Messages'
+                    );
+                }
+            };
+
+            button.prop('disabled', true);
+            if (selected_count === 0) {
+                apply_selection(payment_row, false);
+            } else {
+                transaction_modal.data('mpesa_adding_payment', true);
+                add_mpesa_payment_row(function(success, new_payment_row) {
+                    transaction_modal.removeData('mpesa_adding_payment');
+                    if (success) {
+                        apply_selection(new_payment_row, true);
+                    } else {
+                        button.prop('disabled', false);
+                    }
+                });
             }
         }
     });

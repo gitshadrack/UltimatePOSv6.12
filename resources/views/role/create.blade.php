@@ -1745,24 +1745,6 @@
           <div class="col-md-12">
             <div class="checkbox">
               <label>
-                {!! Form::checkbox('permissions[]', 'intasend.settings', false,
-                [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.manage_intasend_settings' ) }}
-                <br>
-                {!! Form::checkbox('permissions[]', 'intasend.transactions', false,
-                [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.view_intasend_transactions' ) }}
-                <br>
-                {!! Form::checkbox('permissions[]', 'daraja.settings', false,
-                [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.manage_mpesa_settings' ) }}
-                <br>
-                {!! Form::checkbox('permissions[]', 'daraja.transactions', false,
-                [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.view_mpesa_transactions' ) }}
-              </label>
-            </div>
-          </div>
-
-          <div class="col-md-12">
-            <div class="checkbox">
-              <label>
                 {!! Form::checkbox('permissions[]', 'edit_account_transaction', false, 
                 [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.edit_account_transaction' ) }}
               </label>
@@ -1778,6 +1760,35 @@
             </div>
           </div>
         </div>
+        </div>
+        <hr>
+        <div class="row check_group">
+          <div class="col-md-3">
+            <h4>@lang('lang_v1.mpesa_role_permissions')</h4>
+          </div>
+          <div class="col-md-9">
+            <div class="col-md-6">
+              <h5><strong>@lang('lang_v1.intasend_provider')</strong></h5>
+              <div class="checkbox"><label>
+                {!! Form::checkbox('permissions[]', 'intasend.settings', false, ['class' => 'input-icheck']) !!} @lang('lang_v1.manage_intasend_settings')
+              </label></div>
+              <div class="checkbox"><label>
+                {!! Form::checkbox('permissions[]', 'intasend.transactions', false, ['class' => 'input-icheck']) !!} @lang('lang_v1.view_intasend_transactions')
+              </label></div>
+            </div>
+            <div class="col-md-6">
+              <h5><strong>@lang('lang_v1.safaricom_mpesa_provider')</strong></h5>
+              <div class="checkbox"><label>
+                {!! Form::checkbox('permissions[]', 'daraja.settings', false, ['class' => 'input-icheck']) !!} @lang('lang_v1.manage_mpesa_settings')
+              </label></div>
+              <div class="checkbox"><label>
+                {!! Form::checkbox('permissions[]', 'daraja.transactions', false, ['class' => 'input-icheck']) !!} @lang('lang_v1.view_mpesa_transactions')
+              </label></div>
+              <div class="checkbox"><label>
+                {!! Form::checkbox('permissions[]', 'mpesa.reversal', false, ['class' => 'input-icheck']) !!} @lang('lang_v1.reverse_mpesa_payments')
+              </label></div>
+            </div>
+          </div>
         </div>
         <hr>
         @if(in_array('booking', $enabled_modules))

@@ -16,6 +16,7 @@ class DarajaPayment extends Model
         'transaction_date' => 'datetime',
         'reversal_requested_at' => 'datetime',
         'reversed_at' => 'datetime',
+        'reversal_response' => 'array',
         'request_payload' => 'array',
         'payload' => 'array',
     ];

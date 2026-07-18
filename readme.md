@@ -1025,6 +1025,11 @@ What changed:
 - POS multiple-payment rows now support IntaSend STK Push per M-PESA split line. When a cashier selects `M-PESA` / `custom_pay_1` on any payment row, the row shows a `Send STK Push` button beside the transaction number field.
 - The IntaSend popup is row-aware for multiple payments. It uses the selected row's amount, searches collections for that row amount, and writes the selected M-PESA/IntaSend transaction code back to the same payment row instead of always using the first payment row.
 - Dynamically added payment rows also receive the IntaSend row action when the IntaSend module is enabled for the business.
+- The confirmed-message picker supports selecting more than one IntaSend or direct Daraja M-PESA receipt for the same sale. The first selected receipt fills the active M-PESA row, and every additional receipt creates a separate `custom_pay_1` payment row containing that receipt's provider amount and transaction code.
+- When a selected receipt amount is below the amount still required, POS shows a warning notification with the selected amount, required amount, and remaining balance. The cashier can then select another M-PESA message or add another payment method.
+- A selected message changes from `Select` to `Deselect`. Deselecting removes only that receipt, removes an extra payment row when applicable, restores the original active payment row when necessary, and recalculates the sale balance immediately.
+- The same receipt cannot be selected twice. Selected receipts remain visibly marked in the current picker session.
+- M-PESA message selections are provisional while the popup is open. Clicking `Use Selected M-PESA Messages` or `Finalize Payment` commits them. Closing the popup with `Close` or the `X` cancels all unconfirmed selections, removes payment rows created by that session, restores the original payment row, and resets the picker actions to `Select`.
 - IntaSend gross/net handling is explicit: `intasend_payments.amount` stores the customer-paid gross amount from `value`, while `net_amount`, `charges`, and `currency` store settlement details from IntaSend. Customer dues and POS M-PESA payments use the gross amount; finance reports can compare gross collected, charges, and net received.
 - POS transaction-code linking trusts the unique M-PESA/IntaSend code and does not require the POS gross amount to equal the IntaSend `net_amount`, because IntaSend may send `value` as the paid amount and `net_amount` after charges.
 - POS STK Push now carries the configured branch till/paybill in the outgoing `api_ref`, common till fields, and metadata. If IntaSend rejects the extended STK payload with a validation error, the sender retries once with the previous minimal payload so cashier checkout is not blocked by unsupported optional fields.
@@ -1586,6 +1591,85 @@ Reversal fields added to each provider payment table:
 - `reversed_at`
 
 The migration provides auditable reversal tracking for dashboard reporting. It does not by itself submit a reversal request to IntaSend or Safaricom; provider-specific reversal API actions remain a separate implementation.
+
+### Direct Daraja M-PESA Reversal Execution (2026-07-17)
+
+Direct Daraja receipts linked to a POS sale can now be submitted for a full reversal by a user with the `mpesa.reversal` permission. Configure the Safaricom initiator name and generated SecurityCredential under M-PESA Settings; the SecurityCredential is encrypted in the database and is distinct from the STK passkey.
+
+The request moves through `requested`, `pending`, `successful`, or `failed`. Ultimate POS does not change the invoice, account, or register when the request is merely accepted. After an authenticated Safaricom success callback, it creates an audited M-PESA return payment, posts the account debit, adds the register refund, and recalculates the sale payment status. Duplicate success callbacks are idempotent. Queue timeouts remain pending for manual provider-status verification and must not be retried blindly.
+
+Automatic provider reversal is intentionally unavailable for IntaSend collections because its published collection API does not expose an equivalent reversal operation. A payout is not treated as a reversal.
+
+#### Dashboard-to-reversal workflow
+
+1. IntaSend and direct Safaricom records are normalized into the unified M-PESA dashboard and metric reports.
+2. At POS, every selected M-PESA message sets its payment row to the provider's actual amount. IntaSend and Daraja receipt verification both require the receipt amount to match that row.
+3. A walk-in sale cannot be finalized with an unpaid balance. Multiple M-PESA messages or mixed payment methods are allowed when their combined payment covers the sale total.
+4. Saved M-PESA and IntaSend credentials render as `********`; their real values are not returned in the settings HTML. Leaving a masked field blank preserves the saved credential.
+5. Role Create/Edit screens contain a dedicated **M-PESA Permissions** group:
+   - IntaSend M-PESA: manage settings and view transactions.
+   - Direct Safaricom M-PESA: manage settings, view transactions, and reverse payments.
+6. A direct Daraja reversal requires transaction access (`daraja.transactions` or legacy `daraja.manage`) together with `mpesa.reversal`, unless the user is `superadmin`.
+7. Safaricom acceptance changes the reversal to pending only. Financial records change exclusively after the authenticated success callback.
+8. A successful callback creates one idempotent M-PESA return payment, debits the payment account, records a register refund, and recalculates the linked sale's payment status.
+9. A failed callback records the provider error without changing the sale. A queue timeout remains pending for manual verification and cannot be blindly resubmitted.
+
+#### POS M-PESA multiple-message cashier workflow
+
+1. Select M-PESA as the payment method and open the M-PESA tools.
+2. Search confirmed IntaSend or direct Daraja messages using the phone number, amount, or transaction code.
+3. Click `Select` on each receipt that belongs to the sale. Each receipt is recorded in its own M-PESA payment row so its amount and transaction code can be verified independently.
+4. If a receipt is selected by mistake, click `Deselect`. The receipt is removed and the outstanding balance is recalculated.
+5. If the selected messages do not cover the required amount, review the warning and select another message or add another payment method.
+6. Click `Use Selected M-PESA Messages` when working from a payment row, or `Finalize Payment` during express M-PESA checkout, to keep the selections.
+7. Use `Close` or the `X` to abandon the popup without keeping selections made during that popup session.
+
+Files involved in this picker workflow:
+
+- `public/js/pos.js` — message selection, provider amount application, multiple payment-row creation, duplicate prevention, underpayment notifications, deselection, commit, and close-to-cancel rollback.
+- `resources/views/sale_pos/partials/payment_modal.blade.php` — confirmed-message table and cashier instructions.
+- `public/js/lang/en.js` and `lang/en/lang_v1.php` — picker actions, notifications, and help text.
+
+No database migration is required for this UI workflow. After deployment, run `php artisan optimize:clear` and force-refresh the POS browser so the updated JavaScript is loaded.
+
+#### Affected files: M-PESA dashboard through reversal
+
+Unified dashboard and navigation:
+
+- `app/Http/Controllers/MpesaDashboardController.php` — unified provider metrics and drill-down records.
+- `app/Http/Middleware/AdminSidebarMenu.php` — permission-aware M-PESA sidebar.
+- `resources/views/mpesa/dashboard.blade.php` — dashboard cards and filters.
+- `resources/views/mpesa/records.blade.php` — unified metric record listing.
+- `database/migrations/2026_07_16_000001_add_reversal_tracking_to_mpesa_payments.php` — shared reversal status fields.
+- `app/IntaSendPayment.php` and `app/DarajaPayment.php` — reversal date/response casts.
+
+POS payment selection and amount enforcement:
+
+- `public/js/pos.js` — applies the selected provider message amount to its M-PESA payment row.
+- `app/Http/Controllers/SellPosController.php` — enforces full walk-in payment and rejects known receipt/row amount mismatches.
+- `app/Utils/IntaSendUtil.php` — requires IntaSend receipt and payment-row amounts to match.
+- `app/Utils/MpesaVerificationUtil.php` — resolves receipt verification across enabled providers.
+
+Daraja reversal execution:
+
+- `app/DarajaSetting.php` — encrypts/decrypts the reversal SecurityCredential.
+- `app/DarajaPayment.php` — casts reversal callback audit data.
+- `app/Http/Controllers/DarajaController.php` — authorization, reversal request action, result callback, and timeout callback.
+- `app/Utils/DarajaUtil.php` — Safaricom reversal request, state transitions, idempotent payment/account/register reversal, and invoice payment-status update.
+- `resources/views/daraja/settings.blade.php` — masked credentials, initiator settings, and callback URLs.
+- `resources/views/daraja/transactions.blade.php` — reversal status, confirmation modal, reason, and action.
+- `routes/web.php` — authenticated reversal request route.
+- `routes/webhooks.php` — token-protected Safaricom result and timeout routes.
+- `database/migrations/2026_07_17_000001_add_daraja_reversal_execution.php` — reversal credentials, callback audit fields, accounting link, and `mpesa.reversal` permission.
+
+IntaSend settings, roles, language, tests, and documentation:
+
+- `app/Http/Controllers/IntaSendController.php` — preserves masked IntaSend keys when settings are saved without replacement values.
+- `resources/views/intasend/settings.blade.php` — masks the public key, secret key, and webhook secret.
+- `resources/views/role/create.blade.php` and `resources/views/role/edit.blade.php` — dedicated provider-specific M-PESA permission group.
+- `lang/en/lang_v1.php` — dashboard, settings, permissions, validation, and reversal messages.
+- `tests/Unit/DarajaReversalTest.php` — encrypted credential and route registration checks.
+- `routes/web.php` and `readme.md` — dashboard/reversal routes and operational documentation.
 
 Server action:
 

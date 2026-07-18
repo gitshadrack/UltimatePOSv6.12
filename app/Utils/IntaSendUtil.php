@@ -212,10 +212,15 @@ class IntaSendUtil
 
     public function hasCompletePayment($business_id, $transaction_code, $amount = null)
     {
-        return IntaSendPayment::where('business_id', $business_id)
+        $query = IntaSendPayment::where('business_id', $business_id)
             ->where('transaction_code', $this->normalizeTransactionCode($transaction_code))
-            ->where('status', 'COMPLETE')
-            ->exists();
+            ->where('status', 'COMPLETE');
+
+        if ($amount !== null) {
+            $query->whereRaw('ABS(amount - ?) <= 0.01', [(float) $amount]);
+        }
+
+        return $query->exists();
     }
 
     public function linkPosTransactionPayment(TransactionPayment $transaction_payment, $transaction = null, $user_id = null)
@@ -232,6 +237,7 @@ class IntaSendUtil
         $query = IntaSendPayment::where('business_id', $transaction_payment->business_id)
             ->where('transaction_code', $transaction_code)
             ->where('status', 'COMPLETE')
+            ->whereRaw('ABS(amount - ?) <= 0.01', [(float) $transaction_payment->amount])
             ->where(function ($query) use ($transaction_payment) {
                 $query->whereNull('transaction_payment_id')
                     ->orWhere('transaction_payment_id', $transaction_payment->id);

@@ -143,6 +143,7 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::post('/daraja/settings', [DarajaController::class, 'updateSettings'])->name('daraja.settings.update');
     Route::get('/daraja/transactions', [DarajaController::class, 'transactions'])->name('daraja.transactions');
     Route::post('/daraja/payments/{id}/attach', [DarajaController::class, 'attach'])->name('daraja.attach');
+    Route::post('/daraja/payments/{id}/reverse', [DarajaController::class, 'requestReversal'])->name('daraja.reverse');
     Route::get('/daraja/pos-search', [DarajaController::class, 'posSearch'])->name('daraja.pos_search');
     Route::post('/daraja/stk-push', [DarajaController::class, 'sendStkPush'])->name('daraja.stk_push');
     Route::post('/daraja/settings/{id}/register-c2b-urls', [DarajaController::class, 'registerUrls'])->name('daraja.register_urls');

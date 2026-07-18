@@ -123,12 +123,14 @@ class IntaSendController extends Controller
             $data = [
                 'business_id' => $business_id,
                 'till_or_paybill_number' => trim((string) ($input['till_or_paybill_number'] ?? '')),
-                'intasend_public_key' => trim((string) ($input['intasend_public_key'] ?? '')),
                 'payment_link_url' => trim((string) ($input['payment_link_url'] ?? '')),
                 'require_webhook_signature' => ! empty($input['require_webhook_signature']) ? 1 : 0,
                 'is_active' => ! empty($input['is_active']) ? 1 : 0,
             ];
 
+            if (! empty($input['intasend_public_key'])) {
+                $data['intasend_public_key'] = trim((string) $input['intasend_public_key']);
+            }
             if (! empty($input['intasend_secret_key'])) {
                 $data['intasend_secret_key'] = trim((string) $input['intasend_secret_key']);
             }

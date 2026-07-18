@@ -55,7 +55,7 @@ class DarajaController extends Controller
                 ->where('business_location_id', $location->id)->first();
             $is_active = ! empty($input['is_active']);
             $credentials = [];
-            foreach (['consumer_key', 'consumer_secret', 'passkey'] as $secret) {
+            foreach (['consumer_key', 'consumer_secret', 'passkey', 'security_credential'] as $secret) {
                 $credentials[$secret] = trim((string) ($input[$secret] ?? '')) ?: optional($existing)->{$secret};
             }
             $shortcode = trim((string) ($input['business_shortcode'] ?? ''));
@@ -83,13 +83,14 @@ class DarajaController extends Controller
                 'c2b_shortcode' => $c2b_shortcode ?: $shortcode,
                 'transaction_type' => in_array($input['transaction_type'] ?? null, ['CustomerPayBillOnline', 'CustomerBuyGoodsOnline']) ? $input['transaction_type'] : 'CustomerPayBillOnline',
                 'account_reference' => trim((string) ($input['account_reference'] ?? 'UltimatePOS')),
+                'initiator_name' => trim((string) ($input['initiator_name'] ?? '')),
                 'callback_url' => trim((string) ($input['callback_url'] ?? '')),
                 'confirmation_url' => trim((string) ($input['confirmation_url'] ?? '')),
                 'validation_url' => trim((string) ($input['validation_url'] ?? '')),
                 'c2b_response_type' => ($input['c2b_response_type'] ?? null) === 'Cancelled' ? 'Cancelled' : 'Completed',
                 'is_active' => $is_active,
             ];
-            foreach (['consumer_key', 'consumer_secret', 'passkey'] as $secret) {
+            foreach (['consumer_key', 'consumer_secret', 'passkey', 'security_credential'] as $secret) {
                 if (! empty($input[$secret])) {
                     $data[$secret] = trim((string) $input[$secret]);
                 }
@@ -129,6 +130,8 @@ class DarajaController extends Controller
                 $query->where('daraja_payments.source', $request->input('source'));
             }
 
+            $can_reverse = auth()->user()->can('mpesa.reversal') || auth()->user()->can('superadmin');
+
             return DataTables::of($query)
                 ->editColumn('amount', function ($row) {
                     return '<span class="display_currency" data-currency_symbol="true">'.$this->transactionUtil->num_f($row->amount, true).'</span>';
@@ -136,14 +139,28 @@ class DarajaController extends Controller
                 ->editColumn('created_at', function ($row) {
                     return $this->transactionUtil->format_date($row->created_at, true);
                 })
-                ->addColumn('action', function ($row) {
+                ->addColumn('reversal', function ($row) {
+                    $status = $row->reversal_status ?? 'none';
+                    $class = $status === 'successful' ? 'success' : ($status === 'failed' ? 'danger' : ($status === 'none' ? 'default' : 'warning'));
+
+                    return '<span class="label label-'.$class.'">'.e(strtoupper($status)).'</span>';
+                })
+                ->addColumn('action', function ($row) use ($can_reverse) {
+                    $actions = [];
                     if (empty($row->is_attached) && $row->status === 'COMPLETE') {
-                        return '<button type="button" class="btn btn-xs btn-primary attach-daraja-payment" data-id="'.$row->id.'">'.__('lang_v1.link_payment').'</button>';
+                        $actions[] = '<button type="button" class="btn btn-xs btn-primary attach-daraja-payment" data-id="'.$row->id.'">'.__('lang_v1.link_payment').'</button>';
+                    }
+                    if ($row->payment_ref_no) {
+                        $actions[] = '<span class="label label-success">'.e($row->payment_ref_no).'</span>';
+                    }
+                    if ($can_reverse && $row->status === 'COMPLETE' && ! empty($row->transaction_payment_id)
+                        && ($row->reversal_status ?? 'none') === 'none') {
+                        $actions[] = '<button type="button" class="btn btn-xs btn-danger reverse-daraja-payment" data-url="'.e(route('daraja.reverse', $row->id)).'" data-code="'.e($row->transaction_code).'">'.__('lang_v1.reverse_mpesa_payment').'</button>';
                     }
 
-                    return $row->payment_ref_no ? '<span class="label label-success">'.e($row->payment_ref_no).'</span>' : '--';
+                    return empty($actions) ? '--' : implode(' ', $actions);
                 })
-                ->rawColumns(['amount', 'action'])->make(true);
+                ->rawColumns(['amount', 'reversal', 'action'])->make(true);
         }
 
         $business_locations = BusinessLocation::forDropdown($business_id, true);
@@ -187,6 +204,37 @@ class DarajaController extends Controller
             ];
         } catch (\Exception $e) {
             Log::error('Daraja STK push failed: '.$e->getMessage());
+            return ['success' => false, 'msg' => $e->getMessage()];
+        }
+    }
+
+    public function requestReversal(Request $request, $id)
+    {
+        $this->authorizeReversal($request);
+        $request->validate(['reason' => 'required|string|min:5|max:500']);
+
+        if (! Schema::hasColumn('daraja_settings', 'security_credential')
+            || ! Schema::hasColumn('daraja_payments', 'reversal_response')) {
+            return ['success' => false, 'msg' => __('lang_v1.run_daraja_migration')];
+        }
+
+        try {
+            $business_id = $request->session()->get('user.business_id');
+            $payment = DarajaPayment::where('business_id', $business_id)->findOrFail($id);
+            $setting = DarajaSetting::where('business_id', $business_id)->findOrFail($payment->daraja_setting_id);
+            if (empty($setting->initiator_name) || empty($setting->security_credential)) {
+                return ['success' => false, 'msg' => __('lang_v1.daraja_reversal_credentials_missing')];
+            }
+
+            $result = $this->darajaUtil->requestReversal($setting, $payment, $request->input('reason'), auth()->id());
+            $message = $result['accepted']
+                ? __('lang_v1.daraja_reversal_requested')
+                : ($result['data']['errorMessage'] ?? $result['data']['ResponseDescription'] ?? __('lang_v1.daraja_reversal_request_failed'));
+
+            return ['success' => $result['accepted'], 'msg' => $message];
+        } catch (\Exception $e) {
+            Log::error('M-PESA reversal request failed: '.$e->getMessage(), ['daraja_payment_id' => $id]);
+
             return ['success' => false, 'msg' => $e->getMessage()];
         }
     }
@@ -274,6 +322,38 @@ class DarajaController extends Controller
         }
     }
 
+    public function reversalResult(Request $request, $setting)
+    {
+        try {
+            $setting = DarajaSetting::findOrFail($setting);
+            $this->verifyCallbackToken($request, $setting);
+            $payment = $this->darajaUtil->recordReversalResult($setting, $request->all());
+            Log::info('Daraja reversal result processed.', ['daraja_payment_id' => $payment->id]);
+
+            return response()->json(['ResultCode' => 0, 'ResultDesc' => 'Accepted']);
+        } catch (\Exception $e) {
+            Log::error('Daraja reversal result failed: '.$e->getMessage(), ['payload' => $request->all()]);
+
+            return response()->json(['ResultCode' => 1, 'ResultDesc' => 'Rejected'], 422);
+        }
+    }
+
+    public function reversalTimeout(Request $request, $setting)
+    {
+        try {
+            $setting = DarajaSetting::findOrFail($setting);
+            $this->verifyCallbackToken($request, $setting);
+            $payment = $this->darajaUtil->recordReversalTimeout($setting, $request->all());
+            Log::warning('Daraja reversal queue timeout recorded.', ['daraja_payment_id' => $payment->id]);
+
+            return response()->json(['ResultCode' => 0, 'ResultDesc' => 'Accepted']);
+        } catch (\Exception $e) {
+            Log::error('Daraja reversal timeout failed: '.$e->getMessage(), ['payload' => $request->all()]);
+
+            return response()->json(['ResultCode' => 1, 'ResultDesc' => 'Rejected'], 422);
+        }
+    }
+
     public function registerUrls(Request $request, $setting_id)
     {
         $this->authorizeSettings($request);
@@ -329,6 +409,16 @@ class DarajaController extends Controller
         $this->authorizeModule($request);
     }
 
+    protected function authorizeReversal(Request $request)
+    {
+        $user = auth()->user();
+        $can_view_transactions = $user->can('daraja.transactions') || $user->can('daraja.manage');
+        if (! ($user->can('superadmin') || ($user->can('mpesa.reversal') && $can_view_transactions))) {
+            abort(403, 'Unauthorized action.');
+        }
+        $this->authorizeModule($request);
+    }
+
     protected function authorizePosUse(Request $request)
     {
         $this->authorizeModule($request);
@@ -344,7 +434,10 @@ class DarajaController extends Controller
 
     protected function hasSchema()
     {
-        return Schema::hasTable('daraja_settings') && Schema::hasTable('daraja_payments');
+        return Schema::hasTable('daraja_settings')
+            && Schema::hasTable('daraja_payments')
+            && Schema::hasColumn('daraja_settings', 'security_credential')
+            && Schema::hasColumn('daraja_payments', 'reversal_response');
     }
 
     protected function verifyCallbackToken(Request $request, DarajaSetting $setting)

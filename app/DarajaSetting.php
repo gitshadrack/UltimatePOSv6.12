@@ -61,6 +61,16 @@ class DarajaSetting extends Model
         return $this->decryptCredential($value);
     }
 
+    public function setSecurityCredentialAttribute($value)
+    {
+        $this->attributes['security_credential'] = $this->encryptCredential($value);
+    }
+
+    public function getSecurityCredentialAttribute($value)
+    {
+        return $this->decryptCredential($value);
+    }
+
     protected function encryptCredential($value)
     {
         return $value === null || $value === '' ? null : Crypt::encryptString((string) $value);

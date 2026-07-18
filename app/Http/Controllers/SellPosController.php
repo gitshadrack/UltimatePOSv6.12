@@ -49,6 +49,7 @@ use App\Utils\BusinessUtil;
 use App\Utils\CashRegisterUtil;
 use App\Utils\ContactUtil;
 use App\Utils\ModuleUtil;
+use App\Utils\MpesaVerificationUtil;
 use App\Utils\NotificationUtil;
 use App\Utils\ProductUtil;
 use App\Utils\TransactionUtil;
@@ -431,6 +432,19 @@ class SellPosController extends Controller
             if (!empty($input['products'])) {
                 $business_id = $request->session()->get('user.business_id');
 
+                $walk_in_payment_error = $this->validateWalkInPaymentTotal($input, $business_id);
+                if (! empty($walk_in_payment_error)) {
+                    $output = ['success' => 0, 'msg' => $walk_in_payment_error];
+
+                    if (! $is_direct_sale) {
+                        return $output;
+                    }
+
+                    return redirect()
+                        ->action([\App\Http\Controllers\SellController::class, 'index'])
+                        ->with('status', $output);
+                }
+
                 //Check if subscribed or not, then check for users quota
                 if (!$this->moduleUtil->isSubscribed($business_id)) {
                     return $this->moduleUtil->expiredResponse();
@@ -784,6 +798,62 @@ class SellPosController extends Controller
                     ->with('status', $output);
             }
         }
+    }
+
+    /**
+     * Walk-in customers cannot carry a balance. Multiple payment rows are
+     * allowed, but their combined amount must cover the finalized sale.
+     */
+    private function validateWalkInPaymentTotal(array $input, $business_id)
+    {
+        if (($input['status'] ?? null) !== 'final' || ! empty($input['is_suspend'])) {
+            return null;
+        }
+
+        $is_walk_in = Contact::where('business_id', $business_id)
+            ->where('id', $input['contact_id'] ?? null)
+            ->where('is_default', 1)
+            ->exists();
+
+        if (! $is_walk_in) {
+            return null;
+        }
+
+        $mpesa_verification = new MpesaVerificationUtil();
+        foreach ($input['payment'] ?? [] as $payment) {
+            if (($payment['method'] ?? null) !== 'custom_pay_1') {
+                continue;
+            }
+
+            $transaction_code = strtoupper(trim((string) ($payment['transaction_no_1'] ?? '')));
+            $amount = $this->transactionUtil->num_uf($payment['amount'] ?? 0);
+
+            // Keep manually entered, not-yet-received codes in the existing
+            // pending verification workflow. If the provider already has the
+            // receipt, however, its amount must match this M-PESA row.
+            if ($transaction_code !== ''
+                && $mpesa_verification->hasCompletePayment($business_id, $transaction_code)
+                && ! $mpesa_verification->hasCompletePayment($business_id, $transaction_code, $amount)) {
+                return __('lang_v1.mpesa_payment_amount_mismatch', [
+                    'code' => $transaction_code,
+                    'amount' => $this->transactionUtil->num_f($amount, true),
+                ]);
+            }
+        }
+
+        $total_paid = collect($input['payment'] ?? [])->sum(function ($payment) {
+            return $this->transactionUtil->num_uf($payment['amount'] ?? 0);
+        });
+        $final_total = $this->transactionUtil->num_uf($input['final_total'] ?? 0);
+
+        if ($total_paid + 0.01 < $final_total) {
+            return __('lang_v1.walk_in_customer_payment_must_be_full', [
+                'paid' => $this->transactionUtil->num_f($total_paid, true),
+                'total' => $this->transactionUtil->num_f($final_total, true),
+            ]);
+        }
+
+        return null;
     }
 
     /**

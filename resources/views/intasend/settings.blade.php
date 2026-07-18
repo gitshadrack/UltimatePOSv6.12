@@ -40,13 +40,13 @@
                             <div class="col-md-3">
                                 <div class="form-group">
                                     {!! Form::label("locations[$location->id][intasend_public_key]", __('lang_v1.intasend_public_key') . ':') !!}
-                                    {!! Form::text("locations[$location->id][intasend_public_key]", optional($setting)->intasend_public_key, ['class' => 'form-control']) !!}
+                                    {!! Form::password("locations[$location->id][intasend_public_key]", ['class' => 'form-control', 'placeholder' => !empty(optional($setting)->intasend_public_key) ? '********' : '', 'title' => __('lang_v1.leave_blank_to_keep_current'), 'autocomplete' => 'new-password']) !!}
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="form-group">
                                     {!! Form::label("locations[$location->id][intasend_secret_key]", __('lang_v1.intasend_secret_key') . ':') !!}
-                                    {!! Form::password("locations[$location->id][intasend_secret_key]", ['class' => 'form-control', 'placeholder' => !empty($setting->intasend_secret_key) ? __('lang_v1.leave_blank_to_keep_current') : '']) !!}
+                                    {!! Form::password("locations[$location->id][intasend_secret_key]", ['class' => 'form-control', 'placeholder' => !empty(optional($setting)->intasend_secret_key) ? '********' : '', 'title' => __('lang_v1.leave_blank_to_keep_current'), 'autocomplete' => 'new-password']) !!}
                                 </div>
                             </div>
                             <div class="col-md-3">
@@ -60,7 +60,7 @@
                             <div class="col-md-4">
                                 <div class="form-group">
                                     {!! Form::label("locations[$location->id][webhook_secret]", __('lang_v1.webhook_secret') . ':') !!}
-                                    {!! Form::password("locations[$location->id][webhook_secret]", ['class' => 'form-control', 'placeholder' => !empty($setting->webhook_secret) ? __('lang_v1.leave_blank_to_keep_current') : '']) !!}
+                                    {!! Form::password("locations[$location->id][webhook_secret]", ['class' => 'form-control', 'placeholder' => !empty(optional($setting)->webhook_secret) ? '********' : '', 'title' => __('lang_v1.leave_blank_to_keep_current'), 'autocomplete' => 'new-password']) !!}
                                     <p class="help-block">@lang('lang_v1.intasend_webhook_secret_help')</p>
                                 </div>
                             </div>

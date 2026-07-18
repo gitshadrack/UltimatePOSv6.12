@@ -25,11 +25,11 @@
                             </div>
                             <div class="col-md-3">
                                 {!! Form::label("locations[$location->id][consumer_key]", __('lang_v1.consumer_key')) !!}
-                                {!! Form::password("locations[$location->id][consumer_key]", ['class' => 'form-control', 'placeholder' => !empty(optional($setting)->consumer_key) ? __('lang_v1.leave_blank_to_keep_current') : '']) !!}
+                                {!! Form::password("locations[$location->id][consumer_key]", ['class' => 'form-control', 'placeholder' => !empty(optional($setting)->consumer_key) ? '********' : '', 'title' => __('lang_v1.leave_blank_to_keep_current'), 'autocomplete' => 'new-password']) !!}
                             </div>
                             <div class="col-md-3">
                                 {!! Form::label("locations[$location->id][consumer_secret]", __('lang_v1.consumer_secret')) !!}
-                                {!! Form::password("locations[$location->id][consumer_secret]", ['class' => 'form-control', 'placeholder' => !empty(optional($setting)->consumer_secret) ? __('lang_v1.leave_blank_to_keep_current') : '']) !!}
+                                {!! Form::password("locations[$location->id][consumer_secret]", ['class' => 'form-control', 'placeholder' => !empty(optional($setting)->consumer_secret) ? '********' : '', 'title' => __('lang_v1.leave_blank_to_keep_current'), 'autocomplete' => 'new-password']) !!}
                             </div>
                             <div class="col-md-2">
                                 {!! Form::label("locations[$location->id][business_shortcode]", __('lang_v1.business_shortcode')) !!}
@@ -37,7 +37,19 @@
                             </div>
                             <div class="col-md-2">
                                 {!! Form::label("locations[$location->id][passkey]", __('lang_v1.daraja_passkey')) !!}
-                                {!! Form::password("locations[$location->id][passkey]", ['class' => 'form-control', 'placeholder' => !empty(optional($setting)->passkey) ? __('lang_v1.leave_blank_to_keep_current') : '']) !!}
+                                {!! Form::password("locations[$location->id][passkey]", ['class' => 'form-control', 'placeholder' => !empty(optional($setting)->passkey) ? '********' : '', 'title' => __('lang_v1.leave_blank_to_keep_current'), 'autocomplete' => 'new-password']) !!}
+                            </div>
+                        </div>
+                        <br>
+                        <div class="row">
+                            <div class="col-md-4">
+                                {!! Form::label("locations[$location->id][initiator_name]", __('lang_v1.daraja_initiator_name')) !!}
+                                {!! Form::text("locations[$location->id][initiator_name]", optional($setting)->initiator_name, ['class' => 'form-control']) !!}
+                            </div>
+                            <div class="col-md-8">
+                                {!! Form::label("locations[$location->id][security_credential]", __('lang_v1.daraja_security_credential')) !!}
+                                {!! Form::password("locations[$location->id][security_credential]", ['class' => 'form-control', 'placeholder' => !empty(optional($setting)->security_credential) ? '********' : '', 'title' => __('lang_v1.leave_blank_to_keep_current'), 'autocomplete' => 'new-password']) !!}
+                                <p class="help-block">@lang('lang_v1.daraja_security_credential_help')</p>
                             </div>
                         </div>
                         <br>
@@ -87,6 +99,10 @@
                         <div class="checkbox"><label>{!! Form::checkbox("locations[$location->id][is_active]", 1, $settingIsComplete && !empty($setting->is_active), ['class' => 'input-icheck']) !!} @lang('business.is_active')</label></div>
                         @if(!empty($setting))
                             <button type="button" class="btn btn-default register-daraja-urls" data-url="{{ route('daraja.register_urls', $setting->id) }}"><i class="fa fa-link"></i> @lang('lang_v1.register_c2b_urls')</button>
+                            <p class="help-block">
+                                @lang('lang_v1.daraja_reversal_result_url'): <code>{{ route('daraja.reversal_result', ['setting' => $setting->id, 'token' => $setting->callback_token]) }}</code><br>
+                                @lang('lang_v1.daraja_reversal_timeout_url'): <code>{{ route('daraja.reversal_timeout', ['setting' => $setting->id, 'token' => $setting->callback_token]) }}</code>
+                            </p>
                         @endif
                     </div>
                 </div>

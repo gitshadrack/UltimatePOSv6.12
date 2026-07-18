@@ -267,6 +267,7 @@
                         @endif
                     </div>
                     <div id="intasend_pos_candidates" class="table-responsive hide">
+                        <p class="help-block">@lang('lang_v1.mpesa_multiple_selection_help')</p>
                         <table class="table table-condensed table-bordered">
                             <thead>
                                 <tr>

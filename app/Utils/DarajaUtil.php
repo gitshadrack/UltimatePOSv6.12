@@ -4,6 +4,7 @@ namespace App\Utils;
 
 use App\AccountTransaction;
 use App\BusinessLocation;
+use App\CashRegisterTransaction;
 use App\Contact;
 use App\DarajaPayment;
 use App\DarajaSetting;
@@ -179,6 +180,205 @@ class DarajaUtil
             'data' => $data,
             'status' => $response->status(),
         ];
+    }
+
+    /**
+     * Submit a full reversal for a directly linked POS M-PESA payment.
+     */
+    public function requestReversal(DarajaSetting $setting, DarajaPayment $payment, $reason, $user_id)
+    {
+        $payment = DB::transaction(function () use ($setting, $payment, $reason, $user_id) {
+            $payment = DarajaPayment::lockForUpdate()->findOrFail($payment->id);
+
+            if ((int) $payment->daraja_setting_id !== (int) $setting->id
+                || (int) $payment->business_id !== (int) $setting->business_id) {
+                throw new \Exception(__('lang_v1.daraja_reversal_invalid_payment'));
+            }
+            if ($payment->status !== 'COMPLETE' || empty($payment->transaction_code)) {
+                throw new \Exception(__('lang_v1.daraja_reversal_requires_complete_payment'));
+            }
+            if ($payment->reversal_status !== 'none') {
+                throw new \Exception(__('lang_v1.daraja_reversal_already_requested'));
+            }
+
+            $transaction_payment = TransactionPayment::with('transaction')->find($payment->transaction_payment_id);
+            if (empty($transaction_payment) || empty($transaction_payment->transaction_id)
+                || empty($transaction_payment->transaction) || $transaction_payment->transaction->type !== 'sell') {
+                throw new \Exception(__('lang_v1.daraja_reversal_requires_linked_sale'));
+            }
+            if (abs((float) $transaction_payment->amount - (float) $payment->amount) > 0.01) {
+                throw new \Exception(__('lang_v1.daraja_reversal_amount_mismatch'));
+            }
+
+            $payment->reversal_status = 'requested';
+            $payment->reversal_note = trim((string) $reason);
+            $payment->reversal_requested_by = $user_id;
+            $payment->reversal_requested_at = Carbon::now();
+            $payment->save();
+
+            return $payment;
+        });
+
+        $payload = [
+            'Initiator' => trim((string) $setting->initiator_name),
+            'SecurityCredential' => trim((string) $setting->security_credential),
+            'CommandID' => 'TransactionReversal',
+            'TransactionID' => strtoupper(trim((string) $payment->transaction_code)),
+            'Amount' => max(1, (int) round((float) $payment->amount)),
+            'ReceiverParty' => trim((string) ($payment->business_shortcode ?: $setting->business_shortcode)),
+            'RecieverIdentifierType' => '11',
+            'ResultURL' => $this->callbackUrl($setting, null, 'daraja.reversal_result'),
+            'QueueTimeOutURL' => $this->callbackUrl($setting, null, 'daraja.reversal_timeout'),
+            'Remarks' => substr(trim((string) $reason), 0, 100),
+            'Occasion' => 'UltimatePOS',
+        ];
+
+        try {
+            $response = $this->httpClient()->withToken($this->accessToken($setting))
+                ->asJson()->timeout(30)
+                ->post($this->baseUrl($setting).'/mpesa/reversal/v1/request', $payload);
+            $data = $response->json() ?: [];
+            $accepted = $response->successful() && (string) ($data['ResponseCode'] ?? '') === '0';
+
+            $payment->refresh();
+            $payment->reversal_status = $accepted ? 'pending' : 'failed';
+            $payment->reversal_request_id = $data['OriginatorConversationID'] ?? $data['ConversationID'] ?? null;
+            $payment->reversal_response = ['request' => $payload, 'response' => $data, 'http_status' => $response->status()];
+            if (! $accepted) {
+                $payment->reversal_note = trim($payment->reversal_note.' | '.($data['errorMessage'] ?? $data['ResponseDescription'] ?? 'Provider rejected the reversal request.'));
+            }
+            $payment->save();
+
+            return ['accepted' => $accepted, 'payment' => $payment, 'data' => $data, 'http_status' => $response->status()];
+        } catch (\Throwable $e) {
+            $payment->refresh();
+            $payment->reversal_status = 'failed';
+            $payment->reversal_note = trim($payment->reversal_note.' | Request failed: '.$e->getMessage());
+            $payment->save();
+            throw $e;
+        }
+    }
+
+    public function recordReversalResult(DarajaSetting $setting, array $payload)
+    {
+        $result = (array) data_get($payload, 'Result', []);
+        $request_id = $result['OriginatorConversationID'] ?? null;
+        $payment = DarajaPayment::where('daraja_setting_id', $setting->id)
+            ->where('reversal_request_id', $request_id)
+            ->first();
+
+        if (empty($request_id) || empty($payment)) {
+            throw new \Exception('Daraja reversal result does not match a requested reversal.');
+        }
+
+        $result_code = (int) ($result['ResultCode'] ?? 1);
+        if ($result_code !== 0) {
+            $payment->reversal_status = 'failed';
+            $payment->reversal_note = trim($payment->reversal_note.' | '.($result['ResultDesc'] ?? 'M-PESA reversal failed.'));
+            $payment->reversal_response = array_merge((array) $payment->reversal_response, ['result' => $payload]);
+            $payment->save();
+
+            return $payment->fresh();
+        }
+
+        return DB::transaction(function () use ($payment, $payload, $result) {
+            $payment = DarajaPayment::lockForUpdate()->findOrFail($payment->id);
+            if ($payment->reversal_status === 'successful') {
+                return $payment;
+            }
+
+            $this->applySuccessfulReversal($payment, $result['ResultDesc'] ?? 'M-PESA reversal completed.');
+            $payment->reversal_status = 'successful';
+            $payment->reversed_at = Carbon::now();
+            $payment->reversal_response = array_merge((array) $payment->reversal_response, ['result' => $payload]);
+            $payment->save();
+
+            return $payment;
+        });
+    }
+
+    public function recordReversalTimeout(DarajaSetting $setting, array $payload)
+    {
+        $result = (array) data_get($payload, 'Result', []);
+        $request_id = $result['OriginatorConversationID'] ?? null;
+        $payment = DarajaPayment::where('daraja_setting_id', $setting->id)
+            ->where('reversal_request_id', $request_id)
+            ->first();
+
+        if (empty($request_id) || empty($payment)) {
+            throw new \Exception('Daraja reversal timeout does not match a requested reversal.');
+        }
+
+        if ($payment->reversal_status !== 'successful') {
+            // A queue timeout is not proof that money was not reversed. Leave
+            // it pending for provider-status reconciliation instead of retrying.
+            $payment->reversal_status = 'pending';
+            $payment->reversal_note = trim($payment->reversal_note.' | Provider queue timeout; verify status before any retry.');
+            $payment->reversal_response = array_merge((array) $payment->reversal_response, ['timeout' => $payload]);
+            $payment->save();
+        }
+
+        return $payment->fresh();
+    }
+
+    protected function applySuccessfulReversal(DarajaPayment $payment, $result_description)
+    {
+        if (! empty($payment->reversal_transaction_payment_id)) {
+            return TransactionPayment::find($payment->reversal_transaction_payment_id);
+        }
+
+        $original = TransactionPayment::with('transaction')->lockForUpdate()->find($payment->transaction_payment_id);
+        if (empty($original) || empty($original->transaction_id) || empty($original->transaction)) {
+            throw new \Exception('The linked POS payment is unavailable for reversal accounting.');
+        }
+
+        $created_by = $payment->reversal_requested_by ?: $original->created_by;
+        $reversal = TransactionPayment::create([
+            'transaction_id' => $original->transaction_id,
+            'business_id' => $original->business_id,
+            'amount' => $original->amount,
+            'method' => 'custom_pay_1',
+            'transaction_no' => 'REV-'.strtoupper((string) $payment->transaction_code),
+            'paid_on' => Carbon::now()->toDateTimeString(),
+            'created_by' => $created_by,
+            'payment_for' => $original->payment_for,
+            'payment_ref_no' => 'REV-DJ-'.$payment->id,
+            'account_id' => $original->account_id,
+            'payment_type' => 'debit',
+            'is_return' => 1,
+            'note' => 'M-PESA reversal for '.$payment->transaction_code.'. '.$result_description,
+            'mpesa_verification_status' => 'verified',
+            'mpesa_verified_by' => $created_by,
+            'mpesa_verified_at' => Carbon::now(),
+            'mpesa_verification_note' => 'Verified by successful Daraja reversal callback.',
+        ]);
+
+        event(new TransactionPaymentAdded($reversal, [
+            'transaction_type' => 'sell',
+            'amount' => $reversal->amount,
+            'account_id' => $reversal->account_id,
+            'is_return' => 1,
+        ]));
+
+        $register_id = CashRegisterTransaction::where('transaction_id', $original->transaction_id)
+            ->where('pay_method', 'custom_pay_1')
+            ->orderBy('id')
+            ->value('cash_register_id');
+        if (! empty($register_id)) {
+            CashRegisterTransaction::create([
+                'cash_register_id' => $register_id,
+                'amount' => $reversal->amount,
+                'pay_method' => 'custom_pay_1',
+                'type' => 'debit',
+                'transaction_type' => 'refund',
+                'transaction_id' => $original->transaction_id,
+            ]);
+        }
+
+        (new TransactionUtil())->updatePaymentStatus($original->transaction_id, $original->transaction->final_total);
+        $payment->reversal_transaction_payment_id = $reversal->id;
+
+        return $reversal;
     }
 
     public function hasCompletePayment($business_id, $transaction_code, $amount = null)
