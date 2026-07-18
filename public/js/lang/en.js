@@ -1,5 +1,8 @@
 LANG = {
     'required': 'Required',
+    'mpesa_sending_stk': 'Sending M-PESA request...',
+    'session_expired': 'Your session has expired. Refresh the POS and try again.',
+    'unauthorized': 'You are not authorized to perform this action.',
     'sure': 'Are you sure ?',
     'remove_product': 'Are you sure to remove the product?',
     'cancel_invoice':  'Are you sure to cancel the invoice?',

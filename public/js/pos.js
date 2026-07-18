@@ -1159,6 +1159,48 @@ $(document).ready(function() {
             $('#intasend_stk_phone_number').val('');
             __write_number($('#intasend_stk_amount'), amount > 0 ? amount : __read_number($('input#final_total_input')));
         }
+
+        $('#mpesa_stk_status').addClass('hide').removeClass('alert-success alert-danger alert-warning').empty();
+    }
+
+    function show_mpesa_stk_status(message, type) {
+        var status = $('#mpesa_stk_status');
+        if (!status.length) {
+            return;
+        }
+
+        status
+            .removeClass('hide alert-success alert-danger alert-warning alert-info')
+            .addClass('alert-' + (type || 'info'))
+            .text(message);
+    }
+
+    function mpesa_ajax_error_message(xhr) {
+        var response = xhr && xhr.responseJSON ? xhr.responseJSON : {};
+
+        if (response.msg) {
+            return response.msg;
+        }
+        if (response.errors) {
+            var messages = [];
+            $.each(response.errors, function(field, field_messages) {
+                messages = messages.concat($.isArray(field_messages) ? field_messages : [field_messages]);
+            });
+            if (messages.length) {
+                return messages.join(' ');
+            }
+        }
+        if (response.message) {
+            return response.message;
+        }
+        if (xhr && xhr.status === 419) {
+            return LANG.session_expired || 'Your session has expired. Refresh the POS and try again.';
+        }
+        if (xhr && xhr.status === 403) {
+            return LANG.unauthorized || 'You are not authorized to use this M-PESA provider.';
+        }
+
+        return LANG.something_went_wrong || 'Something went wrong';
     }
 
     $('div#transaction_no_modal').on('shown.bs.modal', function(e) {
@@ -1176,6 +1218,7 @@ $(document).ready(function() {
 
     $('div#transaction_no_modal').on('hidden.bs.modal', function(e) {
         var save_button = $('button#pos-save-transaction-no');
+        var resume_payment_modal = $(this).data('resume_payment_modal');
 
         if (!$(this).data('mpesa_selection_committed')) {
             rollback_mpesa_selection_session();
@@ -1186,8 +1229,13 @@ $(document).ready(function() {
             .removeData('fill_only')
             .removeData('mpesa_selected_count')
             .removeData('mpesa_selection_committed')
-            .removeData('mpesa_adding_payment');
+            .removeData('mpesa_adding_payment')
+            .removeData('resume_payment_modal');
         save_button.text(save_button.data('default_text') || save_button.text());
+
+        if (resume_payment_modal) {
+            $('div#modal_payment').modal('show');
+        }
     });
 
     $('div#confirmSuspendModal').on('shown.bs.modal', function(e) {
@@ -1275,6 +1323,7 @@ $(document).ready(function() {
         }
 
         toastr.clear();
+        show_mpesa_stk_status(LANG.mpesa_sending_stk || 'Sending M-PESA request...', 'info');
         button.data('requesting', true).prop('disabled', true);
 
         $.ajax({
@@ -1284,21 +1333,28 @@ $(document).ready(function() {
             data: {
                 phone_number: phone_number,
                 amount: amount,
-                location_id: $('input#location_id').val(),
+                location_id: $('#location_id').val(),
                 contact_id: $('select#customer_id').val(),
+                _token: $('meta[name="csrf-token"]').attr('content'),
             },
             success: function(result) {
                 if (result.success) {
-                    toastr.success(result.msg || LANG.intasend_stk_push_sent || 'STK push sent');
+                    var success_message = result.msg || LANG.intasend_stk_push_sent || 'STK push sent';
+                    show_mpesa_stk_status(success_message, 'success');
+                    toastr.success(success_message);
                     setTimeout(function() {
                         search_intasend_pos_collections(provider);
                     }, 3000);
                 } else {
-                    toastr.error(result.msg || LANG.something_went_wrong);
+                    var failure_message = result.msg || LANG.something_went_wrong;
+                    show_mpesa_stk_status(failure_message, 'danger');
+                    toastr.error(failure_message);
                 }
             },
-            error: function() {
-                toastr.error(LANG.something_went_wrong || 'Something went wrong');
+            error: function(xhr) {
+                var error_message = mpesa_ajax_error_message(xhr);
+                show_mpesa_stk_status(error_message, 'danger');
+                toastr.error(error_message);
             },
             complete: function() {
                 button.data('requesting', false).prop('disabled', false);
@@ -1389,12 +1445,25 @@ $(document).ready(function() {
     $(document).on('click', '.intasend-row-action', function() {
         var row_index = $(this).data('row_index');
         var transaction_no_index = $(this).data('transaction_no_index') || 1;
+        var payment_modal = $('div#modal_payment');
+        var transaction_modal = $('div#transaction_no_modal');
 
-        $('div#transaction_no_modal')
+        transaction_modal
             .data('transaction_no_index', transaction_no_index)
             .data('payment_row_index', row_index)
-            .data('fill_only', true)
-            .modal('show');
+            .data('fill_only', true);
+
+        // Bootstrap 3 does not reliably support one modal directly on top of another.
+        // Temporarily close Multiple Payment and restore it when M-PESA Checkout closes.
+        if (payment_modal.hasClass('in')) {
+            transaction_modal.data('resume_payment_modal', true);
+            payment_modal.one('hidden.bs.modal.mpesaTools', function() {
+                transaction_modal.modal('show');
+            });
+            payment_modal.modal('hide');
+        } else {
+            transaction_modal.modal('show');
+        }
     });
 
     $('button#pos-suspend').click(function() {

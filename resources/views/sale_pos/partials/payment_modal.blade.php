@@ -222,12 +222,12 @@
 
 <!-- Used for express checkout payment methods that only require a transaction number -->
 <div class="modal fade" tabindex="-1" role="dialog" id="transaction_no_modal">
-    <div class="modal-dialog" role="document">
+    <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span
                         aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title">@lang('lang_v1.transaction_no')</h4>
+                <h4 class="modal-title"><i class="fa fa-mobile"></i> @lang('lang_v1.mpesa_checkout')</h4>
             </div>
             <div class="modal-body">
                 @php
@@ -236,6 +236,7 @@
                     $is_mpesa_gateway_enabled = $is_intasend_enabled || $is_daraja_enabled;
                 @endphp
                 @if($is_mpesa_gateway_enabled)
+                    <div id="mpesa_stk_status" class="alert hide" role="alert"></div>
                     @if($is_intasend_enabled)
                         <input type="hidden" id="intasend_pos_search_url" value="{{ route('intasend.pos_search') }}">
                         <input type="hidden" id="intasend_stk_push_url" value="{{ route('intasend.stk_push') }}">
@@ -244,39 +245,41 @@
                         <input type="hidden" id="daraja_pos_search_url" value="{{ route('daraja.pos_search') }}">
                         <input type="hidden" id="daraja_stk_push_url" value="{{ route('daraja.stk_push') }}">
                     @endif
-                    <div class="row">
-                        <div class="col-sm-6">
-                            <div class="form-group">
-                                {!! Form::label('intasend_stk_phone_number', __('lang_v1.phone_number')) !!}
-                                {!! Form::text('', null, [
-                                    'class' => 'form-control',
-                                    'placeholder' => __('lang_v1.phone_number'),
-                                    'id' => 'intasend_stk_phone_number',
-                                    'autocomplete' => 'off',
-                                ]) !!}
+                    <div class="well well-sm">
+                        <div class="row">
+                            <div class="col-sm-6">
+                                <div class="form-group">
+                                    {!! Form::label('intasend_stk_phone_number', __('lang_v1.phone_number')) !!}
+                                    {!! Form::text('', null, [
+                                        'class' => 'form-control input-lg',
+                                        'placeholder' => __('lang_v1.phone_number'),
+                                        'id' => 'intasend_stk_phone_number',
+                                        'autocomplete' => 'off',
+                                    ]) !!}
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="form-group">
+                                    {!! Form::label('intasend_stk_amount', __('sale.amount')) !!}
+                                    {!! Form::text('', null, [
+                                        'class' => 'form-control input-lg input_number',
+                                        'placeholder' => __('sale.amount'),
+                                        'id' => 'intasend_stk_amount',
+                                        'autocomplete' => 'off',
+                                    ]) !!}
+                                </div>
                             </div>
                         </div>
-                        <div class="col-sm-6">
-                            <div class="form-group">
-                                {!! Form::label('intasend_stk_amount', __('sale.amount')) !!}
-                                {!! Form::text('', null, [
-                                    'class' => 'form-control input_number',
-                                    'placeholder' => __('sale.amount'),
-                                    'id' => 'intasend_stk_amount',
-                                    'autocomplete' => 'off',
-                                ]) !!}
-                            </div>
+                        <div class="form-group mb-0">
+                            @if($is_intasend_enabled)
+                                <button type="button" class="btn btn-primary mpesa-stk-action" data-provider="intasend"><i class="fa fa-mobile"></i> @lang('lang_v1.send_intasend_stk_push')</button>
+                                <button type="button" class="btn btn-default mpesa-search-action" data-provider="intasend"><i class="fa fa-search"></i> @lang('lang_v1.search_intasend_collections')</button>
+                            @endif
+                            @if($is_daraja_enabled)
+                                <button type="button" class="btn btn-success mpesa-stk-action" data-provider="daraja"><i class="fa fa-mobile"></i> @lang('lang_v1.send_daraja_stk_push')</button>
+                                <button type="button" class="btn btn-default mpesa-search-action" data-provider="daraja"><i class="fa fa-search"></i> @lang('lang_v1.search_daraja_payments')</button>
+                            @endif
                         </div>
-                    </div>
-                    <div class="form-group">
-                        @if($is_intasend_enabled)
-                            <button type="button" class="btn btn-primary mpesa-stk-action" data-provider="intasend"><i class="fa fa-mobile"></i> @lang('lang_v1.send_intasend_stk_push')</button>
-                            <button type="button" class="btn btn-default mpesa-search-action" data-provider="intasend"><i class="fa fa-search"></i> @lang('lang_v1.search_intasend_collections')</button>
-                        @endif
-                        @if($is_daraja_enabled)
-                            <button type="button" class="btn btn-success mpesa-stk-action" data-provider="daraja"><i class="fa fa-mobile"></i> @lang('lang_v1.send_daraja_stk_push')</button>
-                            <button type="button" class="btn btn-default mpesa-search-action" data-provider="daraja"><i class="fa fa-search"></i> @lang('lang_v1.search_daraja_payments')</button>
-                        @endif
                     </div>
                     <div id="intasend_pos_candidates" class="table-responsive hide">
                         <p class="help-block">@lang('lang_v1.mpesa_multiple_selection_help')</p>
@@ -303,7 +306,7 @@
                     </div>
                 @endif
                 <div class="form-group">
-                    {!! Form::label('express_transaction_no', __('lang_v1.transaction_no')) !!}
+                    {!! Form::label('express_transaction_no', __('lang_v1.mpesa_transaction_no')) !!}
                     {!! Form::text('', null, [
                         'class' => 'form-control',
                         'placeholder' => __('lang_v1.transaction_no'),

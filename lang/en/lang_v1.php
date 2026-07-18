@@ -386,6 +386,8 @@ return [
     'cutomer_credit_limit_exeeded' => 'Customer Credit Limit Exceeded <br>:credit_limit',
     'custom_payment_1' => 'M-PESA',
     'mpesa' => 'M-PESA',
+    'mpesa_checkout' => 'M-PESA Checkout',
+    'mpesa_sending_stk' => 'Sending M-PESA request...',
     'expected_cash_in_drawer' => 'Expected cash in drawer',
     'total_collections' => 'Total collections',
     'custom_payment_2' => 'Custom Payment 2',
