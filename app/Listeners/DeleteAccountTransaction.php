@@ -34,7 +34,12 @@ class DeleteAccountTransaction
     {
         //Add contact advance if exists
         if ($event->transactionPayment->method == 'advance') {
-            $this->transactionUtil->updateContactBalance($event->transactionPayment->payment_for, $event->transactionPayment->amount);
+            $balance_operation = ! empty($event->transactionPayment->is_return) ? 'deduct' : 'add';
+            $this->transactionUtil->updateContactBalance(
+                $event->transactionPayment->payment_for,
+                $event->transactionPayment->amount,
+                $balance_operation
+            );
         }
 
         if (! $this->moduleUtil->isModuleEnabled('account')) {

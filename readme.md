@@ -1632,6 +1632,38 @@ Files involved in this picker workflow:
 
 No database migration is required for this UI workflow. After deployment, run `php artisan optimize:clear` and force-refresh the POS browser so the updated JavaScript is loaded.
 
+#### Retaining M-PESA excess as customer credit
+
+For a named customer, POS can retain an M-PESA overpayment as reusable customer credit instead of returning it as cash. When the received M-PESA total is greater than the sale total, the cashier sees `Keep excess as customer credit` in both the payment window and express M-PESA tools.
+
+Example:
+
+- Sale total: KES 20
+- Confirmed M-PESA receipt: KES 30
+- Amount applied to the sale: KES 20
+- Customer Advance balance created: KES 10
+
+The full KES 30 receipt remains recorded under M-PESA so it continues to match the provider record and the actual M-PESA account inflow. A KES 10 `Advance` change-return line offsets the sale overpayment without recording a physical cash refund, and adds KES 10 to the selected customer's advance balance. On a later sale, the cashier can select `Advance` as the payment method and use some or all of that balance; using it reduces the stored customer balance.
+
+Operational rules:
+
+- A named customer must be selected. Walk-in customers cannot hold reusable credit.
+- The retained credit cannot exceed the M-PESA amount collected on that sale.
+- If the option is not selected, POS continues using the normal change-return workflow.
+- Deleting the credit-producing change-return line removes the corresponding customer credit.
+- Editing its amount adjusts the customer balance by the difference.
+- The Sell Payment Report shows the full M-PESA receipt and a negative `Advance (Change Return)` line. Their net equals the amount settled on the invoice.
+- No database migration is required; the feature uses Ultimate POS's existing contact `balance` and `Advance` payment method.
+
+Files involved:
+
+- `resources/views/sale_pos/partials/payment_modal.blade.php` — excess-credit option in the payment and M-PESA tools windows.
+- `public/js/pos.js` — eligibility, displayed excess amount, synchronized controls, and change-return presentation.
+- `app/Http/Controllers/SellPosController.php` — named-customer and M-PESA-source validation, and conversion of change return to customer credit.
+- `app/Utils/TransactionUtil.php` — advance return validation and balance correction when payment lines are edited.
+- `app/Listeners/AddAccountTransaction.php` and `app/Listeners/DeleteAccountTransaction.php` — add/remove customer credit while preserving normal Advance consumption.
+- `tests/Unit/MpesaExcessCreditTest.php` — credit creation, future use, and deletion behavior.
+
 #### Affected files: M-PESA dashboard through reversal
 
 Unified dashboard and navigation:

@@ -192,6 +192,18 @@
                                     <input type="hidden" id="in_balance_due" value=0>
                                 </div>
 
+                                <div class="col-md-12 hide mpesa_excess_credit_option">
+                                    <hr>
+                                    <label>
+                                        <input type="checkbox" class="store_mpesa_excess_as_advance_toggle">
+                                        @lang('lang_v1.store_mpesa_excess_as_credit')
+                                        (<span class="mpesa_excess_credit_amount"></span>)
+                                    </label>
+                                    <p class="help-block">@lang('lang_v1.store_mpesa_excess_as_credit_help')</p>
+                                </div>
+                                <input type="hidden" name="store_mpesa_excess_as_advance"
+                                    id="store_mpesa_excess_as_advance" value="0">
+
 
 
                             </div>
@@ -280,6 +292,14 @@
                             </thead>
                             <tbody></tbody>
                         </table>
+                    </div>
+                    <div class="alert alert-info hide mpesa_excess_credit_option">
+                        <label>
+                            <input type="checkbox" class="store_mpesa_excess_as_advance_toggle">
+                            @lang('lang_v1.store_mpesa_excess_as_credit')
+                            (<span class="mpesa_excess_credit_amount"></span>)
+                        </label>
+                        <div><small>@lang('lang_v1.store_mpesa_excess_as_credit_help')</small></div>
                     </div>
                 @endif
                 <div class="form-group">

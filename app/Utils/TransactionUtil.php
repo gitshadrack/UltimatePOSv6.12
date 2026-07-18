@@ -728,7 +728,9 @@ class TransactionUtil extends Util
                 $this->editPaymentLine($payment, $transaction, $uf_data);
             } else {
                 $payment_amount = $uf_data ? $this->num_uf($payment['amount']) : $payment['amount'];
-                if ($payment['method'] == 'advance' && $payment_amount > $contact_balance) {
+                if ($payment['method'] == 'advance'
+                    && empty($payment['is_return'])
+                    && $payment_amount > $contact_balance) {
                     throw new AdvanceBalanceNotAvailable(__('lang_v1.required_advance_balance_not_available'));
                 }
                 //If amount is 0 then skip.
@@ -877,6 +879,11 @@ class TransactionUtil extends Util
         $tp = TransactionPayment::where('id', $payment_id)
                             ->first();
 
+        $previous_advance_effect = 0;
+        if ($tp->method == 'advance') {
+            $previous_advance_effect = ! empty($tp->is_return) ? (float) $tp->amount : -1 * (float) $tp->amount;
+        }
+
         $transaction_type = ! empty($transaction->type) ? $transaction->type : null;
 
         if ($payment['method'] == 'custom_pay_1') {
@@ -900,6 +907,20 @@ class TransactionUtil extends Util
         }
 
         $tp->update($payment);
+
+        $new_advance_effect = 0;
+        if ($tp->method == 'advance') {
+            $new_advance_effect = ! empty($tp->is_return) ? (float) $tp->amount : -1 * (float) $tp->amount;
+        }
+        $advance_balance_difference = $new_advance_effect - $previous_advance_effect;
+        if (abs($advance_balance_difference) > 0.0001) {
+            $this->updateContactBalance(
+                $tp->payment_for,
+                abs($advance_balance_difference),
+                $advance_balance_difference > 0 ? 'add' : 'deduct'
+            );
+        }
+
         (new MpesaVerificationUtil())->linkPosTransactionPayment($tp->fresh(), $transaction, auth()->id());
 
         if (! empty($denominations)) {

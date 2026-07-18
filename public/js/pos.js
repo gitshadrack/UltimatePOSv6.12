@@ -2807,6 +2807,8 @@ function calculate_balance_due() {
         $('#change_return_payment_data').addClass('hide');
     }
 
+    update_mpesa_excess_credit_option(change_return);
+
     __write_number($('input#total_paying_input'), total_paying);
     $('span.total_paying').text(__currency_trans_from_en(total_paying, true));
 
@@ -2818,6 +2820,42 @@ function calculate_balance_due() {
     // store payment details
     saveFormDataToLocalStorage();
 }
+
+function update_mpesa_excess_credit_option(change_return) {
+    var options = $('.mpesa_excess_credit_option');
+    if (!options.length) {
+        return;
+    }
+
+    var has_mpesa_payment = $('#payment_rows_div .payment_types_dropdown').filter(function() {
+        return $(this).val() === 'custom_pay_1';
+    }).length > 0;
+    var customer_id = $('select#customer_id').val();
+    var is_named_customer = customer_id && customer_id != $('#default_customer_id').val();
+    var can_store_credit = change_return > 0 && has_mpesa_payment && is_named_customer;
+    var store_as_credit = can_store_credit && $('#store_mpesa_excess_as_advance').val() === '1';
+
+    options.toggleClass('hide', !can_store_credit);
+    options.find('.mpesa_excess_credit_amount').text(__currency_trans_from_en(change_return, true));
+
+    if (!can_store_credit) {
+        store_as_credit = false;
+        $('#store_mpesa_excess_as_advance').val('0');
+    }
+
+    $('.store_mpesa_excess_as_advance_toggle').prop('checked', store_as_credit);
+
+    $('#change_return_payment_data').toggleClass('hide', change_return === 0 || store_as_credit);
+}
+
+$(document).on('change', '.store_mpesa_excess_as_advance_toggle', function() {
+    $('#store_mpesa_excess_as_advance').val($(this).is(':checked') ? '1' : '0');
+    calculate_balance_due();
+});
+
+$(document).on('change', 'select#customer_id', function() {
+    calculate_balance_due();
+});
 
 function isValidPosForm() {
     flag = true;

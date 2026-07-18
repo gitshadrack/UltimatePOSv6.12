@@ -587,6 +587,11 @@ class SellPosController extends Controller
                 $change_return['amount'] = $input['change_return'] ?? 0;
                 $change_return['is_return'] = 1;
 
+                if ($this->shouldStoreMpesaExcessAsCustomerCredit($input, $business_id)) {
+                    $change_return['method'] = 'advance';
+                    $change_return['note'] = __('lang_v1.mpesa_excess_customer_credit_note');
+                }
+
                 $input['payment'][] = $change_return;
 
                 $is_credit_sale = isset($input['is_credit_sale']) && $input['is_credit_sale'] == 1 ? true : false;
@@ -854,6 +859,44 @@ class SellPosController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Determine whether an M-PESA overpayment should become customer credit.
+     * Only named customers can carry an advance balance, and the requested
+     * credit cannot be greater than the M-PESA collected on this sale.
+     */
+    private function shouldStoreMpesaExcessAsCustomerCredit(array $input, $business_id)
+    {
+        if (empty($input['store_mpesa_excess_as_advance'])) {
+            return false;
+        }
+
+        $excess_amount = $this->transactionUtil->num_uf($input['change_return'] ?? 0);
+        if ($excess_amount <= 0) {
+            return false;
+        }
+
+        $customer = Contact::where('business_id', $business_id)
+            ->where('id', $input['contact_id'] ?? null)
+            ->first();
+        if (empty($customer) || ! empty($customer->is_default)) {
+            throw new \Exception(__('lang_v1.mpesa_excess_credit_requires_customer'));
+        }
+
+        $mpesa_total = collect($input['payment'] ?? [])->sum(function ($payment) {
+            if (($payment['method'] ?? null) !== 'custom_pay_1') {
+                return 0;
+            }
+
+            return $this->transactionUtil->num_uf($payment['amount'] ?? 0);
+        });
+
+        if ($mpesa_total <= 0 || $excess_amount > $mpesa_total + 0.01) {
+            throw new \Exception(__('lang_v1.mpesa_excess_credit_invalid'));
+        }
+
+        return true;
     }
 
     /**

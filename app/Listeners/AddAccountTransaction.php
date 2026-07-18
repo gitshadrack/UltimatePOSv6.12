@@ -35,7 +35,12 @@ class AddAccountTransaction
     {
         //echo "<pre>";print_r($event->transactionPayment->toArray());exit;
         if ($event->transactionPayment->method == 'advance') {
-            $this->transactionUtil->updateContactBalance($event->transactionPayment->payment_for, $event->transactionPayment->amount, 'deduct');
+            $balance_operation = ! empty($event->transactionPayment->is_return) ? 'add' : 'deduct';
+            $this->transactionUtil->updateContactBalance(
+                $event->transactionPayment->payment_for,
+                $event->transactionPayment->amount,
+                $balance_operation
+            );
         }
 
         if (! $this->moduleUtil->isModuleEnabled('account', $event->transactionPayment->business_id)) {
