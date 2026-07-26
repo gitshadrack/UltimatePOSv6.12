@@ -829,6 +829,139 @@ php artisan migrate
 php artisan optimize:clear
 ```
 
+### 20. Superadmin System Maintenance Mode
+
+Purpose: Allow Superadmin to temporarily take the entire ERP offline during database cleanup, deployments, backups, or other planned maintenance without requiring direct terminal access for the normal enable/disable workflow.
+
+Files added:
+
+- `Modules/Superadmin/Http/Controllers/MaintenanceModeController.php`
+- `Modules/Superadmin/Resources/views/maintenance/index.blade.php`
+- `resources/views/errors/503.blade.php`
+- `tests/Unit/MaintenanceModeSafetyTest.php`
+
+Files changed:
+
+- `Modules/Superadmin/Routes/web.php`
+- `Modules/Superadmin/Resources/views/layouts/nav.blade.php`
+- `Modules/Superadmin/Resources/lang/en/lang.php`
+- `app/Http/Middleware/EncryptCookies.php`
+- `readme.md`
+
+What changed:
+
+- Added `Superadmin > Maintenance Mode`.
+- Added separate POST-only actions for enabling and disabling maintenance mode.
+- Both actions require an authenticated Superadmin and the current Superadmin password.
+- Enabling requires the operator to:
+  - Confirm that a restorable backup or provider snapshot exists.
+  - Confirm that users were notified and active transactions were stopped.
+  - Type `MAINTENANCE`.
+- Disabling requires the operator to type `ONLINE`.
+- Uses Laravel's native maintenance mode and returns HTTP status `503` to blocked requests.
+- Pre-renders a standalone maintenance page so it does not depend on normal database-backed page rendering.
+- Creates a cryptographically signed administrator bypass cookie valid for 12 hours.
+- Writes enable, disable, and failure events to the application log.
+- Keeps `php artisan up` available as an emergency recovery method.
+- No database migration is required.
+
+#### Who can access the ERP during maintenance
+
+- The Superadmin browser that enables maintenance mode is not logged out. It receives a private bypass cookie and can continue accessing the ERP.
+- Normal users, API clients, and other browsers receive the scheduled-maintenance page.
+- Existing user sessions are not deleted; they are temporarily blocked until maintenance mode is disabled.
+- Other Superadmins are also blocked unless they open the private bypass link in their browser.
+- The bypass link does not log someone into the ERP. Normal authentication is still required.
+- The bypass link remains usable while maintenance mode is active and must be treated as confidential.
+- Disabling maintenance mode invalidates the maintenance secret. The browser bypass cookie is also removed from the disabling Superadmin's browser.
+
+#### Precautions before enabling maintenance
+
+1. Obtain a restorable database backup or ask the hosting provider for a server-side snapshot.
+2. Record the backup/snapshot identifier and confirm how it would be restored.
+3. Notify all users of the outage.
+4. Ensure tills complete or cancel sales currently in progress.
+5. Confirm that no purchase, return, stock adjustment, import, or other write operation is running.
+6. Pause external cron jobs, queue workers started with `--force`, imports, webhooks, or integrations that can write directly to the database.
+7. Keep cPanel Terminal or SSH access available for emergency recovery.
+8. Do not enable maintenance solely to test the button on a production system; use a planned maintenance window.
+
+Laravel's scheduler and normal queue workers respect maintenance mode unless a task or worker was explicitly configured to run during maintenance. External processes that write directly to MariaDB are outside Laravel's protection and must be paused separately.
+
+#### How to enable maintenance mode
+
+1. Log in using a Superadmin account.
+2. Open `Superadmin > Maintenance Mode`.
+3. Confirm the backup/snapshot checkbox.
+4. Confirm that users were notified and active transactions were stopped.
+5. Set the retry-after value between 30 and 3600 seconds. The default is 60 seconds.
+6. Enter the current Superadmin password.
+7. Type `MAINTENANCE` exactly.
+8. Click `Enable maintenance mode` and approve the final browser confirmation.
+9. Save the displayed bypass link securely for the current maintenance window.
+10. Open the public ERP URL in an incognito/private browser and confirm that it shows the scheduled-maintenance page.
+
+The activating Superadmin's current browser should continue working through its bypass cookie. The cookie lasts for 12 hours. If it expires while maintenance mode remains active, open the saved bypass link again to obtain a new valid cookie, then authenticate normally if required.
+
+#### How to return the ERP online
+
+1. Complete the maintenance work.
+2. Validate login, existing invoices, sales, purchases, stock, stock valuation, returns, and profit/cost reports as appropriate.
+3. Return to `Superadmin > Maintenance Mode` using the bypass-enabled browser.
+4. Enter the current Superadmin password.
+5. Type `ONLINE` exactly.
+6. Click `Return system online` and approve the confirmation.
+7. Re-enable paused cron jobs, integrations, and queue workers.
+8. Open the ERP in a separate incognito/private browser and confirm normal access.
+9. Notify users that the ERP is available again.
+
+#### Emergency terminal recovery
+
+If the bypass link or cookie is unavailable, open cPanel Terminal or SSH, change to the application directory containing `artisan`, and run:
+
+```bash
+php artisan up
+```
+
+If cPanel requires a version-specific PHP executable, use the PHP version assigned to the ERP domain. For example:
+
+```bash
+/opt/cpanel/ea-php81/root/usr/bin/php artisan up
+```
+
+If the command reports `Could not open input file: artisan`, change to the correct UltimatePOS application directory first.
+
+The equivalent terminal command for enabling maintenance remains available:
+
+```bash
+php artisan down --secret="USE-A-LONG-RANDOM-SECRET" --retry=60
+```
+
+Do not publish or share the secret URL generated from that command.
+
+#### Deployment
+
+Upload all files listed above, then clear cached routes, configuration, and views:
+
+```bash
+php artisan optimize:clear
+```
+
+No migration is needed. After deployment, log in as Superadmin and confirm that the `Maintenance Mode` navigation item and page load correctly. Do not activate it on the live ERP until a real maintenance window is scheduled.
+
+Tests:
+
+```bash
+php vendor/bin/phpunit --do-not-cache-result tests/Unit/MaintenanceModeSafetyTest.php
+```
+
+The tests cover:
+
+- Unencrypted framework-compatible maintenance bypass cookie handling.
+- Cryptographic bypass-cookie validation.
+- POST-only, authenticated, Superadmin-protected enable/disable routes.
+- Database-independent pre-rendering of the custom `503` maintenance page.
+
 ### POS Default Purchase Price Visibility Permission
 
 Purpose: Add a separate role permission for viewing the default purchase price from the POS product row.
@@ -1373,6 +1506,108 @@ Security and operational notes:
 - IntaSend and Daraja can coexist. The POS modal shows controls for each enabled provider.
 - On 3 July 2026, the configured sandbox credentials successfully completed Safaricom OAuth after the WAMP CA bundle was configured. A C2B registration test reached Safaricom but Sandbox returned HTTP 500 / `500.003.1001` (`Service is currently unreachable. Please try again later.`); this is a Safaricom service response and can be retried from M-PESA Settings. Callback parsing and C2B idempotency were also verified with rollback-only database smoke tests.
 - Official onboarding, sandbox apps, and production approval are managed through the [Safaricom Daraja portal](https://developer.safaricom.co.ke/).
+
+### Automatic Windows POS Print Server
+
+Purpose: Allow non-technical cashiers to use configured ESC/POS receipt
+printers without opening a terminal or manually running `php server.php`.
+
+Implementation:
+
+- Deployment source: `tools/windows-print-server`
+- Preferred technician installer:
+  `tools/windows-print-server/artifacts/UltimatePOS-PrintServer-Setup.exe`
+- Fallback manual package:
+  `tools/windows-print-server/artifacts/UltimatePOS-PrintServer.zip`
+- Installation directory:
+  `%LOCALAPPDATA%\UltimatePOS\PrintServer`
+- Automatic task name: `UltimatePOS Print Server`
+- Local endpoint: `ws://127.0.0.1:6441`
+- Log directory:
+  `%LOCALAPPDATA%\UltimatePOS\PrintServer\logs`
+
+The setup EXE includes the official UltimatePOS POS Print Server and a portable
+PHP runtime. A technician runs the EXE once while signed in as the Windows user
+used by the cashier.
+The installer registers an automatic per-user Scheduled Task, starts the
+server immediately, verifies a WebSocket connection, and adds Test and
+Uninstall shortcuts under the Windows Start menu.
+
+Cashiers only open UltimatePOS normally. No WAMP/XAMPP window, PowerShell
+command, or daily printer-server action is required.
+
+Build the technician ZIP:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\windows-print-server\Build-DeploymentPackage.ps1 `
+  -PrintServerSource "C:\path\to\pos_print_server" `
+  -PhpRuntimeDirectory "C:\path\to\portable-php"
+```
+
+Quick configuration:
+
+1. Install the printer driver and confirm a Windows test page prints.
+2. Share a USB printer using a simple share name such as `receipt_printer`.
+3. Run `UltimatePOS-PrintServer-Setup.exe` as the cashier Windows user.
+4. Confirm the installer reports that the server is ready.
+5. In UltimatePOS, open Settings > Receipt Printers and create the printer:
+   Connection Type `Windows`, Path `t`, and the
+   correct characters per line (`32` for most 58 mm printers or `42/48` for
+   most 80 mm printers).
+6. Open Settings > Business Locations > Settings > Receipt Settings, select
+   `Use Configured Receipt Printer`, choose the printer, enable printing on
+   invoice, and save.
+7. Complete one test sale and test the Open Drawer button if a cash drawer is
+   connected.
+
+How to confirm it is running:
+
+1. Open Windows Start > UltimatePOS > Test Print Server. A healthy installation
+   displays `UltimatePOS Print Server is READY on ws://127.0.0.1:6441`.
+2. On the POS screen, confirm the printer indicator changes to
+   `Printer ready`. A red `Printer unavailable` indicator can be clicked to
+   retry.
+3. A technician can verify the background task and listening port with:
+
+```powershell
+Get-ScheduledTask -TaskName "UltimatePOS Print Server" |
+  Select-Object TaskName, State
+
+Get-NetTCPConnection -State Listen -LocalPort 6441
+```
+
+The task should show `Running`, and port `6441` should show `Listen`. If either
+check fails, sign out and back in or rerun the installer. Review errors under
+`%LOCALAPPDATA%\UltimatePOS\PrintServer\logs`.
+
+The POS now displays `Connecting to printer`, `Printer ready`,
+`Receipt queued`, `Printing`, `Receipt printed`, or a red offline warning. Clicking the
+offline warning retries the connection. Receipt printing no longer attempts
+`socket.send()` before the WebSocket is ready, and failures produce a
+cashier-readable notification.
+
+Configured-printer receipts are persisted under
+`%LOCALAPPDATA%\UltimatePOS\PrintServer\queue` before acknowledgment. A hidden
+worker automatically retries printer failures with increasing delays, up to
+five minutes between attempts. Successful jobs discard the receipt payload and
+retain status metadata for 48 hours. Pending jobs expire after 24 hours to
+prevent stale receipts printing unexpectedly. Open Drawer commands are
+live-only and are never queued.
+
+The agent binds only to loopback (`127.0.0.1`). Do not expose port `6441` in
+the router or to the public internet.
+
+Verified on 26 July 2026:
+
+- Portable PHP 8.2 and the downloaded official print-server payload started.
+- The automatic Scheduled Task started successfully.
+- A real WebSocket handshake to `ws://127.0.0.1:6441` succeeded.
+- Logs were written correctly.
+- Uninstall stopped the listener, removed the task, and removed installed
+  files.
+- A physical receipt test remains required on a computer with an installed
+  thermal printer.
 
 ### POS Open Cash Drawer Button
 

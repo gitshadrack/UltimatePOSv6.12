@@ -47,7 +47,9 @@ $(document).ready(function() {
 
 function initialize_printer() {
     if ($('input#location_id').data('receipt_printer_type') == 'printer') {
-        initializeSocket();
+        initializeSocket().catch(function() {
+            // Printing errors are shown when a print job is attempted.
+        });
     }
 }
 
@@ -57,15 +59,9 @@ function pos_print(receipt) {
         var content = receipt;
         content.type = 'print-receipt';
 
-        //Check if ready or not, then print.
-        if (socket.readyState != 1) {
-            initializeSocket();
-            setTimeout(function() {
-                socket.send(JSON.stringify(content));
-            }, 700);
-        } else {
-            socket.send(JSON.stringify(content));
-        }
+        sendToPosPrintServer(content).catch(function(error) {
+            toastr.error(error.message);
+        });
     } else if (receipt.html_content != '') {
         var title = document.title;
         if (typeof receipt.print_title != 'undefined') {

@@ -3140,8 +3140,14 @@ function set_location() {
 }
 
 function initialize_printer() {
-    if ($('input#location_id').data('receipt_printer_type') == 'printer') {
-        initializeSocket();
+    var usesConfiguredPrinter = $('input#location_id').data('receipt_printer_type') == 'printer';
+    if (typeof setPrinterStatusVisibility === 'function') {
+        setPrinterStatusVisibility(usesConfiguredPrinter);
+    }
+    if (usesConfiguredPrinter) {
+        initializeSocket().catch(function() {
+            // The visible printer status gives the cashier a non-blocking warning.
+        });
     }
 }
 
@@ -3180,15 +3186,9 @@ function pos_print(receipt) {
         var content = receipt;
         content.type = 'print-receipt';
 
-        //Check if ready or not, then print.
-        if (socket != null && socket.readyState == 1) {
-            socket.send(JSON.stringify(content));
-        } else {
-            initializeSocket();
-            setTimeout(function() {
-                socket.send(JSON.stringify(content));
-            }, 700);
-        }
+        sendToPosPrintServer(content).catch(function(error) {
+            toastr.error(error.message);
+        });
 
     } else if (receipt.html_content != '') {
         var title = document.title;

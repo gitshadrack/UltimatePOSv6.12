@@ -1811,5 +1811,14 @@ return [
     'mpesa_role_permissions' => 'M-PESA Permissions',
     'intasend_provider' => 'IntaSend M-PESA',
     'safaricom_mpesa_provider' => 'Direct Safaricom M-PESA',
+    'printer_connecting' => 'Connecting to printer...',
+    'printer_ready' => 'Printer ready',
+    'printer_job_sent' => 'Print job sent',
+    'printer_job_sending' => 'Sending receipt...',
+    'printer_job_queued' => 'Receipt queued',
+    'printer_printing' => 'Printing...',
+    'printer_printed' => 'Receipt printed',
+    'printer_job_expired' => 'Print expired',
+    'printer_unavailable_help' => 'Printer offline',
 
 ];

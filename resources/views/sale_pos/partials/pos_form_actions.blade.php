@@ -156,6 +156,22 @@
 
             <div class="no-print"
                 style="display: flex !important; flex-direction: row; align-items: center; justify-content: flex-end; gap: 12px; width: auto; flex: 0 0 auto; white-space: nowrap; overflow: visible;">
+                <button type="button"
+                    id="pos-printer-status"
+                    class="hide no-print"
+                    data-connecting-text="@lang('lang_v1.printer_connecting')"
+                    data-ready-text="@lang('lang_v1.printer_ready')"
+                    data-sending-text="@lang('lang_v1.printer_job_sending')"
+                    data-queued-text="@lang('lang_v1.printer_job_queued')"
+                    data-printing-text="@lang('lang_v1.printer_printing')"
+                    data-printed-text="@lang('lang_v1.printer_printed')"
+                    data-expired-text="@lang('lang_v1.printer_job_expired')"
+                    data-unavailable-text="@lang('lang_v1.printer_unavailable_help')"
+                    style="display: none; align-items: center; gap: 6px; border: 0; border-radius: 9999px; padding: 7px 12px; font-weight: 700; font-size: 12px;"
+                    title="@lang('lang_v1.printer_connecting')">
+                    <i class="fas fa-print printer-status-icon" aria-hidden="true"></i>
+                    <span class="printer-status-text">@lang('lang_v1.printer_connecting')</span>
+                </button>
                 @if (auth()->user()->can('open_cash_drawer') || auth()->user()->can('superadmin') || auth()->user()->can('admin'))
                 <button type="button"
                     class="open-cash-drawer tw-font-bold tw-bg-[#28B77B] hover:tw-bg-[#209763] tw-rounded-full tw-text-white tw-px-5 tw-h-11 tw-cursor-pointer tw-text-xs md:tw-text-sm no-print"
