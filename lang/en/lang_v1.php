@@ -1820,5 +1820,6 @@ return [
     'printer_printed' => 'Receipt printed',
     'printer_job_expired' => 'Print expired',
     'printer_unavailable_help' => 'Printer offline',
+    'system_downloads' => 'Downloads',
 
 ];

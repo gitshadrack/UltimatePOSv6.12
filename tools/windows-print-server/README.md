@@ -133,6 +133,17 @@ direct TCP network printer.
 
 ## 2. Install the Print Server
 
+The current installer can be obtained without a flash disk:
+
+- In UltimatePOS, open **Settings > Business Settings > System**, then select
+  **Open System Downloads**.
+- Use **Download Print Server** to download it from the hosted ERP.
+- If the ERP copy is temporarily unavailable, use **Download from repository**
+  on the same page.
+
+The version, file size, and SHA-256 checksum are displayed so a technician can
+confirm the downloaded file matches the published repository artifact.
+
 1. Sign in to Windows using the account the cashier normally uses.
 2. Run `UltimatePOS-PrintServer-Setup.exe`.
 3. If Windows SmartScreen appears, use **More info > Run anyway** only after

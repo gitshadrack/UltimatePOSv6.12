@@ -27,4 +27,5 @@ npm-debug.log
 /public/js/skins/
 /public/js/icons/
 /docs
-/tools/windows-print-server/artifacts/
+/tools/windows-print-server/artifacts/*
+!/tools/windows-print-server/artifacts/UltimatePOS-PrintServer-Setup.exe

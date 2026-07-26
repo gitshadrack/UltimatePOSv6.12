@@ -1536,6 +1536,13 @@ Uninstall shortcuts under the Windows Start menu.
 Cashiers only open UltimatePOS normally. No WAMP/XAMPP window, PowerShell
 command, or daily printer-server action is required.
 
+Authorized users can open **Settings > Business Settings > System > Open
+System Downloads** and download the current
+`UltimatePOS-PrintServer-Setup.exe`. The page serves the exact versioned
+repository artifact, shows its version, size, SHA-256 checksum, and provides
+the repository link as a fallback. This removes the need to distribute updates
+using a flash disk.
+
 Build the technician ZIP:
 
 ```powershell
@@ -2058,6 +2065,18 @@ php artisan optimize:clear
 6. Keep the Kenya Tax Administration feature clearly labelled as internal reporting and manual eTIMS tracking. It does not automatically submit invoices to KRA eTIMS.
 7. Keep PWA expectations modest. The current PWA only supports installability and static asset caching; it does not support offline selling, stock updates, payment capture, or report syncing.
 8. Confirm `.env` remains untracked in Git before deployment or handoff. Store live credentials in the server environment, not in committed project files.
+9. Treat `docs/RESTAURANT_POS_IMPLEMENTATION_PLAN.md` as the future
+   specification for fully committing the POS to restaurant operations. It
+   covers waiter PIN access, floors and tables, preparation routing, kitchen
+   displays, provisional bills, cashier settlement, split/merge/return/swap
+   workflows, waiter-shift and register eligibility, supervisor voids,
+   inventory history, tips, service charges, permissions, audit controls,
+   architecture recommendations, implementation phases, and acceptance
+   criteria. The recommendations prioritize a focused MVP, separate operational
+   numbers, append-only order events, table sessions, early ingredient
+   reservation/consumption, station routing, atomic settlement, controlled tip
+   liabilities, and a feature-flagged pilot. These capabilities remain planned
+   until their implementation is completed and verified.
 
 ### Migration Safety Note
 

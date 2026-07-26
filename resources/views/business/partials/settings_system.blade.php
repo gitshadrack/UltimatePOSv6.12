@@ -1,5 +1,5 @@
 <div class="pos-tab-content">
-     <div class="row">
+    <div class="row">
         <div class="col-sm-4">
             <div class="form-group">
                 {!! Form::label('theme_color', __('lang_v1.theme_color')); !!}
@@ -26,6 +26,27 @@
                   </label>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <hr>
+
+    <div class="row">
+        <div class="col-sm-12">
+            <h4 class="tw-font-bold">
+                <i class="fa fa-download"></i>
+                @lang('lang_v1.system_downloads')
+            </h4>
+            <p class="text-muted">
+                Download the current UltimatePOS Windows Print Server installer for
+                cashier computers. The download page includes the version, file size,
+                SHA-256 checksum, repository fallback, and update instructions.
+            </p>
+            <a href="{{ route('system-downloads.index') }}"
+                class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full">
+                <i class="fa fa-download"></i>
+                Open System Downloads
+            </a>
         </div>
     </div>
 </div>
