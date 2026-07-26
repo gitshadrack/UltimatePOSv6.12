@@ -1548,11 +1548,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 Quick configuration:
 
 1. Install the printer driver and confirm a Windows test page prints.
-2. Share a USB printer using a simple share name such as `receipt_printer`.
+2. Share the working USB printer queue using a simple share name such as
+   `ReceiptPrinter`.
 3. Run `UltimatePOS-PrintServer-Setup.exe` as the cashier Windows user.
 4. Confirm the installer reports that the server is ready.
 5. In UltimatePOS, open Settings > Receipt Printers and create the printer:
-   Connection Type `Windows`, Path `t`, and the
+   Connection Type `Windows`, Path
+   `smb://localhost/ReceiptPrinter`, and the
    correct characters per line (`32` for most 58 mm printers or `42/48` for
    most 80 mm printers).
 6. Open Settings > Business Locations > Settings > Receipt Settings, select
@@ -1561,12 +1563,25 @@ Quick configuration:
 7. Complete one test sale and test the Open Drawer button if a cash drawer is
    connected.
 
+Printer connection rules:
+
+- For printers shown on Windows ports such as `USB001` or `USB003`, share the
+  working Windows printer queue and use
+  `smb://localhost/ReceiptPrinter`. Do not use the USB port name as the path.
+- Direct `LPT1`-`LPT9` and `COM1`-`COM9` paths are supported only when the
+  printer is genuinely connected or mapped to that local port.
+- For a raw TCP ESC/POS network printer, select Connection Type `Network`,
+  enter its static/reserved IP address and its raw-printing port (commonly
+  `9100`), and leave Path blank.
+- If a network printer uses a Windows/WSD driver rather than raw TCP, print a
+  Windows test page, share that working queue, and use the Windows SMB path.
+
 How to confirm it is running:
 
 1. Open Windows Start > UltimatePOS > Test Print Server. A healthy installation
    displays `UltimatePOS Print Server is READY on ws://127.0.0.1:6441`.
 2. On the POS screen, confirm the printer indicator changes to
-   `Printer ready`. A red `Printer unavailable` indicator can be clicked to
+   `Printer ready`. A red `Printer offline` indicator can be clicked to
    retry.
 3. A technician can verify the background task and listening port with:
 
@@ -1608,6 +1623,10 @@ Verified on 26 July 2026:
   files.
 - A physical receipt test remains required on a computer with an installed
   thermal printer.
+
+The complete configuration, installation, status, offline queue, update,
+cash-drawer, and troubleshooting guide is maintained in
+`tools/windows-print-server/README.md`.
 
 ### POS Open Cash Drawer Button
 
