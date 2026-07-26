@@ -16,6 +16,13 @@ Route::middleware('web', 'auth', 'language', 'AdminSidebarMenu', 'superadmin')->
     Route::get('/', [Modules\Superadmin\Http\Controllers\SuperadminController::class, 'index']);
     Route::get('/stats', [Modules\Superadmin\Http\Controllers\SuperadminController::class, 'stats']);
 
+    Route::get('/maintenance', [Modules\Superadmin\Http\Controllers\MaintenanceModeController::class, 'index'])
+        ->name('superadmin.maintenance.index');
+    Route::post('/maintenance/enable', [Modules\Superadmin\Http\Controllers\MaintenanceModeController::class, 'enable'])
+        ->name('superadmin.maintenance.enable');
+    Route::post('/maintenance/disable', [Modules\Superadmin\Http\Controllers\MaintenanceModeController::class, 'disable'])
+        ->name('superadmin.maintenance.disable');
+
     Route::get('/{business_id}/toggle-active/{is_active}', [Modules\Superadmin\Http\Controllers\BusinessController::class, 'toggleActive']);
 
     Route::get('/users/{business_id}', [Modules\Superadmin\Http\Controllers\BusinessController::class, 'usersList']);
