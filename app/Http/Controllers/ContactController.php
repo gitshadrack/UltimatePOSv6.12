@@ -53,6 +53,31 @@ class ContactController extends Controller
         $this->moduleUtil = $moduleUtil;
         $this->transactionUtil = $transactionUtil;
         $this->notificationUtil = $notificationUtil;
+        $this->middleware(function ($request, $next) {
+            $method = $request->route()->getActionMethod();
+            $access = \App\Utils\ContactAccess::class;
+            if ($method === 'store') {
+                abort_unless($access::allows($request->user(), $request->input('type'), 'create'), 403);
+            }
+            $actions = [
+                'show' => 'view', 'edit' => 'update', 'update' => 'update',
+                'destroy' => 'delete', 'updateStatus' => 'update',
+                'getLedger' => 'view', 'sendLedger' => 'view',
+                'getContactPayments' => 'view', 'getSupplierStockReport' => 'view',
+            ];
+            if (isset($actions[$method])) {
+                $id = $request->route('contact') ?? $request->route('id')
+                    ?? $request->route('contact_id') ?? $request->route('supplier_id')
+                    ?? $request->input('contact_id');
+                $contact = Contact::where('business_id', $request->user()->business_id)->findOrFail($id);
+                abort_unless($access::allows($request->user(), $contact->type, $actions[$method], $contact), 403);
+                if ($method === 'update' && $request->input('type') !== $contact->type) {
+                    abort_unless($access::allows($request->user(), $request->input('type'), 'create'), 403);
+                }
+            }
+
+            return $next($request);
+        });
     }
 
     /**
@@ -536,7 +561,7 @@ class ContactController extends Controller
      */
     public function create()
     {
-        if (! auth()->user()->can('supplier.create') && ! auth()->user()->can('customer.create') && ! auth()->user()->can('customer.view_own') && ! auth()->user()->can('supplier.view_own')) {
+        if (! auth()->user()->can('supplier.create') && ! auth()->user()->can('customer.create')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -548,13 +573,13 @@ class ContactController extends Controller
         }
 
         $types = [];
-        if (auth()->user()->can('supplier.create') || auth()->user()->can('supplier.view_own')) {
+        if (auth()->user()->can('supplier.create')) {
             $types['supplier'] = __('report.supplier');
         }
-        if (auth()->user()->can('customer.create') || auth()->user()->can('customer.view_own')) {
+        if (auth()->user()->can('customer.create')) {
             $types['customer'] = __('report.customer');
         }
-        if (auth()->user()->can('supplier.create') && auth()->user()->can('customer.create') || auth()->user()->can('supplier.view_own') || auth()->user()->can('customer.view_own')) {
+        if (auth()->user()->can('supplier.create') && auth()->user()->can('customer.create')) {
             $types['both'] = __('lang_v1.both_supplier_customer');
         }
 
@@ -578,7 +603,7 @@ class ContactController extends Controller
      */
     public function store(Request $request)
     {
-        if (! auth()->user()->can('supplier.create') && ! auth()->user()->can('customer.create') && ! auth()->user()->can('customer.view_own') && ! auth()->user()->can('supplier.view_own')) {
+        if (! auth()->user()->can('supplier.create') && ! auth()->user()->can('customer.create')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -668,23 +693,6 @@ class ContactController extends Controller
         $business_id = request()->session()->get('user.business_id');
         $contact = $this->contactUtil->getContactInfo($business_id, $id);
 
-        $is_selected_contacts = User::isSelectedContacts(auth()->user()->id);
-        $user_contacts = [];
-        if ($is_selected_contacts) {
-            $user_contacts = auth()->user()->contactAccess->pluck('id')->toArray();
-        }
-
-        if (! auth()->user()->can('supplier.view') && auth()->user()->can('supplier.view_own')) {
-            if ($contact->created_by != auth()->user()->id & ! in_array($contact->id, $user_contacts)) {
-                abort(403, 'Unauthorized action.');
-            }
-        }
-        if (! auth()->user()->can('customer.view') && auth()->user()->can('customer.view_own')) {
-            if ($contact->created_by != auth()->user()->id & ! in_array($contact->id, $user_contacts)) {
-                abort(403, 'Unauthorized action.');
-            }
-        }
-
         $reward_enabled = (request()->session()->get('business.enable_rp') == 1 && in_array($contact->type, ['customer', 'both'])) ? true : false;
 
         $contact_dropdown = Contact::contactDropdown($business_id, false, false);
@@ -716,7 +724,7 @@ class ContactController extends Controller
      */
     public function edit($id)
     {
-        if (! auth()->user()->can('supplier.update') && ! auth()->user()->can('customer.update') && ! auth()->user()->can('customer.view_own') && ! auth()->user()->can('supplier.view_own')) {
+        if (! auth()->user()->can('supplier.update') && ! auth()->user()->can('customer.update')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -738,6 +746,8 @@ class ContactController extends Controller
             if (auth()->user()->can('supplier.create') && auth()->user()->can('customer.create')) {
                 $types['both'] = __('lang_v1.both_supplier_customer');
             }
+
+            $types[$contact->type] = $contact->type === 'both' ? __('lang_v1.both_supplier_customer') : __('report.'.$contact->type);
 
             $customer_groups = CustomerGroup::forDropdown($business_id);
 
@@ -773,7 +783,7 @@ class ContactController extends Controller
      */
     public function update(Request $request, $id)
     {
-        if (! auth()->user()->can('supplier.update') && ! auth()->user()->can('customer.update') && ! auth()->user()->can('customer.view_own') && ! auth()->user()->can('supplier.view_own')) {
+        if (! auth()->user()->can('supplier.update') && ! auth()->user()->can('customer.update')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -848,7 +858,7 @@ class ContactController extends Controller
      */
     public function destroy($id)
     {
-        if (! auth()->user()->can('supplier.delete') && ! auth()->user()->can('customer.delete') && ! auth()->user()->can('customer.view_own') && ! auth()->user()->can('supplier.view_own')) {
+        if (! auth()->user()->can('supplier.delete') && ! auth()->user()->can('customer.delete')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -1103,6 +1113,12 @@ class ContactController extends Controller
                         break;
                     }
 
+                    if (! \App\Utils\ContactAccess::allows(auth()->user(), $contact_array['type'], 'create')) {
+                        $is_valid = false;
+                        $error_msg = 'Unauthorized contact type in row '.$row_no;
+                        break;
+                    }
+
                     $contact_array['prefix'] = $value[1];
                     //Check contact name
                     if (! empty($value[2])) {
@@ -1300,23 +1316,6 @@ class ContactController extends Controller
         $location_id = request()->location_id;
 
         $contact = Contact::find($contact_id);
-
-        $is_selected_contacts = User::isSelectedContacts(auth()->user()->id);
-        $user_contacts = [];
-        if ($is_selected_contacts) {
-            $user_contacts = auth()->user()->contactAccess->pluck('id')->toArray();
-        }
-
-        if (! auth()->user()->can('supplier.view') && auth()->user()->can('supplier.view_own')) {
-            if ($contact->created_by != auth()->user()->id & ! in_array($contact->id, $user_contacts)) {
-                abort(403, 'Unauthorized action.');
-            }
-        }
-        if (! auth()->user()->can('customer.view') && auth()->user()->can('customer.view_own')) {
-            if ($contact->created_by != auth()->user()->id & ! in_array($contact->id, $user_contacts)) {
-                abort(403, 'Unauthorized action.');
-            }
-        }
 
         $line_details = ($format == 'format_3' || $format == 'format_4') ? true : false;
 
@@ -1613,6 +1612,13 @@ class ContactController extends Controller
         $query = Contact::where('business_id', $business_id)
                         ->active()
                         ->whereNotNull('position');
+        $visible_types = ['both'];
+        foreach (['customer', 'supplier'] as $type) {
+            if (auth()->user()->can($type.'.view')) {
+                $visible_types[] = $type;
+            }
+        }
+        $query->whereIn('type', $visible_types);
 
         if (! empty(request()->input('contacts'))) {
             $query->whereIn('id', request()->input('contacts'));
@@ -1620,6 +1626,7 @@ class ContactController extends Controller
         $contacts = $query->get();
 
         $all_contacts = Contact::where('business_id', $business_id)
+                        ->whereIn('type', $visible_types)
                         ->active()
                         ->get();
 

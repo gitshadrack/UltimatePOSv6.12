@@ -145,6 +145,9 @@ class BusinessController extends BaseController
                                 class="tw-m-0.5 tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-warning">'.__('superadmin::lang.initialize_business_data').'
                             </a>';
 
+                    $html .= ' <a href="'.route('superadmin.business.migration', ['id' => $row->id]).'"
+                                class="tw-m-0.5 tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-info">Tenant migration</a>';
+
                     if (request()->session()->get('user.business_id') != $row->id) {
                         $html .= ' <a href="'.action([\Modules\Superadmin\Http\Controllers\BusinessController::class, 'destroy'], [$row->id]).'"
                                     class="tw-m-0.5 tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline  tw-dw-btn-error delete_business_confirmation">'.__('messages.delete').'</a>';

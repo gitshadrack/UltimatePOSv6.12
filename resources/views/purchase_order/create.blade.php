@@ -526,6 +526,44 @@
 			if($('#location_id').length){
 				$('#location_id').change();
 			}
+
+            @if(!empty($stock_alert_lpo_prefill))
+                var stockAlertLpoPrefill = @json($stock_alert_lpo_prefill);
+                $('#location_id').val(String(stockAlertLpoPrefill.location_id)).trigger('change');
+
+                function loadStockAlertLpoLine(index) {
+                    if (index >= stockAlertLpoPrefill.items.length) {
+                        update_table_total();
+                        update_grand_total();
+                        return;
+                    }
+                    var item = stockAlertLpoPrefill.items[index];
+                    var rowCount = $('#row_count').val();
+                    $.ajax({
+                        method: 'POST',
+                        url: '/purchases/get_purchase_entry_row',
+                        dataType: 'html',
+                        data: {
+                            product_id: item.product_id,
+                            variation_id: item.variation_id,
+                            row_count: rowCount,
+                            location_id: stockAlertLpoPrefill.location_id,
+                            is_purchase_order: true
+                        }
+                    }).done(function(html) {
+                        append_purchase_lines(html, rowCount);
+                        var row = $('#purchase_entry_table .hidden_variation_id').filter(function() {
+                            return String(this.value) === String(item.variation_id);
+                        }).last().closest('tr');
+                        __write_number(row.find('.purchase_quantity'), item.quantity);
+                        row.find('.purchase_quantity').trigger('change');
+                        loadStockAlertLpoLine(index + 1);
+                    }).fail(function() {
+                        toastr.error('Unable to load one of the stock-alert products into the LPO.');
+                    });
+                }
+                loadStockAlertLpoLine(0);
+            @endif
     	});
 	</script>
 	@include('purchase.partials.keyboard_shortcuts')

@@ -1,6 +1,18 @@
 <?php
 
 return [
+    'complete_payment' => 'Complete Payment',
+    'complete_sale' => 'Complete Sale',
+    'processing' => 'Processing...',
+    'pay_remaining' => 'Pay Remaining',
+    'exact' => 'Exact',
+    'amount_tendered' => 'Amount Tendered',
+    'cash_tendered_help' => 'Only the amount allocated to this sale is recorded; any excess is returned as change.',
+    'finalize_and_pay' => 'FINALIZE & PAY',
+    'invalid_payment_amount' => 'Payment amounts must be valid, non-negative numbers.',
+    'ready' => 'Ready',
+    'enable_unified_payment_modal' => 'Enable Unified Payment Modal',
+    'enable_unified_payment_modal_help' => 'Show all enabled payment methods together behind the FINALIZE & PAY button. Disable this to use the original payment-row checkout.',
     'enable_editing_product_from_purchase' => 'Enable editing product price from purchase screen',
     'sales_commission_agent' => 'Sales Commission Agent',
     'sales_commission_agents' => 'Sales Commission Agents',

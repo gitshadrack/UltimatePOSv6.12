@@ -315,6 +315,56 @@ Requirements:
 - Merging multiple tables must not release a table until its responsibility
   has been transferred to the merged bill.
 
+## Pending-bill transfer and handover
+
+An authorized user must be able to transfer responsibility for an unpaid or
+otherwise pending bill to another active waiter, supervisor, or cashier. This
+supports shift changes, breaks, reassignment of tables, and designated-cashier
+settlement without losing accountability.
+
+Suggested workflow:
+
+1. The current bill owner selects **Transfer/Handover Bill**.
+2. The system displays only eligible recipients assigned to the same business
+   and location, together with their role, active-shift status, and register
+   status where relevant.
+3. The sender selects the recipient, enters a reason or handover note, and
+   confirms the bill totals, table, unsent items, preparation status, payments,
+   tips, and other outstanding actions.
+4. The recipient accepts or rejects the handover. A supervisor with the
+   appropriate permission may force a transfer when the original owner is
+   unavailable.
+5. After acceptance, the recipient becomes the responsible bill owner and
+   both users receive confirmation. The customer order, bill number, table
+   session, preparation tickets, and previous ownership history remain intact.
+
+Controls and requirements:
+
+- Transferring a bill changes responsibility; it must not duplicate, merge,
+  settle, void, renumber, or silently modify the bill.
+- Only open/pending bills may be transferred. Paid, voided, refunded, or
+  fiscalized bills require their applicable exception workflow.
+- A waiter receiving a bill must have an active service shift. A cashier who
+  will receive payment must have the required active register. A supervisor
+  may receive or oversee a bill according to configured permissions.
+- A transfer must not release the table or change preparation-station routing.
+- The system must clearly state whether the associated table and all linked
+  split bills are transferred together. A partial transfer must require the
+  user to select the exact child bills and resulting ownership explicitly.
+- Unsent items, partially prepared items, payment attempts, deposits, credit,
+  discounts, service charges, and tips must be disclosed before acceptance.
+- While acceptance is pending, settlement and conflicting transfers must be
+  locked or version-checked to prevent two users from assuming responsibility
+  for the same bill.
+- Every request, acceptance, rejection, cancellation, forced transfer, and
+  subsequent action must record the bill, table, sender, recipient, authorizing
+  supervisor, reason, terminal, timestamp, and before/after ownership.
+- Shift closure must either block while bills remain assigned to the user or
+  complete an accepted/forced handover under the configured shift-close
+  policy.
+- Pending handovers should appear in the recipient's Waiter Screen or cashier
+  queue and produce an in-app notification.
+
 ## Returns, removals, and swaps
 
 ### Removing or returning an item
@@ -489,6 +539,9 @@ permission:
 - Access Waiter Screen
 - Claim/release table
 - Transfer table or waiter
+- Request pending-bill transfer
+- Accept/reject pending-bill handover
+- Force pending-bill transfer
 - Send order
 - Cancel unsent item
 - Cancel sent item
@@ -650,6 +703,11 @@ ITEM_SWAPPED
 BILL_PRINTED
 BILL_SPLIT
 BILLS_MERGED
+BILL_HANDOVER_REQUESTED
+BILL_HANDOVER_ACCEPTED
+BILL_HANDOVER_REJECTED
+BILL_HANDOVER_CANCELLED
+BILL_HANDOVER_FORCED
 PAYMENT_RECEIVED
 BILL_VOIDED
 TABLE_RELEASED
@@ -793,6 +851,7 @@ Maintain a rollback plan and manual service fallback throughout the pilot.
 - Split bills.
 - Merge bills.
 - Table/waiter transfers.
+- Pending-bill transfer and handover to a waiter, supervisor, or cashier.
 - Returns and item swaps.
 - Wastage handling.
 

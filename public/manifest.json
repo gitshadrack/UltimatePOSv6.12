@@ -2,7 +2,7 @@
   "name": "Sysnettechs Solutions POS",
   "short_name": "Sysnettechs POS",
   "description": "Installable Ultimate POS app for Sysnettechs Solutions.",
-  "start_url": "/",
+  "start_url": "/sells/pos/create",
   "scope": "/",
   "display": "standalone",
   "background_color": "#081830",

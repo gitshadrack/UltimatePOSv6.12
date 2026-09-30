@@ -420,6 +420,9 @@ class SellController extends Controller
                 })
                 ->editColumn('invoice_no', function ($row) use ($is_crm) {
                     $invoice_no = $row->invoice_no;
+                    if (($row->offline_sync_status ?? null) === 'manager_review') {
+                        $invoice_no .= ' &nbsp;<small class="label bg-red label-round no-print" title="Offline stock conflict requires manager review"><i class="fas fa-exclamation-triangle"></i> Stock review</small>';
+                    }
                     if (! empty($row->woocommerce_order_id)) {
                         $invoice_no .= ' <i class="fab fa-wordpress text-primary no-print" title="'.__('lang_v1.synced_from_woocommerce').'"></i>';
                     }

@@ -4,6 +4,8 @@ M-PESA collection, verification, reconciliation, dashboards, Daraja, IntaSend, r
 
 Return to the [documentation index](../../readme.md) or [customizations index](../CUSTOMIZATIONS.md).
 
+For the proposed local/offline SMS verification design, see [Offline M-PESA Verification with a GSM Modem](../OFFLINE_MPESA_GSM_MODEM.md).
+
 ## Contents
 
 - [1. M-PESA / Custom Pay Button](#1-m-pesa-custom-pay-button)

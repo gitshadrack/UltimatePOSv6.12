@@ -67,6 +67,9 @@ class TransactionUtil extends Util
             'contact_id' => $input['contact_id'],
             'customer_group_id' => ! empty($input['customer_group_id']) ? $input['customer_group_id'] : null,
             'invoice_no' => $invoice_no,
+            'offline_transaction_uuid' => ! empty($input['offline_transaction_uuid']) ? $input['offline_transaction_uuid'] : null,
+            'offline_created_at' => ! empty($input['offline_created_at']) ? $input['offline_created_at'] : null,
+            'offline_sync_status' => ! empty($input['offline_created_at']) ? 'syncing' : null,
             'ref_no' => '',
             'source' => ! empty($input['source']) ? $input['source'] : null,
             'total_before_tax' => $invoice_total['total_before_tax'],
@@ -751,6 +754,9 @@ class TransactionUtil extends Util
 
                     $payment_data = [
                         'amount' => $payment_amount,
+                        'cash_tendered' => $payment['method'] == 'cash' && isset($payment['cash_tendered'])
+                            ? $this->num_uf($payment['cash_tendered'])
+                            : null,
                         'method' => $payment['method'],
                         'business_id' => $transaction->business_id,
                         'is_return' => isset($payment['is_return']) ? $payment['is_return'] : 0,
@@ -872,6 +878,11 @@ class TransactionUtil extends Util
         }
 
         $payment['amount'] = $uf_data ? $this->num_uf($payment['amount']) : $payment['amount'];
+        if ($payment['method'] != 'cash') {
+            $payment['cash_tendered'] = null;
+        } elseif (isset($payment['cash_tendered'])) {
+            $payment['cash_tendered'] = $uf_data ? $this->num_uf($payment['cash_tendered']) : $payment['cash_tendered'];
+        }
 
         // Set payment for to transaction contact id
         $payment['payment_for'] = $transaction->contact_id;
@@ -1348,6 +1359,7 @@ class TransactionUtil extends Util
         $output['date_time_format'] = $business_details->date_format;
         $output['currency_symbol'] = $business_details->currency_symbol;
 
+        $output['hide_payment_date'] = ! empty($il->common_settings['hide_payment_date']);
         $output['hide_price'] = ! empty($il->common_settings['hide_price']) ? true : false;
 
         if (! empty($il->common_settings['show_due_date']) && $transaction->payment_status != 'paid') {
@@ -1617,13 +1629,12 @@ class TransactionUtil extends Util
                     foreach ($payments as $value) {
                         $method = ! empty($payment_types[$value['method']]) ? $payment_types[$value['method']] : '';
                         if ($value['method'] == 'cash') {
+                            $payment_label = $value['is_return'] == 1 ? 'Change Returned' : $method;
                             $output['payments'][] =
-                                ['method' => $method.($value['is_return'] == 1 ? ' ('.$il->change_return_label.')(-)' : ''),
+                                ['method' => $payment_label,
                                     'amount' => $this->num_f($value['amount'], $show_currency, $business_details),
                                     'date' => $this->format_date($value['paid_on'], false, $business_details),
                                 ];
-                            if ($value['is_return'] == 1) {
-                            }
                         } elseif ($value['method'] == 'card') {
                             $output['payments'][] =
                                 ['method' => $method.(! empty($value['card_transaction_number']) ? (', Transaction Number:'.$value['card_transaction_number']) : ''),

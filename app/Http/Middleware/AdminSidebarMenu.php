@@ -490,7 +490,7 @@ class AdminSidebarMenu
             if (in_array('stock_adjustment', $enabled_modules) && (auth()->user()->can('stock_adjustment.view') || auth()->user()->can('stock_adjustment.create') || auth()->user()->can('view_own_stock_adjustment'))) {
                 $menu->dropdown(
                     __('stock_adjustment.stock_adjustment'),
-                    function ($sub) {
+                    function ($sub) use ($common_settings) {
                         if (auth()->user()->can('stock_adjustment.view')  || auth()->user()->can('view_own_stock_adjustment')) {
                             $sub->url(
                                 action([\App\Http\Controllers\StockAdjustmentController::class, 'index']),
@@ -504,6 +504,18 @@ class AdminSidebarMenu
                                 __('stock_adjustment.add'),
                                 ['icon' => '', 'active' => request()->segment(1) == 'stock-adjustments' && request()->segment(2) == 'create']
                             );
+                            $sub->url(
+                                route('stock-adjustments.stocktake.create'),
+                                __('stock_adjustment.stocktake'),
+                                ['icon' => '', 'active' => request()->segment(1) == 'stock-adjustments' && request()->segment(2) == 'stocktake']
+                            );
+                            if (! empty($common_settings['enable_purchase_order']) && auth()->user()->can('purchase_order.create')) {
+                                $sub->url(
+                                    route('stock-adjustments.stock-alert-lpo'),
+                                    __('stock_adjustment.create_lpo_from_stock_alert'),
+                                    ['icon' => '', 'active' => request()->segment(2) == 'stock-alert-lpo']
+                                );
+                            }
                         }
                     },
                     ['icon' => '<svg aria-hidden="true" class="tw-size-5 tw-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
@@ -790,6 +802,11 @@ class AdminSidebarMenu
                         }
                         if (auth()->user()->can('register_report.view')) {
                             $sub->url(
+                                route('reports.z-report'),
+                                __('upgrade.z_report'),
+                                ['icon' => '', 'active' => request()->segment(2) == 'z-report']
+                            );
+                            $sub->url(
                                 action([\App\Http\Controllers\ReportController::class, 'getRegisterReport']),
                                 __('report.register_report'),
                                 ['icon' => '', 'active' => request()->segment(2) == 'register-report']
@@ -933,6 +950,13 @@ class AdminSidebarMenu
                                 action([\App\Http\Controllers\InvoiceSchemeController::class, 'index']),
                                 __('invoice.invoice_settings'),
                                 ['icon' => '', 'active' => in_array(request()->segment(1), ['invoice-schemes', 'invoice-layouts'])]
+                            );
+                        }
+                        if (auth()->user()->hasAnyPermission(['sell.view', 'stock_adjustment.view', 'stock_adjustment.create'])) {
+                            $sub->url(
+                                route('offline-stock-conflicts.index'),
+                                'Offline stock conflicts',
+                                ['icon' => '', 'active' => request()->segment(1) == 'offline-stock-conflicts']
                             );
                         }
                         if (auth()->user()->can('barcode_settings.access')) {

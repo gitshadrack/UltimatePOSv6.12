@@ -1,4 +1,13 @@
 $(document).ready(function() {
+    $(document).on('shown.bs.modal', '.payment_modal, .edit_payment_modal', function() {
+        var modal = $(this);
+        modal.find('select.select2').each(function() {
+            if ($(this).hasClass('select2-hidden-accessible')) {
+                $(this).select2('destroy');
+            }
+            $(this).select2({ dropdownParent: modal, width: '100%' });
+        });
+    });
     $(document).on('click', '.add_payment_modal', function(e) {
         e.preventDefault();
         var container = $('.payment_modal');
@@ -15,7 +24,7 @@ $(document).ready(function() {
                         ignoreReadonly: true,
                     });
                     container.find('form#transaction_payment_add_form').validate();
-                    set_default_payment_account();
+                    set_default_payment_account(container.find('form#transaction_payment_add_form'));
 
                     $('.payment_modal')
                         .find('input[type="checkbox"].input-icheck')
@@ -131,28 +140,29 @@ $(document).ready(function() {
 });
 
 $(document).on('change', '#transaction_payment_add_form .payment_types_dropdown', function(e) {
-    set_default_payment_account();
+    set_default_payment_account($(this).closest('form'));
 });
 
-function set_default_payment_account() {
+function set_default_payment_account(form) {
     var default_accounts = {};
 
-    if (!_.isUndefined($('#transaction_payment_add_form #default_payment_accounts').val())) {
-        default_accounts = JSON.parse($('#transaction_payment_add_form #default_payment_accounts').val());
+    try {
+        default_accounts = JSON.parse(form.find('#default_payment_accounts').val() || '{}');
+    } catch (e) {
+        default_accounts = {};
     }
 
-    var payment_type = $('#transaction_payment_add_form .payment_types_dropdown').val();
+    var payment_type = form.find('.payment_types_dropdown').val();
     if (payment_type && payment_type != 'advance') {
-        var default_account = !_.isEmpty(default_accounts) && default_accounts[payment_type]['account'] ? 
+        var default_account = default_accounts && default_accounts[payment_type] && default_accounts[payment_type]['account'] ?
             default_accounts[payment_type]['account'] : '';
-        $('#transaction_payment_add_form #account_id').val(default_account);
-        $('#transaction_payment_add_form #account_id').change();
+        form.find('#account_id').val(default_account).trigger('change');
     }
 }
 
 $(document).on('change', '.payment_types_dropdown', function(e) {
-    var payment_type = $('#transaction_payment_add_form .payment_types_dropdown').val();
-    account_dropdown = $('#transaction_payment_add_form #account_id');
+    var payment_type = $(this).val();
+    var account_dropdown = $(this).closest('form').find('#account_id');
     if (payment_type == 'advance') {
         if (account_dropdown) {
             account_dropdown.prop('disabled', true);

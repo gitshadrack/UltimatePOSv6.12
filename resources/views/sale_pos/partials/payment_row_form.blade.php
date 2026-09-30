@@ -49,6 +49,17 @@
 			</div>
 		</div>
 	</div>
+	<div class="col-md-6 cash-tendered-container @if($payment_line['method'] != 'cash') hide @endif">
+		<div class="form-group">
+			<label for="cash_tendered_{{$row_index}}">Amount tendered:</label>
+			<div class="input-group">
+				<span class="input-group-addon">
+					<i class="fas fa-money-bill-alt"></i>
+				</span>
+				<input type="text" name="payment[{{$row_index}}][cash_tendered]" value="{{ @num_format($payment_line['cash_tendered'] ?? $payment_line['amount']) }}" class="form-control cash-tendered input_number" id="cash_tendered_{{$row_index}}" placeholder="Amount tendered" autocomplete="off" min="0">
+			</div>
+		</div>
+	</div>
 
 	@php
             $pos_settings = !empty(session()->get('business.pos_settings')) ? json_decode(session()->get('business.pos_settings'), true) : [];

@@ -409,7 +409,7 @@
 					<tr>
 						<td>{{$payment['method']}}</td>
 						<td class="text-right" >{{$payment['amount']}}</td>
-						<td class="text-right">{{$payment['date']}}</td>
+						@if(empty($receipt_details->hide_payment_date))<td class="text-right">{{$payment['date']}}</td>@endif
 					</tr>
 				@endforeach
 			@endif

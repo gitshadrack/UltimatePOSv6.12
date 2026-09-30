@@ -603,7 +603,7 @@
 			@if(!empty($receipt_details->payments))
 				@foreach($receipt_details->payments as $payment)
 					<div class="flex-box">
-						<p class="width-50 text-left">{{$payment['method']}} ({{$payment['date']}}) </p>
+						<p class="width-50 text-left">{{$payment['method']}} @if(empty($receipt_details->hide_payment_date))({{$payment['date']}})@endif </p>
 						<p class="width-50 text-right">{{$payment['amount']}}</p>
 					</div>
 				@endforeach

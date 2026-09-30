@@ -21,6 +21,35 @@
 	<br>
 	{!! Form::open(['url' => action([\App\Http\Controllers\ProductController::class, 'bulkUpdate']), 
 			'method' => 'post', 'id' => 'bulk_edit_products_form' ]) !!}
+	<div class="box box-solid box-primary">
+		<div class="box-header"><h3 class="box-title">@lang('lang_v1.bulk_edit')</h3></div>
+		<div class="box-body">
+			<p class="help-block">Set only the values you want to apply to every selected product, then click Apply to all.</p>
+			<div class="row">
+				<div class="col-md-2">
+					{!! Form::label('bulk_selling_price', __('product.default_selling_price') . ' (' . __('product.inc_of_tax') . ')') !!}
+					{!! Form::text('bulk_selling_price', null, ['class' => 'form-control input_number', 'id' => 'bulk_selling_price']) !!}
+				</div>
+				<div class="col-md-2">
+					{!! Form::label('bulk_is_inactive', __('business.is_active')) !!}
+					{!! Form::select('bulk_is_inactive', ['' => __('messages.please_select'), 0 => __('business.is_active'), 1 => __('lang_v1.inactive')], '', ['class' => 'form-control', 'id' => 'bulk_is_inactive']) !!}
+				</div>
+				<div class="col-md-2">
+					{!! Form::label('bulk_not_for_selling', __('lang_v1.not_for_selling')) !!}
+					{!! Form::select('bulk_not_for_selling', ['' => __('messages.please_select'), 0 => __('messages.no'), 1 => __('messages.yes')], '', ['class' => 'form-control', 'id' => 'bulk_not_for_selling']) !!}
+				</div>
+				<div class="col-md-2">
+					{!! Form::label('bulk_enable_stock', __('product.manage_stock')) !!}
+					{!! Form::select('bulk_enable_stock', ['' => __('messages.please_select'), 1 => __('messages.yes'), 0 => __('messages.no')], '', ['class' => 'form-control', 'id' => 'bulk_enable_stock']) !!}
+				</div>
+				<div class="col-md-2">
+					{!! Form::label('bulk_alert_quantity', __('product.alert_quantity')) !!}
+					{!! Form::text('bulk_alert_quantity', null, ['class' => 'form-control input_number', 'min' => 0, 'id' => 'bulk_alert_quantity']) !!}
+				</div>
+				<div class="col-md-2"><br><button type="button" id="apply_bulk_values" class="tw-dw-btn tw-dw-btn-primary tw-text-white">@lang('messages.update')</button></div>
+			</div>
+		</div>
+	</div>
 	<div class="row">
 		<div class="col-md-12">
 			<table class="table text-center table-bordered" id="product_table">
@@ -156,6 +185,29 @@
 		var profit_percent = __get_rate(purchase_exc_tax, sp_exc_tax);
 		__write_number(tr.find('input.profit_percent'), profit_percent);
 	});
+
+	$(document).on('click', '#apply_bulk_values', function() {
+		var sellingPrice = $('#bulk_selling_price').val();
+		var activeState = $('#bulk_is_inactive').val();
+		var sellingState = $('#bulk_not_for_selling').val();
+		var stockState = $('#bulk_enable_stock').val();
+		var alertQuantity = $('#bulk_alert_quantity').val();
+
+		if (sellingPrice !== '') {
+			$('input.sp_inc_tax').val(sellingPrice).trigger('change');
+		}
+		if (activeState !== '') $('select[name$="[is_inactive]"]').val(activeState);
+		if (sellingState !== '') $('select[name$="[not_for_selling]"]').val(sellingState);
+		if (stockState !== '') $('select[name$="[enable_stock]"]').val(stockState).trigger('change');
+		if (alertQuantity !== '') $('input[name$="[alert_quantity]"]').val(alertQuantity);
+
+		toastr.success('@lang('lang_v1.updated_success')');
+	});
+
+	$(document).on('change', '.bulk-enable-stock', function() {
+		$(this).closest('tr').find('.bulk-alert-quantity').prop('disabled', $(this).val() === '0');
+	});
+	$('.bulk-enable-stock').trigger('change');
 
 	$(document).on('change', 'select.category_id', function() {
 		var cat = $(this).val();

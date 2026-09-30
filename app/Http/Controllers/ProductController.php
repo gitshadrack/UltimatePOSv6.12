@@ -446,7 +446,7 @@ class ProductController extends Controller
         }
         try {
             $business_id = $request->session()->get('user.business_id');
-            $form_fields = ['name', 'brand_id', 'unit_id', 'category_id', 'tax', 'type', 'barcode_type', 'sku', 'alert_quantity', 'tax_type', 'weight', 'product_description', 'sub_unit_ids', 'preparation_time_in_minutes', 'product_custom_field1', 'product_custom_field2', 'product_custom_field3', 'product_custom_field4', 'product_custom_field5', 'product_custom_field6', 'product_custom_field7', 'product_custom_field8', 'product_custom_field9', 'product_custom_field10', 'product_custom_field11', 'product_custom_field12', 'product_custom_field13', 'product_custom_field14', 'product_custom_field15', 'product_custom_field16', 'product_custom_field17', 'product_custom_field18', 'product_custom_field19', 'product_custom_field20',];
+            $form_fields = ['name', 'brand_id', 'unit_id', 'category_id', 'tax', 'type', 'barcode_type', 'sku', 'alert_quantity', 'offline_safety_stock', 'tax_type', 'weight', 'product_description', 'sub_unit_ids', 'preparation_time_in_minutes', 'product_custom_field1', 'product_custom_field2', 'product_custom_field3', 'product_custom_field4', 'product_custom_field5', 'product_custom_field6', 'product_custom_field7', 'product_custom_field8', 'product_custom_field9', 'product_custom_field10', 'product_custom_field11', 'product_custom_field12', 'product_custom_field13', 'product_custom_field14', 'product_custom_field15', 'product_custom_field16', 'product_custom_field17', 'product_custom_field18', 'product_custom_field19', 'product_custom_field20',];
 
             $module_form_fields = $this->moduleUtil->getModuleFormField('product_form_fields');
             if (! empty($module_form_fields)) {
@@ -475,6 +475,7 @@ class ProductController extends Controller
             if (! empty($product_details['alert_quantity'])) {
                 $product_details['alert_quantity'] = $this->productUtil->num_uf($product_details['alert_quantity']);
             }
+            $product_details['offline_safety_stock'] = $this->productUtil->num_uf($product_details['offline_safety_stock'] ?? 0);
 
             $expiry_enabled = $request->session()->get('business.enable_product_expiry');
             if (! empty($request->input('expiry_period_type')) && ! empty($request->input('expiry_period')) && ! empty($expiry_enabled) && ($product_details['enable_stock'] == 1)) {
@@ -678,7 +679,7 @@ class ProductController extends Controller
 
         try {
             $business_id = $request->session()->get('user.business_id');
-            $product_details = $request->only(['name', 'brand_id', 'unit_id', 'category_id', 'tax', 'barcode_type', 'sku', 'alert_quantity', 'tax_type', 'weight', 'product_description', 'sub_unit_ids', 'preparation_time_in_minutes', 'product_custom_field1', 'product_custom_field2', 'product_custom_field3', 'product_custom_field4', 'product_custom_field5', 'product_custom_field6', 'product_custom_field7', 'product_custom_field8', 'product_custom_field9', 'product_custom_field10', 'product_custom_field11', 'product_custom_field12', 'product_custom_field13', 'product_custom_field14', 'product_custom_field15', 'product_custom_field16', 'product_custom_field17', 'product_custom_field18', 'product_custom_field19', 'product_custom_field20',]);
+            $product_details = $request->only(['name', 'brand_id', 'unit_id', 'category_id', 'tax', 'barcode_type', 'sku', 'alert_quantity', 'offline_safety_stock', 'tax_type', 'weight', 'product_description', 'sub_unit_ids', 'preparation_time_in_minutes', 'product_custom_field1', 'product_custom_field2', 'product_custom_field3', 'product_custom_field4', 'product_custom_field5', 'product_custom_field6', 'product_custom_field7', 'product_custom_field8', 'product_custom_field9', 'product_custom_field10', 'product_custom_field11', 'product_custom_field12', 'product_custom_field13', 'product_custom_field14', 'product_custom_field15', 'product_custom_field16', 'product_custom_field17', 'product_custom_field18', 'product_custom_field19', 'product_custom_field20',]);
 
             DB::beginTransaction();
 
@@ -702,6 +703,7 @@ class ProductController extends Controller
             $product->barcode_type = $product_details['barcode_type'];
             $product->sku = $product_details['sku'];
             $product->alert_quantity = ! empty($product_details['alert_quantity']) ? $this->productUtil->num_uf($product_details['alert_quantity']) : $product_details['alert_quantity'];
+            $product->offline_safety_stock = $this->productUtil->num_uf($product_details['offline_safety_stock'] ?? 0);
             $product->tax_type = $product_details['tax_type'];
             $product->weight = $product_details['weight'];
             $product->product_custom_field1 = $product_details['product_custom_field1'] ?? '';
@@ -1254,13 +1256,16 @@ class ProductController extends Controller
             $not_for_selling = request()->get('not_for_selling', null);
             $price_group_id = request()->input('price_group', '');
             $product_types = request()->get('product_types', []);
+            $result_limit = request()->integer('limit', 0);
+            $result_limit = $result_limit > 0 ? min($result_limit, 50) : null;
+            $stock_alert = request()->boolean('stock_alert');
 
             $search_fields = request()->get('search_fields', ['name', 'sku']);
             if (in_array('sku', $search_fields)) {
                 $search_fields[] = 'sub_sku';
             }
 
-            $result = $this->productUtil->filterProduct($business_id, $search_term, $location_id, $not_for_selling, $price_group_id, $product_types, $search_fields, $check_qty);
+            $result = $this->productUtil->filterProduct($business_id, $search_term, $location_id, $not_for_selling, $price_group_id, $product_types, $search_fields, $check_qty, 'like', $result_limit, $stock_alert);
 
             // If only one result and location_id is provided (POS context), auto-fetch the product row
             if (count($result) == 1 && !empty($location_id) && request()->get('auto_add_single', false)) {
@@ -2210,6 +2215,12 @@ class ProductController extends Controller
                     'sub_category_id' => $product_data['sub_category_id'],
                     'brand_id' => $product_data['brand_id'],
                     'tax' => $product_data['tax'],
+                    'is_inactive' => (int) $product_data['is_inactive'],
+                    'not_for_selling' => (int) $product_data['not_for_selling'],
+                    'enable_stock' => (int) $product_data['enable_stock'],
+                    'alert_quantity' => isset($product_data['alert_quantity']) && $product_data['alert_quantity'] !== ''
+                        ? $this->productUtil->num_uf($product_data['alert_quantity'])
+                        : null,
                 ];
 
                 //Update product

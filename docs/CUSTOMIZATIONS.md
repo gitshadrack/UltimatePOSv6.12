@@ -14,6 +14,7 @@ M-PESA collection, verification, reconciliation, dashboards, Daraja, IntaSend, r
 - [13. Manual M-PESA Payment Verification](features/MPESA_AND_PAYMENTS.md#13-manual-m-pesa-payment-verification)
 - [IntaSend M-PESA Webhook and Reconciliation Holding Pool](features/MPESA_AND_PAYMENTS.md#intasend-m-pesa-webhook-and-reconciliation-holding-pool)
 - [Direct Safaricom Daraja M-PESA Integration](features/MPESA_AND_PAYMENTS.md#direct-safaricom-daraja-m-pesa-integration)
+- [Offline M-PESA Verification with a GSM Modem](OFFLINE_MPESA_GSM_MODEM.md)
 - [Unified M-PESA Dashboard and Dedicated Sidebar (2026-07-16)](features/MPESA_AND_PAYMENTS.md#unified-m-pesa-dashboard-and-dedicated-sidebar-2026-07-16)
 - [Direct Daraja M-PESA Reversal Execution (2026-07-17)](features/MPESA_AND_PAYMENTS.md#direct-daraja-m-pesa-reversal-execution-2026-07-17)
 

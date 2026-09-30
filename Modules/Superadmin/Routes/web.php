@@ -30,6 +30,18 @@ Route::middleware('web', 'auth', 'language', 'AdminSidebarMenu', 'superadmin')->
 
     Route::get('/business/{id}/initialize-data', [Modules\Superadmin\Http\Controllers\BusinessController::class, 'initializeDataForm']);
     Route::post('/business/{id}/initialize-data', [Modules\Superadmin\Http\Controllers\BusinessController::class, 'initializeData']);
+    Route::get('/tenant-migration', [Modules\Superadmin\Http\Controllers\TenantMigrationController::class, 'index'])
+        ->name('superadmin.tenant-migration.index');
+    Route::post('/tenant-migration/import-check', [Modules\Superadmin\Http\Controllers\TenantMigrationController::class, 'checkImport'])
+        ->name('superadmin.tenant-migration.import-check');
+    Route::post('/tenant-migration/import', [Modules\Superadmin\Http\Controllers\TenantMigrationController::class, 'import'])
+        ->name('superadmin.tenant-migration.import');
+    Route::get('/business/{id}/migration', [Modules\Superadmin\Http\Controllers\TenantMigrationController::class, 'show'])
+        ->name('superadmin.business.migration');
+    Route::post('/business/{id}/migration/export', [Modules\Superadmin\Http\Controllers\TenantMigrationController::class, 'export'])
+        ->name('superadmin.business.migration.export');
+    Route::get('/business/{id}/migration/archive/{archive}', [Modules\Superadmin\Http\Controllers\TenantMigrationController::class, 'download'])
+        ->name('superadmin.business.migration.download');
     Route::resource('/business', Modules\Superadmin\Http\Controllers\BusinessController::class);
     Route::get('/business/{id}/destroy', [Modules\Superadmin\Http\Controllers\BusinessController::class, 'destroy']);
 

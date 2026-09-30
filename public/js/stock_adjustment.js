@@ -1,4 +1,8 @@
+var stockAdjustmentScanner = null;
+var stockAdjustmentScanInProgress = false;
+
 $(document).ready(function() {
+
     //Add products
     if ($('#search_product_for_srock_adjustment').length > 0) {
         //Add Product
@@ -7,7 +11,13 @@ $(document).ready(function() {
                 source: function(request, response) {
                     $.getJSON(
                         '/products/list',
-                        { location_id: $('#location_id').val(), term: request.term },
+                        {
+                            location_id: $('#location_id').val(),
+                            term: request.term,
+                            search_fields: ['name', 'sku'],
+                            stock_alert: $('#stock_alert_only').is(':checked') ? 1 : 0,
+                            limit: 20,
+                        },
                         response
                     );
                 },
@@ -68,6 +78,7 @@ $(document).ready(function() {
         } else {
             $('#search_product_for_srock_adjustment').attr('disabled', 'disabled');
         }
+        $('#stock_adjustment_scan_button').prop('disabled', !$(this).val());
         $('table#stock_adjustment_product_table tbody').html('');
         $('#product_row_index').val(0);
         update_table_total();
@@ -103,6 +114,28 @@ $(document).ready(function() {
     });
 
     $('form#stock_adjustment_form').validate();
+
+    $('#stock_alert_only').on('change', function() {
+        $('#search_product_for_srock_adjustment').val('').focus();
+    });
+
+    $('#stock_adjustment_scan_button').on('click', function() {
+        if (!$('#location_id').val()) {
+            toastr.warning('Select a location before scanning.');
+            return;
+        }
+        if (typeof Html5Qrcode === 'undefined') {
+            toastr.error('The camera scanner could not be loaded. Use the barcode search field instead.');
+            return;
+        }
+        $('#stock_adjustment_scanner_modal').modal('show');
+    });
+
+    $('#stock_adjustment_scanner_modal').on('shown.bs.modal', function() {
+        start_stock_adjustment_scanner();
+    }).on('hidden.bs.modal', function() {
+        stop_stock_adjustment_scanner();
+    });
 
     stock_adjustment_table = $('#stock_adjustment_table').DataTable({
         processing: true,
@@ -160,6 +193,85 @@ $(document).ready(function() {
         });
     });
 });
+
+function start_stock_adjustment_scanner() {
+    if (stockAdjustmentScanInProgress) {
+        return;
+    }
+
+    stockAdjustmentScanner = new Html5Qrcode('stock_adjustment_scanner');
+    stockAdjustmentScanInProgress = true;
+    $('#stock_adjustment_scanner_status').text('Point the camera at a product barcode.');
+    stockAdjustmentScanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 280, height: 140 } },
+        function(decodedText) {
+            $.when(stop_stock_adjustment_scanner()).always(function() {
+                $('#stock_adjustment_scanner_modal').modal('hide');
+                lookup_stock_adjustment_barcode(decodedText);
+            });
+        },
+        function() {}
+    ).catch(function(error) {
+        stockAdjustmentScanInProgress = false;
+        var errorMessage = 'Camera access failed. Check browser permissions or use the search field.';
+        if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            errorMessage = 'Camera scanning requires HTTPS on hosted sites. Open this page over HTTPS, then allow camera access.';
+        } else if (error && error.name === 'NotAllowedError') {
+            errorMessage = 'Camera permission was denied. Allow camera access for this site in the browser address-bar settings, then try again.';
+        } else if (error && error.name === 'NotFoundError') {
+            errorMessage = 'No camera was found on this device.';
+        }
+        $('#stock_adjustment_scanner_status').text(errorMessage);
+    });
+}
+
+function stop_stock_adjustment_scanner() {
+    var stopPromise = $.Deferred().resolve().promise();
+    if (stockAdjustmentScanner && stockAdjustmentScanInProgress) {
+        var scanner = stockAdjustmentScanner;
+        stopPromise = scanner.stop().catch(function() {}).then(function() {
+            scanner.clear();
+        });
+    }
+    stockAdjustmentScanInProgress = false;
+    stockAdjustmentScanner = null;
+    return stopPromise;
+}
+
+function lookup_stock_adjustment_barcode(barcode) {
+    $.getJSON('/products/list', {
+        location_id: $('#location_id').val(),
+        term: barcode,
+        search_fields: ['sku'],
+        stock_alert: $('#stock_alert_only').is(':checked') ? 1 : 0,
+        limit: 5,
+    }).done(function(products) {
+        if (products.length !== 1) {
+            swal(products.length ? 'More than one product matched this barcode.' : LANG.no_products_found);
+            return;
+        }
+        add_stock_adjustment_product(products[0].variation_id);
+    }).fail(function() {
+        toastr.error('Unable to search for the scanned barcode.');
+    });
+}
+
+function add_stock_adjustment_product(variation_id) {
+    var existing_row = $('#stock_adjustment_product_table tbody input[name$="[variation_id]"]').filter(function() {
+        return String($(this).val()) === String(variation_id);
+    }).closest('tr');
+
+    if (existing_row.length) {
+        var quantity_input = existing_row.find('input.product_quantity');
+        var quantity = parseFloat(__read_number(quantity_input)) || 0;
+        __write_number(quantity_input, quantity + 1);
+        update_table_row(existing_row);
+        return;
+    }
+
+    stock_adjustment_product_row(variation_id);
+}
 
 function stock_adjustment_product_row(variation_id) {
     var row_index = parseInt($('#product_row_index').val());

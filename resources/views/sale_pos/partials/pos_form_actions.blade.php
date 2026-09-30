@@ -23,7 +23,7 @@
                     <button type="button"
                         class=" tw-flex tw-flex-row tw-items-center tw-justify-center tw-gap-1 tw-font-bold tw-text-white tw-cursor-pointer tw-text-xs md:tw-text-sm tw-bg-[#001F3E] tw-rounded-md tw-p-2 tw-w-[8.5rem] @if (!$is_mobile)  @endif no-print @if ($pos_settings['disable_pay_checkout'] != 0) hide @endif"
                         id="pos-finalize" title="@lang('lang_v1.tooltip_checkout_multi_pay')"><i class="fas fa-money-check-alt"
-                            aria-hidden="true"></i> @lang('lang_v1.checkout_multi_pay') </button>
+                            aria-hidden="true"></i> {{ (!empty($pos_settings['enable_unified_payment_modal']) || !array_key_exists('enable_unified_payment_modal', $pos_settings)) ? __('lang_v1.finalize_and_pay') : __('lang_v1.checkout_multi_pay') }} </button>
                 @endif
 
                 @if (!Gate::check('disable_express_checkout') || auth()->user()->can('superadmin') || auth()->user()->can('admin'))
@@ -102,7 +102,7 @@
                     <button type="button"
                         class="tw-hidden md:tw-flex md:tw-flex-row md:tw-items-center md:tw-justify-center md:tw-gap-1 tw-font-bold tw-text-white tw-cursor-pointer tw-text-xs md:tw-text-sm tw-bg-[#001F3E] tw-rounded-md tw-p-2 tw-w-[8.5rem] @if (!$is_mobile)  @endif no-print @if ($pos_settings['disable_pay_checkout'] != 0) hide @endif"
                         id="pos-finalize" title="@lang('lang_v1.tooltip_checkout_multi_pay')"><i class="fas fa-money-check-alt"
-                            aria-hidden="true"></i> @lang('lang_v1.checkout_multi_pay') </button>
+                            aria-hidden="true"></i> {{ (!empty($pos_settings['enable_unified_payment_modal']) || !array_key_exists('enable_unified_payment_modal', $pos_settings)) ? __('lang_v1.finalize_and_pay') : __('lang_v1.checkout_multi_pay') }} </button>
                 @endif
 
                 @if (!Gate::check('disable_express_checkout') || auth()->user()->can('superadmin') || auth()->user()->can('admin'))
@@ -218,3 +218,13 @@
 @endif
 
 @include('sale_pos.partials.edit_shipping_modal')
+
+@if (!empty($pos_settings['enable_unified_payment_modal']) || !array_key_exists('enable_unified_payment_modal', $pos_settings))
+<style>
+    .pos-express-finalize[data-pay_method="cash"],
+    .pos-express-finalize[data-pay_method="card"],
+    .pos-express-finalize[data-pay_method="custom_pay_1"] {
+        display: none !important;
+    }
+</style>
+@endif

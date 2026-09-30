@@ -61,6 +61,17 @@
                         ) !!}
                     </div>
                 </div>
+                <div class="col-sm-3">
+                    <div class="form-group">
+                        {!! Form::label('stock_adjustment_direction', __('stock_adjustment.stock_direction') . ':*') !!}
+                        {!! Form::select(
+                            'stock_adjustment_direction',
+                            ['decrease' => __('stock_adjustment.decrease_stock'), 'increase' => __('stock_adjustment.increase_stock')],
+                            'decrease',
+                            ['class' => 'form-control select2', 'required'],
+                        ) !!}
+                    </div>
+                </div>
             </div>
         @endcomponent
 
@@ -78,6 +89,17 @@
                                 'placeholder' => __('stock_adjustment.search_product'),
                                 'disabled',
                             ]) !!}
+                            <span class="input-group-btn">
+                                <button type="button" class="btn btn-primary" id="stock_adjustment_scan_button" disabled>
+                                    <i class="fa fa-camera"></i> Scan barcode
+                                </button>
+                            </span>
+                        </div>
+                        <div class="checkbox">
+                            <label>
+                                <input type="checkbox" id="stock_alert_only">
+                                Show stock-alert items only
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -152,8 +174,27 @@
         @endcomponent
         {!! Form::close() !!}
     </section>
+
+    <div class="modal fade" id="stock_adjustment_scanner_modal" tabindex="-1" role="dialog" aria-labelledby="stockAdjustmentScannerTitle">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title" id="stockAdjustmentScannerTitle">Scan product barcode</h4>
+                </div>
+                <div class="modal-body">
+                    <div id="stock_adjustment_scanner" style="width: 100%;"></div>
+                    <p class="text-muted text-center" id="stock_adjustment_scanner_status">Allow camera access to scan a product barcode.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
 @stop
 @section('javascript')
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="{{ asset('js/stock_adjustment.js?v=' . $asset_v) }}"></script>
     <script type="text/javascript">
         __page_leave_confirmation('#stock_adjustment_form');

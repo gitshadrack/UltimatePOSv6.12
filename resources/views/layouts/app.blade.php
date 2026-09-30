@@ -1,8 +1,9 @@
 @inject('request', 'Illuminate\Http\Request')
 
 @if (
-    $request->segment(1) == 'pos' &&
-        ($request->segment(2) == 'create' || $request->segment(3) == 'edit' || $request->segment(2) == 'payment'))
+    ($request->segment(1) == 'pos' &&
+        ($request->segment(2) == 'create' || $request->segment(3) == 'edit' || $request->segment(2) == 'payment')) ||
+        $request->is('sells/pos/create'))
     @php
         $pos_layout = true;
     @endphp
@@ -40,7 +41,7 @@
 </head>
 <body
     class="tw-font-sans tw-antialiased tw-text-gray-900 tw-bg-gray-100 @if ($pos_layout) hold-transition lockscreen @else hold-transition skin-@if (!empty(session('business.theme_color'))){{ session('business.theme_color') }}@else{{ 'blue-light' }} @endif sidebar-mini @endif" >
-    <div class="tw-flex thetop">
+    <div class="tw-flex thetop @if(!$pos_layout) independent-scroll-layout @endif">
         <script type="text/javascript">
             if (localStorage.getItem("upos_sidebar_collapse") == 'true') {
                 var body = document.getElementsByTagName("body")[0];
@@ -236,6 +237,7 @@
                 (function () {
                     var logoutUrl = @json(action([\App\Http\Controllers\Auth\LoginController::class, 'logout']));
                     var unlockUrl = @json(route('pos.unlock'));
+                    var offlineReauthUrl = @json(route('pos.offline-reauthenticate'));
                     var pinUnlockAvailable = @json(!empty(auth()->user()->is_enable_service_staff_pin) && !empty(auth()->user()->service_staff_pin));
                     var lockTimer = null;
                     var timerEnabled = false;
@@ -283,6 +285,9 @@
 
                     function logout() {
                         clearPersistedLock();
+                        if (window.purgePosUserCache) {
+                            window.purgePosUserCache();
+                        }
                         var locationId = $('#location_id').val();
                         var separator = logoutUrl.indexOf('?') === -1 ? '?' : '&';
                         window.location.href = logoutUrl + (locationId ? separator + 'location_id=' + encodeURIComponent(locationId) : '');
@@ -418,15 +423,23 @@
 
                         $.ajax({
                             method: 'POST',
-                            url: unlockUrl,
+                            url: window.posOfflineReauthRequired ? offlineReauthUrl : unlockUrl,
                             data: {
                                 location_id: $('#location_id').val(),
                                 credential_type: credentialType,
-                                credential: credential
+                                credential: credential,
+                                business_id: $('#pos_sync_status').data('business-id'),
+                                user_id: $('#pos_sync_status').data('user-id')
                             },
                             success: function (response) {
                                 if (response.success) {
+                                    if (response.csrf_token) {
+                                        $('meta[name="csrf-token"]').attr('content', response.csrf_token);
+                                        $.ajaxSetup({headers: {'X-CSRF-TOKEN': response.csrf_token}});
+                                    }
+                                    window.posOfflineReauthRequired = false;
                                     hideLock();
+                                    window.dispatchEvent(new CustomEvent('pos:reauthenticated'));
                                 } else {
                                     showUnlockError(response.msg);
                                 }

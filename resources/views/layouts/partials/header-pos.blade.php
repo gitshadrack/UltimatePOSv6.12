@@ -29,6 +29,11 @@
         class="tw-flex tw-flex-col md:tw-flex-row tw-items-center tw-justify-between tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-bg-white tw-rounded-xl tw-mx-0 tw-mt-1 tw-mb-0 md:tw-mb-0 tw-p-3">
         <div class="tw-w-full md:tw-w-1/3">
             <div class="tw-flex tw-items-center tw-gap-2">
+                @if(Auth::user()->media)
+                    <a href="{{ action([\App\Http\Controllers\UserController::class, 'getProfile']) }}" title="{{ __('lang_v1.profile') }}">
+                        <img src="{{ Auth::user()->media->display_url }}" width="28" height="28" style="border-radius:50%;object-fit:cover" alt="{{ __('lang_v1.profile_photo') }}">
+                    </a>
+                @endif
                 <p><strong>@lang('sale.location'): &nbsp;</strong></p>
                 <div style="width: 28%">
                     @if (empty($transaction->location_id))
@@ -74,6 +79,21 @@
 
         <div class="tw-w-full md:tw-w-2/3 !tw-p-0 tw-flex tw-items-center tw-justify-between tw-gap-4 tw-flex-col md:tw-flex-row tw-hidden md:tw-flex"
             id="pos_header_more_options">
+            <button type="button" id="pos_sync_status" data-heartbeat-url="{{ route('pos.offline-heartbeat') }}"
+                data-business-id="{{ session('user.business_id') }}" data-user-id="{{ auth()->id() }}"
+                data-user-name="{{ auth()->user()->first_name }} {{ auth()->user()->last_name }}"
+                data-can-manage-outbox="{{ auth()->user()->can('sell.view') ? 1 : 0 }}"
+                data-catalog-url="{{ route('pos.offline-product-catalog') }}"
+                data-recent-transactions-url="{{ action([\App\Http\Controllers\SellPosController::class, 'getRecentTransactions']) }}"
+                class="tw-border-0 tw-py-1 tw-px-3 tw-rounded-md tw-text-white tw-font-semibold"
+                style="background:#dc2626" title="Server unavailable">
+                <span id="pos_sync_dot" aria-hidden="true">&#9679;</span>
+                <span id="pos_sync_label">Offline</span>
+                <span>(<span id="pos_unsynced_count">0</span>)</span>
+            </button>
+            <button type="button" id="pos_outbox_open" class="tw-border tw-border-gray-300 tw-py-1 tw-px-3 tw-rounded-md tw-bg-white tw-text-gray-700" title="Review offline sales">
+                <i class="fas fa-list"></i> Outbox
+            </button>
             <a href="{{ $go_back_url }}" title="{{ __('lang_v1.go_back') }}"
                 class="tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-bg-white hover:tw-bg-white/60 tw-cursor-pointer tw-border-2 tw-flex tw-items-center tw-justify-center tw-rounded-md md:tw-w-8 tw-w-auto tw-h-8 tw-text-gray-600 pull-right">
                 <strong class="!tw-m-3">

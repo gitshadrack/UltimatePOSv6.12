@@ -429,6 +429,37 @@ class ProductUtil extends Util
     }
 
     /**
+     * Increase available stock for a stock adjustment or stock take correction.
+     */
+    public function increaseProductQuantity($product_id, $variation_id, $location_id, $new_quantity, $old_quantity = 0)
+    {
+        $qty_difference = $new_quantity - $old_quantity;
+        $product = Product::find($product_id);
+
+        if ($product->enable_stock == 1 && $qty_difference != 0) {
+            $variation = Variation::where('id', $variation_id)
+                ->where('product_id', $product_id)
+                ->firstOrFail();
+
+            $details = VariationLocationDetails::firstOrCreate(
+                [
+                    'variation_id' => $variation_id,
+                    'product_id' => $product_id,
+                    'location_id' => $location_id,
+                ],
+                [
+                    'product_variation_id' => $variation->product_variation_id,
+                    'qty_available' => 0,
+                ]
+            );
+
+            $details->increment('qty_available', $qty_difference);
+        }
+
+        return true;
+    }
+
+    /**
      * Decrease the product quantity of combo sub-products
      *
      * @param $combo_details
@@ -1619,7 +1650,7 @@ class ProductUtil extends Util
      * @param  string  $search_type (like or exact)
      * @return object
      */
-    public function filterProduct($business_id, $search_term, $location_id = null, $not_for_selling = null, $price_group_id = null, $product_types = [], $search_fields = [], $check_qty = false, $search_type = 'like')
+    public function filterProduct($business_id, $search_term, $location_id = null, $not_for_selling = null, $price_group_id = null, $product_types = [], $search_fields = [], $check_qty = false, $search_type = 'like', $result_limit = null, $stock_alert = false)
     {
         $query = Product::join('variations', 'products.id', '=', 'variations.product_id')
                 ->active()
@@ -1731,6 +1762,11 @@ class ProductUtil extends Util
             $query->where('VLD.qty_available', '>', 0);
         }
 
+        if ($stock_alert) {
+            $query->where('products.alert_quantity', '>', 0)
+                ->whereRaw('COALESCE(VLD.qty_available, 0) <= products.alert_quantity');
+        }
+
         if (! empty($location_id)) {
             $query->ForLocation($location_id);
         }
@@ -1740,6 +1776,12 @@ class ProductUtil extends Util
                 'products.name',
                 'products.type',
                 'products.enable_stock',
+                'products.offline_safety_stock',
+                'products.sku',
+                'products.product_custom_field1',
+                'products.product_custom_field2',
+                'products.product_custom_field3',
+                'products.product_custom_field4',
                 'variations.id as variation_id',
                 'variations.name as variation',
                 'VLD.qty_available',
@@ -1756,9 +1798,14 @@ class ProductUtil extends Util
             $query->addSelect('pl.id as purchase_line_id', 'pl.lot_number');
         }
 
-        $data = $query->groupBy('variations.id')
-             ->orderBy('VLD.qty_available', 'desc')
-             ->get();
+           $query->groupBy('variations.id')
+               ->orderBy('VLD.qty_available', 'desc');
+
+           if (! empty($result_limit)) {
+              $query->limit((int) $result_limit);
+           }
+
+           $data = $query->get();
 
         // 🔐 Escape `name`, `variation`, `sub_sku`
         $data->transform(function ($item) {
@@ -2414,6 +2461,10 @@ class ProductUtil extends Util
             'pv.name as product_variation',
             'v.name as variation',
             'v.sub_sku',
+            'p.id as product_id',
+            'v.id as variation_id',
+            'variation_location_details.location_id',
+            'p.alert_quantity',
             'l.name as location',
             'variation_location_details.qty_available as stock',
             'u.short_name as unit'

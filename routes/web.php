@@ -36,6 +36,8 @@ use App\Http\Controllers\MpesaDashboardController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NotificationTemplateController;
 use App\Http\Controllers\OpeningStockController;
+use App\Http\Controllers\OfflinePosAuthController;
+use App\Http\Controllers\OfflineStockConflictController;
 use App\Http\Controllers\PrinterController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseController;
@@ -84,6 +86,9 @@ Route::middleware(['setData'])->group(function () {
     })->name('welcome');
 
     Auth::routes();
+    Route::post('/pos/offline-reauthenticate', [OfflinePosAuthController::class, 'reauthenticate'])
+        ->middleware('throttle:6,1')
+        ->name('pos.offline-reauthenticate');
 
     Route::get('/tenant-login-image/{filename}', [BusinessController::class, 'tenantLoginImage'])
         ->where('filename', '[A-Za-z0-9._-]+')
@@ -256,9 +261,18 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::post('/import-sales', [ImportSalesController::class, 'import']);
     Route::get('/revert-sale-import/{batch}', [ImportSalesController::class, 'revertSaleImport']);
 
+    Route::get('/sells/pos/create', [SellPosController::class, 'create'])->name('pos.offline-shell');
     Route::get('/sells/pos/get_product_row/{variation_id}/{location_id}', [SellPosController::class, 'getProductRow']);
+    Route::get('/sells/pos/offline-product-catalog', [SellPosController::class, 'offlineProductCatalog'])
+        ->name('pos.offline-product-catalog');
     Route::post('/sells/pos/get_payment_row', [SellPosController::class, 'getPaymentRow']);
+    Route::get('/pos/offline-heartbeat', [SellPosController::class, 'offlineHeartbeat'])
+        ->name('pos.offline-heartbeat');
     Route::post('/pos/unlock', [SellPosController::class, 'unlock'])->name('pos.unlock');
+    Route::get('/offline-stock-conflicts', [OfflineStockConflictController::class, 'index'])->name('offline-stock-conflicts.index');
+    Route::post('/offline-stock-conflicts/{id}/approve', [OfflineStockConflictController::class, 'approve'])->name('offline-stock-conflicts.approve');
+    Route::post('/offline-stock-conflicts/{id}/reassign', [OfflineStockConflictController::class, 'reassign'])->name('offline-stock-conflicts.reassign');
+    Route::post('/offline-stock-conflicts/{id}/void', [OfflineStockConflictController::class, 'void'])->name('offline-stock-conflicts.void');
     Route::post('/sells/pos/get-reward-details', [SellPosController::class, 'getRewardDetails']);
     Route::get('/sells/pos/get-recent-transactions', [SellPosController::class, 'getRecentTransactions']);
     Route::get('/sells/pos/get-product-suggestion', [SellPosController::class, 'getProductSuggestion']);
@@ -317,6 +331,7 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::get('/reports/expense-report', [ReportController::class, 'getExpenseReport']);
     Route::get('/reports/stock-adjustment-report', [ReportController::class, 'getStockAdjustmentReport']);
     Route::get('/reports/register-report', [ReportController::class, 'getRegisterReport']);
+    Route::get('/reports/z-report', [\App\Http\Controllers\ZReportController::class, 'index'])->name('reports.z-report');
     Route::get('/reports/mpesa-verification', [ReportController::class, 'getMpesaVerificationReport']);
     Route::post('/reports/mpesa-verification/{id}', [ReportController::class, 'updateMpesaVerification'])->name('reports.mpesa-verification.update');
     Route::get('/reports/sales-representative-report', [ReportController::class, 'getSalesRepresentativeReport']);
@@ -382,6 +397,12 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::get('/stock-adjustments/remove-expired-stock/{purchase_line_id}', [StockAdjustmentController::class, 'removeExpiredStock']);
     Route::post('/stock-adjustments/get_product_row', [StockAdjustmentController::class, 'getProductRow']);
     Route::post('/stock-adjustments/reset-location-stock', [StockAdjustmentController::class, 'resetLocationStock']);
+    Route::get('/stock-adjustments/stocktake/create', [StockAdjustmentController::class, 'createStocktake'])->name('stock-adjustments.stocktake.create');
+    Route::post('/stock-adjustments/stocktake', [StockAdjustmentController::class, 'storeStocktake'])->name('stock-adjustments.stocktake.store');
+    Route::post('/stock-adjustments/stocktake/product-row', [StockAdjustmentController::class, 'getStocktakeProductRow'])->name('stock-adjustments.stocktake.product-row');
+    Route::get('/stock-adjustments/stock-alert-lpo', [StockAdjustmentController::class, 'stockAlertLpo'])->name('stock-adjustments.stock-alert-lpo');
+    Route::get('/stock-adjustments/stock-alert-lpo/items', [StockAdjustmentController::class, 'stockAlertLpoItems'])->name('stock-adjustments.stock-alert-lpo.items');
+    Route::post('/stock-adjustments/stock-alert-lpo/prepare', [StockAdjustmentController::class, 'prepareStockAlertLpo'])->name('stock-adjustments.stock-alert-lpo.prepare');
     Route::resource('stock-adjustments', StockAdjustmentController::class);
 
     Route::get('/cash-register/register-details', [CashRegisterController::class, 'getRegisterDetails']);

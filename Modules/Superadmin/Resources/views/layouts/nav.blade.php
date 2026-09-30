@@ -32,6 +32,9 @@
                             <i class="fa fa-tools"></i> @lang('superadmin::lang.maintenance_mode')
                         </a>
                     </li>
+                    <li @if(request()->segment(1) == 'superadmin' && request()->segment(2) == 'tenant-migration') class="active" @endif>
+                        <a href="{{ route('superadmin.tenant-migration.index') }}"><i class="fa fa-exchange-alt"></i> Tenant migration</a>
+                    </li>
                 </ul>
 
             </div><!-- /.navbar-collapse -->

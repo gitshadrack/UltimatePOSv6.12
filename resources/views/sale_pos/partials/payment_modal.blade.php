@@ -1,10 +1,14 @@
 <div class="modal fade" tabindex="-1" role="dialog" id="modal_payment">
+    @php
+        $unified_payment_enabled = !array_key_exists('enable_unified_payment_modal', $pos_settings ?? [])
+            || !empty($pos_settings['enable_unified_payment_modal']);
+    @endphp
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span
                         aria-hidden="true">&times;</span></button>
-                <h4 class="modal-title">@lang('lang_v1.payment')</h4>
+                <h4 class="modal-title"><i class="fas fa-money-check-alt"></i> {{ $unified_payment_enabled ? __('lang_v1.complete_payment') : __('lang_v1.payment') }}</h4>
             </div>
             <div class="modal-body">
                 <div class="row">
@@ -17,7 +21,8 @@
                     </div>
                     <div class="col-md-9">
                         <div class="row">
-                            <div id="payment_rows_div">
+                            <div id="payment_rows_div" class="row unified-payment-grid">
+                                @if ($unified_payment_enabled)
                                 @php
                                     $pos_settings = !empty(session()->get('business.pos_settings')) ? json_decode(session()->get('business.pos_settings'), true) : [];
                                     $show_in_pos = '';
@@ -26,32 +31,84 @@
                                     if (isset($pos_settings['enable_cash_denomination_on']) && ($pos_settings['enable_cash_denomination_on'] == 'all_screens' || $pos_settings['enable_cash_denomination_on'] == 'pos_screen')) {
                                         $show_in_pos = true;
                                     }
+                                    $is_intasend_enabled = $is_intasend_enabled ?? (!empty($enabled_modules) && in_array('intasend', $enabled_modules));
+                                    $is_daraja_enabled = $is_daraja_enabled ?? (!empty($enabled_modules) && in_array('daraja', $enabled_modules));
                                     
                                 @endphp
-                                @foreach ($payment_lines as $payment_line)
-                                    @if ($payment_line['is_return'] == 1)
-                                        @php
-                                            $change_return = $payment_line;
-                                        @endphp
-
-                                        @continue
-                                    @endif
-
-                                    @include('sale_pos.partials.payment_row', [
-                                        'removable' => !$loop->first,
+                                @php
+                                    $available_lines = collect($payment_lines)->filter(function ($line) use (&$change_return) {
+                                        if (!empty($line['is_return'])) {
+                                            $change_return = $line;
+                                            return false;
+                                        }
+                                        return true;
+                                    })->values();
+                                    $ordered_methods = collect($payment_types)->keys()->sortBy(function ($method) {
+                                        return $method === 'cash' ? 0 : ($method === 'custom_pay_1' ? 1 : ($method === 'card' ? 2 : ($method === 'advance' ? 99 : 10)));
+                                    })->values();
+                                    $used_lines = [];
+                                    $unified_rows = [];
+                                    foreach ($ordered_methods as $method) {
+                                        $match_index = $available_lines->search(function ($line, $index) use ($method, $used_lines) {
+                                            return !in_array($index, $used_lines, true) && ($line['method'] ?? null) === $method;
+                                        });
+                                        if ($match_index !== false) {
+                                            $line = $available_lines[$match_index];
+                                            $used_lines[] = $match_index;
+                                        } else {
+                                            $line = [
+                                                'amount' => 0,
+                                                'method' => $method,
+                                                'cash_tendered' => 0,
+                                                'transaction_no' => '',
+                                                'card_transaction_number' => '',
+                                                'cheque_number' => '',
+                                                'bank_account_number' => '',
+                                                'account_id' => '',
+                                                'note' => '',
+                                                'is_return' => 0,
+                                            ];
+                                        }
+                                        $line['method'] = $method;
+                                        $unified_rows[] = ['line' => $line, 'label' => $payment_types[$method]];
+                                    }
+                                    foreach ($available_lines as $index => $line) {
+                                        if (!in_array($index, $used_lines, true)) {
+                                            $unified_rows[] = ['line' => $line, 'label' => $payment_types[$line['method']] ?? $line['method']];
+                                        }
+                                    }
+                                @endphp
+                                @foreach ($unified_rows as $unified_row)
+                                    @include('sale_pos.partials.unified_payment_row', [
                                         'row_index' => $loop->index,
-                                        'payment_line' => $payment_line,
-                                        'show_denomination' => true,
-                                        'show_in_pos' => $show_in_pos,
+                                        'payment_line' => $unified_row['line'],
+                                        'payment_label' => $unified_row['label'],
                                     ])
                                 @endforeach
+                                @else
+                                    @foreach ($payment_lines as $payment_line)
+                                        @if (!empty($payment_line['is_return']))
+                                            @php $change_return = $payment_line; @endphp
+                                            @continue
+                                        @endif
+                                        @include('sale_pos.partials.payment_row', [
+                                            'removable' => !$loop->first,
+                                            'row_index' => $loop->index,
+                                            'payment_line' => $payment_line,
+                                            'show_denomination' => true,
+                                            'show_in_pos' => $show_in_pos,
+                                        ])
+                                    @endforeach
+                                    @php $unified_rows = $payment_lines; @endphp
+                                @endif
                             </div>
-                            <input type="hidden" id="payment_row_index" value="{{ count($payment_lines) }}">
+                            <input type="hidden" id="payment_row_index" value="{{ count($unified_rows) }}">
                         </div>
                         <div class="row">
                             <div class="col-md-12">
-                                <button type="button" class="tw-dw-btn tw-dw-btn-primary tw-text-white tw-dw-btn-sm tw-w-full"
-                                    id="add-payment-row">@lang('sale.add_payment_row')</button>
+                                <button type="button" class="btn btn-default btn-sm" id="add-payment-row">
+                                    <i class="fa fa-plus"></i> @lang('sale.add_payment_row')
+                                </button>
                             </div>
                         </div>
                         <br>
@@ -214,11 +271,31 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="tw-dw-btn tw-dw-btn-neutral tw-text-white" data-dismiss="modal">@lang('messages.close')</button>
-                <button type="submit" class="tw-dw-btn tw-dw-btn-primary tw-text-white" id="pos-save">@lang('sale.finalize_payment')</button>
+                <button type="submit" class="tw-dw-btn tw-dw-btn-primary tw-text-white" id="pos-save"
+                    data-default-text="{{ $unified_payment_enabled ? __('lang_v1.complete_sale') : __('sale.finalize_payment') }}" data-processing-text="@lang('lang_v1.processing')">
+                    <i class="fas fa-check-circle"></i> <span>{{ $unified_payment_enabled ? __('lang_v1.complete_sale') : __('sale.finalize_payment') }}</span>
+                </button>
             </div>
         </div><!-- /.modal-content -->
     </div><!-- /.modal-dialog -->
 </div><!-- /.modal -->
+
+<style>
+    #modal_payment .modal-dialog { width: min(1180px, calc(100% - 20px)); }
+    #modal_payment .modal-body { max-height: calc(100vh - 170px); overflow-y: auto; }
+    #modal_payment .unified-payment-grid { margin: 0 -8px; }
+    #modal_payment .unified-payment-column { padding: 0 8px; }
+    #modal_payment .unified-payment-section { border-top: 3px solid #3c8dbc; transition: box-shadow .15s, border-color .15s; }
+    #modal_payment .unified-payment-section:focus-within { border-top-color: #00a65a; box-shadow: 0 4px 16px rgba(0,0,0,.14); }
+    #modal_payment .unified-payment-method { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    #modal_payment .unified-payment-quick-actions { display: flex; flex-wrap: wrap; margin: -5px 0 12px; }
+    #modal_payment .unified-payment-quick-actions .btn { min-height: 38px; }
+    #modal_payment .unified-payment-amount, #modal_payment .cash-tendered { font-size: 22px; font-weight: 700; }
+    @media (max-width: 767px) {
+        #modal_payment .modal-dialog { width: calc(100% - 10px); margin: 5px; }
+        #modal_payment .modal-body { max-height: calc(100vh - 130px); padding: 10px; }
+    }
+</style>
 
 <!-- Used for express checkout payment methods that only require a transaction number -->
 <div class="modal fade" tabindex="-1" role="dialog" id="transaction_no_modal">

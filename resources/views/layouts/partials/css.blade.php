@@ -76,3 +76,12 @@
     {!! $__system_settings['additional_css'] !!}
 @endif
 
+
+<style>
+@media screen {
+    .independent-scroll-layout { height: 100vh; height: 100dvh; overflow: hidden; }
+    .independent-scroll-layout > main { height: 100%; min-height: 0; }
+    .independent-scroll-layout #scrollable-container { min-height: 0; height: auto; overscroll-behavior-y: contain; }
+    .independent-scroll-layout > .side-bar { max-height: 100%; overflow-y: auto; overscroll-behavior-y: contain; }
+}
+</style>

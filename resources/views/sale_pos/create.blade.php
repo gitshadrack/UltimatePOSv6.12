@@ -33,6 +33,7 @@
             'method' => 'post',
             'id' => 'add_pos_sell_form',
         ]) !!}
+        <input type="hidden" name="offline_transaction_uuid" id="offline_transaction_uuid" value="">
         <div class="row mb-12">
             <div class="col-md-12 tw-pt-0 tw-mb-14">
                 <div class="row tw-flex lg:tw-flex-row md:tw-flex-col sm:tw-flex-col tw-flex-col tw-items-start md:tw-gap-4">
@@ -96,6 +97,31 @@
     @endif
     <!-- /.content -->
     <div class="modal fade register_details_modal" tabindex="-1" role="dialog" aria-labelledby="gridSystemModalLabel">
+    </div>
+    <div class="modal fade" id="pos_outbox_modal" tabindex="-1" role="dialog" aria-labelledby="pos_outbox_title">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title" id="pos_outbox_title">Offline Sales Outbox</h4>
+                </div>
+                <div class="modal-body">
+                    <div id="pos_outbox_auth_notice" class="alert alert-warning hide">Synchronization is paused. Unlock the POS to refresh authentication without losing queued sales.</div>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-striped">
+                            <thead><tr><th>Cashier</th><th>Created</th><th>Total</th><th>Status</th><th>Last error</th><th>Actions</th></tr></thead>
+                            <tbody id="pos_outbox_rows"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    @if(auth()->user()->hasAnyPermission(['sell.view', 'stock_adjustment.view', 'stock_adjustment.create']))
+                        <a href="{{ route('offline-stock-conflicts.index') }}" class="btn btn-warning pull-left">Stock Conflict Review</a>
+                    @endif
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
     </div>
     <div class="modal fade close_register_modal" tabindex="-1" role="dialog" aria-labelledby="gridSystemModalLabel">
     </div>

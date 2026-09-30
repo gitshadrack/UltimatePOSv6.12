@@ -854,6 +854,7 @@
             <div class="checkbox">
               <label>
                 {!! Form::checkbox('show_payments', 1, $invoice_layout->show_payments, ['class' => 'input-icheck']); !!} @lang('invoice.show_payments')</label>
+                <label>{!! Form::checkbox('common_settings[hide_payment_date]', 1, !empty($invoice_layout->common_settings['hide_payment_date']), ['class' => 'input-icheck']); !!} @lang('upgrade.hide_payment_date')</label>
               </div>
           </div>
         </div>

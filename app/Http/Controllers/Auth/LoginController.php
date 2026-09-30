@@ -87,7 +87,13 @@ class LoginController extends Controller
             $redirect_url .= '?location_id='.urlencode($location_id);
         }
 
-        return redirect($redirect_url);
+        return redirect($redirect_url)->withHeaders([
+            // Browser-side logout handling removes only this user's POS cache.
+            // This header is a fallback for direct logout requests where the
+            // service-worker message could not run; IndexedDB outbox data is
+            // intentionally not cleared.
+            'Clear-Site-Data' => '"cache"',
+        ]);
     }
 
     /**

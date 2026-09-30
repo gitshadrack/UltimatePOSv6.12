@@ -101,6 +101,21 @@
                 <div class="checkbox">
                 <br>
                   <label>
+                    {!! Form::hidden('pos_settings[enable_unified_payment_modal]', 0) !!}
+                    {!! Form::checkbox('pos_settings[enable_unified_payment_modal]', 1,
+                        !array_key_exists('enable_unified_payment_modal', $pos_settings) || !empty($pos_settings['enable_unified_payment_modal']),
+                    [ 'class' => 'input-icheck']); !!} {{ __('lang_v1.enable_unified_payment_modal') }}
+                  </label>
+                  @show_tooltip(__('lang_v1.enable_unified_payment_modal_help'))
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-4">
+            <div class="form-group">
+                <div class="checkbox">
+                <br>
+                  <label>
                     {!! Form::checkbox('pos_settings[disable_pay_checkout]', 1,  
                         $pos_settings['disable_pay_checkout'] , 
                     [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.disable_pay_checkout' ) }}

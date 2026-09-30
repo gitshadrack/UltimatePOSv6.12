@@ -206,6 +206,7 @@
 	<div class="col-sm-12 pos_product_div">
 		<input type="hidden" name="sell_price_tax" id="sell_price_tax" value="{{$business_details->sell_price_tax}}">
 
+		<input type="hidden" name="is_serial_no" value="1">
 		<!-- Keeps count of product rows -->
 		<input type="hidden" id="product_row_count" 
 			value="0">
@@ -218,6 +219,7 @@
 		<table class="table table-condensed table-bordered table-striped table-responsive" id="pos_table">
 			<thead>
 				<tr>
+					<th class="text-center">#</th>
 					<th class="tex-center tw-text-sm md:!tw-text-base tw-font-bold @if(!empty($pos_settings['inline_service_staff'])) col-md-3 @else col-md-4 @endif">	
 						@lang('sale.product') @show_tooltip(__('lang_v1.tooltip_sell_product_column'))
 					</th>

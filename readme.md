@@ -15,11 +15,33 @@ Ultimate POS is a POS application by [Ultimate Fosters](http://ultimatefosters.c
 ### Feature documentation
 
 - [M-PESA and payments](docs/features/MPESA_AND_PAYMENTS.md)
+- [Offline M-PESA verification with a GSM modem](docs/OFFLINE_MPESA_GSM_MODEM.md)
 - [POS and sales](docs/features/POS_AND_SALES.md)
 - [Inventory and reporting](docs/features/INVENTORY_AND_REPORTING.md)
 - [Invoices and tax](docs/features/INVOICES_AND_TAX.md)
 - [Tenancy and Superadmin](docs/features/TENANCY_AND_SUPERADMIN.md)
 - [Windows Print Server](tools/windows-print-server/README.md)
+
+## Product bulk editing
+
+Users with product-update permission can select products from **Products > Products List** and use **Bulk Edit** from the same action bar as Delete Selected, Add to Location, and Remove from Location.
+
+The bulk-edit screen supports applying these values to every selected product:
+
+- Default selling price, including tax
+- Active or inactive status
+- Selling or not for selling status
+- Stock management
+- Reorder/alert quantity
+
+Category, subcategory, brand, tax, business locations, purchase prices, profit margins, variation selling prices, and selling-price-group prices can still be edited per product. Values applied to all products can also be adjusted individually before saving.
+
+Files used by this customization:
+
+- `resources/views/product/partials/product_list.blade.php`
+- `resources/views/product/bulk-edit.blade.php`
+- `resources/views/product/partials/bulk_edit_product_row.blade.php`
+- `app/Http/Controllers/ProductController.php`
 
 ### Plans and specialist reports
 

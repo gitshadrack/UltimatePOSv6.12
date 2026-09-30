@@ -18,6 +18,24 @@
 		</td>
 	<tr>
 	<tr>
+		<td colspan="2">
+			{!! Form::label('products_' . $product->id . '_is_inactive', __('business.is_active')) !!}
+			{!! Form::select('products[' . $product->id . '][is_inactive]', [0 => __('business.is_active'), 1 => __('lang_v1.inactive')], (int) $product->is_inactive, ['class' => 'form-control input-sm', 'id' => 'products_' . $product->id . '_is_inactive']); !!}
+		</td>
+		<td colspan="2">
+			{!! Form::label('products_' . $product->id . '_not_for_selling', __('lang_v1.not_for_selling')) !!}
+			{!! Form::select('products[' . $product->id . '][not_for_selling]', [0 => __('messages.no'), 1 => __('messages.yes')], (int) $product->not_for_selling, ['class' => 'form-control input-sm', 'id' => 'products_' . $product->id . '_not_for_selling']); !!}
+		</td>
+		<td>
+			{!! Form::label('products_' . $product->id . '_enable_stock', __('product.manage_stock')) !!}
+			{!! Form::select('products[' . $product->id . '][enable_stock]', [1 => __('messages.yes'), 0 => __('messages.no')], (int) $product->enable_stock, ['class' => 'form-control input-sm bulk-enable-stock', 'id' => 'products_' . $product->id . '_enable_stock']); !!}
+		</td>
+		<td>
+			{!! Form::label('products_' . $product->id . '_alert_quantity', __('product.alert_quantity')) !!}
+			{!! Form::text('products[' . $product->id . '][alert_quantity]', !is_null($product->alert_quantity) ? @format_quantity($product->alert_quantity) : null, ['class' => 'form-control input-sm input_number bulk-alert-quantity', 'min' => 0, 'id' => 'products_' . $product->id . '_alert_quantity']); !!}
+		</td>
+	</tr>
+	<tr>
 		<td colspan="6">
 			<table class="table">
 				<thead>

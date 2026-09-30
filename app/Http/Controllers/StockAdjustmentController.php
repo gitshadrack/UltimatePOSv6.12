@@ -309,6 +309,264 @@ class StockAdjustmentController extends Controller
                 ->with(compact('business_locations'));
     }
 
+    /** Show the physical stock count screen. */
+    public function createStocktake()
+    {
+        if (! auth()->user()->can('stock_adjustment.create')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = request()->session()->get('user.business_id');
+        if (! $this->moduleUtil->isSubscribed($business_id)) {
+            return $this->moduleUtil->expiredResponse(action([self::class, 'index']));
+        }
+
+        $business_locations = BusinessLocation::forDropdown($business_id);
+
+        return view('stock_adjustment.stocktake')->with(compact('business_locations'));
+    }
+
+    /** Show reorder-level products which can be transferred to a new LPO. */
+    public function stockAlertLpo()
+    {
+        if (! auth()->user()->can('stock_adjustment.create') || ! auth()->user()->can('purchase_order.create')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = request()->session()->get('user.business_id');
+        $business_locations = BusinessLocation::forDropdown($business_id);
+
+        return view('stock_adjustment.stock_alert_lpo', compact('business_locations'));
+    }
+
+    /** DataTable source for the LPO stock-alert selector. */
+    public function stockAlertLpoItems(Request $request)
+    {
+        if (! auth()->user()->can('stock_adjustment.create') || ! auth()->user()->can('purchase_order.create')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+        $products = $this->productUtil->getProductAlert($business_id, auth()->user()->permitted_locations());
+        if (empty($request->input('location_id'))) {
+            $products->whereRaw('1 = 0');
+        } else {
+            abort_unless(BusinessLocation::where('business_id', $business_id)->where('id', $request->input('location_id'))->exists(), 422, 'Invalid business location.');
+        }
+
+        return Datatables::of($products)
+            ->addColumn('select_item', function ($row) {
+                return '<input type="checkbox" class="lpo-alert-select" value="'.(int) $row->variation_id.'">';
+            })
+            ->editColumn('product', function ($row) {
+                return e($row->type === 'single'
+                    ? $row->product.' ('.$row->sku.')'
+                    : $row->product.' - '.$row->product_variation.' - '.$row->variation.' ('.$row->sub_sku.')');
+            })
+            ->editColumn('stock', fn ($row) => '<span data-is_quantity="true" data-orig-value="'.(float) $row->stock.'" class="display_currency" data-currency_symbol="false">'.(float) $row->stock.'</span> '.e($row->unit))
+            ->editColumn('alert_quantity', fn ($row) => '<span data-is_quantity="true" data-orig-value="'.(float) $row->alert_quantity.'" class="display_currency" data-currency_symbol="false">'.(float) $row->alert_quantity.'</span> '.e($row->unit))
+            ->addColumn('order_quantity', function ($row) {
+                $suggested = max(1, (float) $row->alert_quantity - (float) $row->stock);
+                return '<input type="text" class="form-control input-sm input_number lpo-order-quantity" value="'.$this->productUtil->num_f($suggested, false, null, true).'" data-variation-id="'.(int) $row->variation_id.'">';
+            })
+            ->rawColumns(['select_item', 'stock', 'alert_quantity', 'order_quantity'])
+            ->make(true);
+    }
+
+    /** Validate selected alerts and carry them to the standard Purchase Order form. */
+    public function prepareStockAlertLpo(Request $request)
+    {
+        if (! auth()->user()->can('stock_adjustment.create') || ! auth()->user()->can('purchase_order.create')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'location_id' => 'required|integer',
+            'items' => 'required|array|min:1',
+            'items.*.variation_id' => 'required|integer|distinct',
+            'items.*.quantity' => 'required|numeric|min:0.0001',
+        ]);
+        $business_id = $request->session()->get('user.business_id');
+        $location_id = (int) $request->input('location_id');
+        abort_unless(BusinessLocation::where('business_id', $business_id)->where('id', $location_id)->exists(), 422, 'Invalid business location.');
+
+        $permitted = auth()->user()->permitted_locations();
+        abort_if($permitted !== 'all' && ! in_array($location_id, array_map('intval', $permitted), true), 403, 'Unauthorized location.');
+
+        $variation_ids = collect($request->input('items'))->pluck('variation_id')->map(fn ($id) => (int) $id)->all();
+        $valid = DB::table('variations as v')
+            ->join('products as p', 'p.id', '=', 'v.product_id')
+            ->join('variation_location_details as vld', function ($join) use ($location_id) {
+                $join->on('vld.variation_id', '=', 'v.id')->where('vld.location_id', '=', $location_id);
+            })
+            ->where('p.business_id', $business_id)
+            ->where('p.enable_stock', 1)
+            ->where('p.is_inactive', 0)
+            ->whereIn('v.id', $variation_ids)
+            ->whereNotNull('p.alert_quantity')
+            ->whereColumn('vld.qty_available', '<=', 'p.alert_quantity')
+            ->select('v.id as variation_id', 'p.id as product_id')
+            ->get()->keyBy('variation_id');
+
+        $items = collect($request->input('items'))->map(function ($item) use ($valid) {
+            $product = $valid->get((int) $item['variation_id']);
+            abort_if(empty($product), 422, 'One or more selected products are no longer at reorder level. Refresh the list and try again.');
+            return ['product_id' => (int) $product->product_id, 'variation_id' => (int) $product->variation_id, 'quantity' => (float) $item['quantity']];
+        })->values()->all();
+
+        $request->session()->put('stock_alert_lpo_prefill', ['location_id' => $location_id, 'items' => $items]);
+
+        return redirect()->action([\App\Http\Controllers\PurchaseOrderController::class, 'create']);
+    }
+
+    /** Return a row for the physical stock count table. */
+    public function getStocktakeProductRow(Request $request)
+    {
+        if (! auth()->user()->can('stock_adjustment.create')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'row_index' => 'required|integer|min:0',
+            'variation_id' => 'required|integer',
+            'location_id' => 'required|integer',
+        ]);
+
+        $business_id = $request->session()->get('user.business_id');
+        abort_unless(
+            BusinessLocation::where('business_id', $business_id)->where('id', $request->input('location_id'))->exists(),
+            422,
+            'Invalid business location.'
+        );
+        $product = $this->productUtil->getDetailsFromVariation(
+            $request->input('variation_id'),
+            $business_id,
+            null,
+            false,
+            true
+        );
+        abort_unless((int) $product->enable_stock === 1, 422, __('lang_v1.stock_not_enabled'));
+        $product->qty_available = (float) DB::table('variation_location_details')
+            ->where('variation_id', $request->input('variation_id'))
+            ->where('product_id', $product->product_id)
+            ->where('location_id', $request->input('location_id'))
+            ->value('qty_available');
+        $product->formatted_qty_available = $this->productUtil->num_f($product->qty_available);
+        $row_index = $request->input('row_index');
+
+        return view('stock_adjustment.partials.stocktake_product_row', compact('product', 'row_index'));
+    }
+
+    /** Apply one stocktake, splitting shortages and surpluses into auditable adjustments. */
+    public function storeStocktake(Request $request)
+    {
+        if (! auth()->user()->can('stock_adjustment.create')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'location_id' => 'required|integer',
+            'transaction_date' => 'required|string',
+            'products' => 'required|array|min:1',
+            'products.*.product_id' => 'required|integer',
+            'products.*.variation_id' => 'required|integer',
+            'products.*.physical_quantity' => 'required|numeric|min:0',
+        ]);
+
+        $business_id = $request->session()->get('user.business_id');
+        if (! $this->moduleUtil->isSubscribed($business_id)) {
+            return $this->moduleUtil->expiredResponse(action([self::class, 'index']));
+        }
+
+        try {
+            DB::beginTransaction();
+            $location_id = (int) $request->input('location_id');
+            abort_unless(BusinessLocation::where('business_id', $business_id)->where('id', $location_id)->exists(), 422, 'Invalid business location.');
+
+            $changes = ['increase' => [], 'decrease' => []];
+            foreach ($request->input('products') as $line) {
+                $stock = DB::table('variations as v')
+                    ->join('products as p', 'p.id', '=', 'v.product_id')
+                    ->leftJoin('variation_location_details as vld', function ($join) use ($location_id) {
+                        $join->on('vld.variation_id', '=', 'v.id')->where('vld.location_id', '=', $location_id);
+                    })
+                    ->where('p.business_id', $business_id)
+                    ->where('p.enable_stock', 1)
+                    ->where('p.id', $line['product_id'])
+                    ->where('v.id', $line['variation_id'])
+                    ->select('p.id as product_id', 'v.id as variation_id', 'v.dpp_inc_tax', DB::raw('COALESCE(vld.qty_available, 0) as qty_available'))
+                    ->lockForUpdate()
+                    ->first();
+
+                if (empty($stock)) {
+                    throw new \InvalidArgumentException('A stocktake product is invalid or does not track stock.');
+                }
+
+                $physical = $this->productUtil->num_uf($line['physical_quantity']);
+                $difference = round($physical - (float) $stock->qty_available, 4);
+                if ($difference == 0) {
+                    continue;
+                }
+
+                $direction = $difference > 0 ? 'increase' : 'decrease';
+                $quantity = abs($difference);
+                $changes[$direction][] = [
+                    'product_id' => $stock->product_id,
+                    'variation_id' => $stock->variation_id,
+                    'quantity' => $quantity,
+                    'unit_price' => (float) $stock->dpp_inc_tax,
+                ];
+
+                if ($direction === 'increase') {
+                    $this->productUtil->increaseProductQuantity($stock->product_id, $stock->variation_id, $location_id, $quantity);
+                } else {
+                    $this->productUtil->decreaseProductQuantity($stock->product_id, $stock->variation_id, $location_id, $quantity);
+                }
+            }
+
+            $created = 0;
+            foreach ($changes as $direction => $lines) {
+                if (empty($lines)) {
+                    continue;
+                }
+                $ref_count = $this->productUtil->setAndGetReferenceCount('stock_adjustment');
+                $ref_no = $this->productUtil->generateReferenceNumber('stock_adjustment', $ref_count);
+                $transaction = Transaction::create([
+                    'business_id' => $business_id,
+                    'location_id' => $location_id,
+                    'type' => 'stock_adjustment',
+                    'status' => 'final',
+                    'transaction_date' => $this->productUtil->uf_date($request->input('transaction_date'), true),
+                    'adjustment_type' => 'normal',
+                    'stock_adjustment_direction' => $direction,
+                    'ref_no' => $ref_no,
+                    'final_total' => collect($lines)->sum(fn ($line) => $line['quantity'] * $line['unit_price']),
+                    'total_amount_recovered' => 0,
+                    'additional_notes' => trim(__('stock_adjustment.stocktake_reference_note', ['reference' => $request->input('stocktake_reference') ?: $ref_no]).' '.$request->input('additional_notes')),
+                    'created_by' => $request->session()->get('user.id'),
+                ]);
+                $transaction->stock_adjustment_lines()->createMany($lines);
+
+                if ($direction === 'decrease') {
+                    $business = ['id' => $business_id, 'accounting_method' => $request->session()->get('business.accounting_method'), 'location_id' => $location_id];
+                    $this->transactionUtil->mapPurchaseSell($business, $transaction->stock_adjustment_lines, 'stock_adjustment');
+                }
+                event(new StockAdjustmentCreatedOrModified($transaction, 'added'));
+                $this->transactionUtil->activityLog($transaction, 'added', null, [], false);
+                $created++;
+            }
+
+            DB::commit();
+            $output = ['success' => 1, 'msg' => $created ? __('stock_adjustment.stocktake_saved_successfully') : __('stock_adjustment.stocktake_no_changes')];
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
+            $output = ['success' => 0, 'msg' => $e instanceof \App\Exceptions\PurchaseSellMismatch ? $e->getMessage() : __('messages.something_went_wrong')];
+        }
+
+        return redirect()->route('stock-adjustments.stocktake.create')->with('status', $output);
+    }
+
     /**
      * Store a newly created resource in storage.
      *
@@ -324,7 +582,10 @@ class StockAdjustmentController extends Controller
         try {
             DB::beginTransaction();
 
-            $input_data = $request->only(['location_id', 'transaction_date', 'adjustment_type', 'additional_notes', 'total_amount_recovered', 'final_total', 'ref_no']);
+            $input_data = $request->only(['location_id', 'transaction_date', 'adjustment_type', 'stock_adjustment_direction', 'additional_notes', 'total_amount_recovered', 'final_total', 'ref_no']);
+            $input_data['stock_adjustment_direction'] = in_array($input_data['stock_adjustment_direction'] ?? null, ['increase', 'decrease'], true)
+                ? $input_data['stock_adjustment_direction']
+                : 'decrease';
             $business_id = $request->session()->get('user.business_id');
 
             //Check if subscribed or not
@@ -365,24 +626,35 @@ class StockAdjustmentController extends Controller
                     }
                     $product_data[] = $adjustment_line;
 
-                    //Decrease available quantity
-                    $this->productUtil->decreaseProductQuantity(
-                        $product['product_id'],
-                        $product['variation_id'],
-                        $input_data['location_id'],
-                        $this->productUtil->num_uf($product['quantity'])
-                    );
+                    $quantity = $this->productUtil->num_uf($product['quantity']);
+                    if ($input_data['stock_adjustment_direction'] === 'increase') {
+                        $this->productUtil->increaseProductQuantity(
+                            $product['product_id'],
+                            $product['variation_id'],
+                            $input_data['location_id'],
+                            $quantity
+                        );
+                    } else {
+                        $this->productUtil->decreaseProductQuantity(
+                            $product['product_id'],
+                            $product['variation_id'],
+                            $input_data['location_id'],
+                            $quantity
+                        );
+                    }
                 }
 
                 $stock_adjustment = Transaction::create($input_data);
                 $stock_adjustment->stock_adjustment_lines()->createMany($product_data);
 
-                //Map Stock adjustment & Purchase.
-                $business = ['id' => $business_id,
-                    'accounting_method' => $request->session()->get('business.accounting_method'),
-                    'location_id' => $input_data['location_id'],
-                ];
-                $this->transactionUtil->mapPurchaseSell($business, $stock_adjustment->stock_adjustment_lines, 'stock_adjustment');
+                // Only decreases consume existing purchase stock layers.
+                if ($input_data['stock_adjustment_direction'] === 'decrease') {
+                    $business = ['id' => $business_id,
+                        'accounting_method' => $request->session()->get('business.accounting_method'),
+                        'location_id' => $input_data['location_id'],
+                    ];
+                    $this->transactionUtil->mapPurchaseSell($business, $stock_adjustment->stock_adjustment_lines, 'stock_adjustment');
+                }
 
                 event(new StockAdjustmentCreatedOrModified($stock_adjustment, 'added'));
 
@@ -492,16 +764,28 @@ class StockAdjustmentController extends Controller
                 if (! empty($stock_adjustment_lines)) {
                     $line_ids = [];
                     foreach ($stock_adjustment_lines as $stock_adjustment_line) {
-                        $this->productUtil->updateProductQuantity(
-                            $stock_adjustment->location_id,
-                            $stock_adjustment_line->product_id,
-                            $stock_adjustment_line->variation_id,
-                            $this->productUtil->num_f($stock_adjustment_line->quantity)
-                        );
+                        $quantity = $this->productUtil->num_f($stock_adjustment_line->quantity);
+                        if (($stock_adjustment->stock_adjustment_direction ?? 'decrease') === 'increase') {
+                            $this->productUtil->decreaseProductQuantity(
+                                $stock_adjustment_line->product_id,
+                                $stock_adjustment_line->variation_id,
+                                $stock_adjustment->location_id,
+                                $quantity
+                            );
+                        } else {
+                            $this->productUtil->updateProductQuantity(
+                                $stock_adjustment->location_id,
+                                $stock_adjustment_line->product_id,
+                                $stock_adjustment_line->variation_id,
+                                $quantity
+                            );
+                        }
                         $line_ids[] = $stock_adjustment_line->id;
                     }
 
-                    $this->transactionUtil->mapPurchaseQuantityForDeleteStockAdjustment($line_ids);
+                    if (($stock_adjustment->stock_adjustment_direction ?? 'decrease') === 'decrease') {
+                        $this->transactionUtil->mapPurchaseQuantityForDeleteStockAdjustment($line_ids);
+                    }
                 }
                 $stock_adjustment->delete();
 

@@ -250,7 +250,8 @@ class SellPosController extends Controller
             }
         }
 
-        $payment_types = $this->productUtil->payment_types(null, true, $business_id);
+        // Build the unified checkout from methods enabled for the active location.
+        $payment_types = $this->productUtil->payment_types($default_location, true, $business_id);
         $is_intasend_enabled = $this->moduleUtil->isModuleEnabled('intasend', $business_id);
 
         //Shortcuts
@@ -432,6 +433,46 @@ class SellPosController extends Controller
             if (!empty($input['products'])) {
                 $business_id = $request->session()->get('user.business_id');
 
+                $offline_uuid = trim((string) ($input['offline_transaction_uuid'] ?? ''));
+                if ($offline_uuid !== '' && ! preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $offline_uuid)) {
+                    return ['success' => 0, 'msg' => 'The offline transaction identifier is invalid.'];
+                }
+
+                if ($offline_uuid !== '') {
+                    $existing_offline_sale = Transaction::where('business_id', $business_id)
+                        ->where('offline_transaction_uuid', $offline_uuid)
+                        ->first();
+
+                    if (! empty($existing_offline_sale)) {
+                        return [
+                            'success' => 1,
+                            'msg' => 'Sale already synchronized as '.$existing_offline_sale->invoice_no.'.',
+                            'receipt' => ['is_enabled' => false],
+                            'offline_duplicate' => true,
+                        ];
+                    }
+                }
+
+                $payment_amount_error = $this->validatePaymentAmounts($input);
+                if (! empty($payment_amount_error)) {
+                    return ['success' => 0, 'msg' => $payment_amount_error];
+                }
+
+                $mpesa_reference_error = $this->validateManualMpesaReferences($input, $business_id);
+                if (! empty($mpesa_reference_error)) {
+                    return ['success' => 0, 'msg' => $mpesa_reference_error];
+                }
+
+                $offline_payment_error = $this->validateOfflinePaymentMethods($input);
+                if (! empty($offline_payment_error)) {
+                    return ['success' => 0, 'msg' => $offline_payment_error];
+                }
+
+                $cash_tender_error = $this->validateCashTendering($input);
+                if (! empty($cash_tender_error)) {
+                    return ['success' => 0, 'msg' => $cash_tender_error];
+                }
+
                 $walk_in_payment_error = $this->validateWalkInPaymentTotal($input, $business_id);
                 if (! empty($walk_in_payment_error)) {
                     $output = ['success' => 0, 'msg' => $walk_in_payment_error];
@@ -453,6 +494,15 @@ class SellPosController extends Controller
                 }
 
                 $user_id = $request->session()->get('user.id');
+                if (! empty($input['offline_created_at']) && ! empty($input['offline_origin_user_id'])) {
+                    $origin_user_id = (int) $input['offline_origin_user_id'];
+                    $can_process_origin = $origin_user_id === (int) $user_id || auth()->user()->can('sell.view');
+                    $origin_user_exists = User::where('business_id', $business_id)->where('id', $origin_user_id)->exists();
+                    if (! $can_process_origin || ! $origin_user_exists) {
+                        return ['success' => 0, 'msg' => 'The offline sale cashier is invalid or cannot be processed by this user.'];
+                    }
+                    $user_id = $origin_user_id;
+                }
 
                 $cost_price_error = $this->validateProductsAboveCostPrice($input['products'], $business_id);
                 if (!empty($cost_price_error)) {
@@ -477,6 +527,16 @@ class SellPosController extends Controller
                     $input['transaction_date'] = \Carbon::now();
                 } else {
                     $input['transaction_date'] = $this->productUtil->uf_date($request->input('transaction_date'), true);
+                }
+                if (! empty($input['offline_created_at'])) {
+                    try {
+                        $input['offline_created_at'] = \Carbon::parse($input['offline_created_at'])
+                            ->setTimezone(config('app.timezone'))
+                            ->format('Y-m-d H:i:s');
+                    } catch (\Exception $exception) {
+                        DB::rollBack();
+                        return ['success' => 0, 'msg' => 'The offline sale timestamp is invalid.'];
+                    }
                 }
                 if ($is_direct_sale) {
                     $input['is_direct_sale'] = 1;
@@ -627,6 +687,7 @@ class SellPosController extends Controller
                         }
                     }
                     //update product stock
+                    $offline_stock_conflicts = [];
                     foreach ($input['products'] as $product) {
                         $decrease_qty = $this->productUtil
                             ->num_uf($product['quantity']);
@@ -641,6 +702,20 @@ class SellPosController extends Controller
                                 $input['location_id'],
                                 $decrease_qty
                             );
+
+                            if (! empty($input['offline_created_at'])) {
+                                $remaining_stock = DB::table('variation_location_details')
+                                    ->where('product_id', $product['product_id'])
+                                    ->where('variation_id', $product['variation_id'])
+                                    ->where('location_id', $input['location_id'])
+                                    ->value('qty_available');
+                                if ($remaining_stock !== null && (float) $remaining_stock < 0) {
+                                    $offline_stock_conflicts[] = [
+                                        'variation_id' => $product['variation_id'],
+                                        'remaining_stock' => (float) $remaining_stock,
+                                    ];
+                                }
+                            }
                         }
 
                         if ($product['product_type'] == 'combo') {
@@ -679,7 +754,22 @@ class SellPosController extends Controller
                         'location_id' => $input['location_id'],
                         'pos_settings' => $pos_settings,
                     ];
-                    $this->transactionUtil->mapPurchaseSell($business, $transaction->sell_lines, 'purchase');
+                    try {
+                        $this->transactionUtil->mapPurchaseSell($business, $transaction->sell_lines, 'purchase');
+                    } catch (\App\Exceptions\PurchaseSellMismatch $exception) {
+                        if (empty($input['offline_created_at'])) {
+                            throw $exception;
+                        }
+                        $offline_stock_conflicts[] = ['mapping_error' => $exception->getMessage()];
+                    }
+
+                    if (! empty($input['offline_created_at'])) {
+                        $transaction->offline_sync_status = empty($offline_stock_conflicts) ? 'synced' : 'manager_review';
+                        $transaction->offline_sync_note = empty($offline_stock_conflicts)
+                            ? null
+                            : 'Offline stock conflict: '.json_encode($offline_stock_conflicts);
+                        $transaction->save();
+                    }
 
                     //Auto send notification
                     $whatsapp_link = $this->notificationUtil->autoSendNotification($business_id, 'new_sale', $transaction, $transaction->contact);
@@ -744,6 +834,13 @@ class SellPosController extends Controller
 
                 $output = ['success' => 1, 'msg' => $msg, 'receipt' => $receipt];
 
+                if (! empty($transaction->offline_sync_status)) {
+                    $output['offline_sync_status'] = $transaction->offline_sync_status;
+                    if ($transaction->offline_sync_status === 'manager_review') {
+                        $output['msg'] .= ' Stock dropped below zero; this sale was saved and flagged for manager review.';
+                    }
+                }
+
                 if (!empty($whatsapp_link)) {
                     $output['whatsapp_link'] = $whatsapp_link;
                 }
@@ -754,6 +851,22 @@ class SellPosController extends Controller
             }
         } catch (\Exception $e) {
             DB::rollBack();
+
+            $offline_uuid = trim((string) ($input['offline_transaction_uuid'] ?? ''));
+            if ($offline_uuid !== '') {
+                $existing_offline_sale = Transaction::where('business_id', $request->session()->get('user.business_id'))
+                    ->where('offline_transaction_uuid', $offline_uuid)
+                    ->first();
+                if (! empty($existing_offline_sale)) {
+                    return [
+                        'success' => 1,
+                        'msg' => 'Sale already synchronized as '.$existing_offline_sale->invoice_no.'.',
+                        'receipt' => ['is_enabled' => false],
+                        'offline_duplicate' => true,
+                    ];
+                }
+            }
+
             \Log::emergency('File:' . $e->getFile() . 'Line:' . $e->getLine() . 'Message:' . $e->getMessage());
             $msg = trans('messages.something_went_wrong');
 
@@ -806,6 +919,86 @@ class SellPosController extends Controller
     }
 
     /**
+     * M-PESA can be captured offline, but the cashier must record the code
+     * from the dedicated store phone before the sale is accepted.
+     */
+    private function validatePaymentAmounts(array $input)
+    {
+        foreach ($input['payment'] ?? [] as $payment) {
+            $raw_amount = trim((string) ($payment['amount'] ?? '0'));
+            if ($raw_amount === '') {
+                continue;
+            }
+
+            $amount = $this->transactionUtil->num_uf($raw_amount);
+            if (! is_numeric($amount) || ! is_finite((float) $amount) || (float) $amount < 0) {
+                return __('lang_v1.invalid_payment_amount');
+            }
+        }
+
+        return null;
+    }
+
+    private function validateManualMpesaReferences(array $input, $business_id)
+    {
+        foreach ($input['payment'] ?? [] as $payment) {
+            if (($payment['method'] ?? null) !== 'custom_pay_1'
+                || $this->transactionUtil->num_uf($payment['amount'] ?? 0) <= 0) {
+                continue;
+            }
+
+            $reference = strtoupper(trim((string) ($payment['transaction_no_1'] ?? '')));
+            if ($reference === '') {
+                return 'Enter the M-PESA transaction code after confirming the receipt SMS on the store phone.';
+            }
+
+            if (! preg_match('/^[A-Z0-9]{8,20}$/', $reference)) {
+                return 'Enter a valid M-PESA transaction code using 8 to 20 letters or numbers.';
+            }
+
+            $reference_used = TransactionPayment::where('business_id', $business_id)
+                ->where('method', 'custom_pay_1')
+                ->where('transaction_no', $reference)
+                ->exists();
+            if ($reference_used) {
+                return 'M-PESA transaction code '.$reference.' has already been used.';
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Offline requests may have lived on an unattended device. Only payment
+     * methods that do not require storing reusable financial credentials are
+     * accepted when the outbox eventually synchronizes.
+     */
+    private function validateOfflinePaymentMethods(array $input)
+    {
+        if (empty($input['offline_created_at'])) {
+            return null;
+        }
+
+        $allowed_methods = ['cash', 'custom_pay_1'];
+        foreach ($input['payment'] ?? [] as $payment) {
+            $amount = $this->transactionUtil->num_uf($payment['amount'] ?? 0);
+            if ($amount > 0 && ! in_array($payment['method'] ?? '', $allowed_methods, true)) {
+                return 'Offline sales can only use cash or manually confirmed M-PESA payments.';
+            }
+        }
+
+        return null;
+    }
+
+    public function offlineHeartbeat()
+    {
+        return response()->json([
+            'success' => true,
+            'server_time' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
      * Walk-in customers cannot carry a balance. Multiple payment rows are
      * allowed, but their combined amount must cover the finalized sale.
      */
@@ -815,13 +1008,20 @@ class SellPosController extends Controller
             return null;
         }
 
-        $is_walk_in = Contact::where('business_id', $business_id)
+        $customer = Contact::where('business_id', $business_id)
             ->where('id', $input['contact_id'] ?? null)
-            ->where('is_default', 1)
-            ->exists();
+            ->first();
+        $is_walk_in = empty($customer) || (int) $customer->is_default === 1;
 
         if (! $is_walk_in) {
             return null;
+        }
+
+        if (! empty($input['is_credit_sale'])) {
+            return __('lang_v1.walk_in_customer_payment_must_be_full', [
+                'paid' => $this->transactionUtil->num_f(0, true),
+                'total' => $this->transactionUtil->num_f($this->transactionUtil->num_uf($input['final_total'] ?? 0), true),
+            ]);
         }
 
         $mpesa_verification = new MpesaVerificationUtil();
@@ -856,6 +1056,64 @@ class SellPosController extends Controller
                 'paid' => $this->transactionUtil->num_f($total_paid, true),
                 'total' => $this->transactionUtil->num_f($final_total, true),
             ]);
+        }
+
+        return null;
+    }
+
+    /**
+     * Verify the browser's cash allocation and change calculation. Older
+     * clients without cash_tendered remain valid by treating amount as tendered.
+     */
+    private function validateCashTendering(array &$input)
+    {
+        if (($input['status'] ?? null) !== 'final' || ! empty($input['is_suspend'])) {
+            return null;
+        }
+
+        if (empty($input['payment']) || ! is_array($input['payment'])) {
+            return null;
+        }
+        $payments = &$input['payment'];
+        $final_total = max($this->transactionUtil->num_uf($input['final_total'] ?? 0), 0);
+        $non_cash_total = 0;
+        foreach ($payments as &$payment) {
+            if (($payment['method'] ?? null) !== 'cash') {
+                $non_cash_total += max($this->transactionUtil->num_uf($payment['amount'] ?? 0), 0);
+            }
+        }
+
+        $remaining = max($final_total - $non_cash_total, 0);
+        $total_tendered = 0;
+        foreach ($payments as $payment) {
+            if (($payment['method'] ?? null) !== 'cash') {
+                continue;
+            }
+
+            $amount = max($this->transactionUtil->num_uf($payment['amount'] ?? 0), 0);
+            if (array_key_exists('cash_tendered', $payment) && trim((string) $payment['cash_tendered']) === '') {
+                return 'Enter an amount tendered for every cash payment.';
+            }
+            $tendered = array_key_exists('cash_tendered', $payment)
+                ? $this->transactionUtil->num_uf($payment['cash_tendered'])
+                : $amount;
+            if ($tendered < 0) {
+                return 'Cash tendered cannot be negative.';
+            }
+
+            $expected_amount = min($tendered, $remaining);
+            // The visible amount remains the amount expected from the cashier.
+            // Persist only the portion of the tender that is actually applied.
+            $payment['amount'] = $this->transactionUtil->num_f($expected_amount);
+            $remaining -= $expected_amount;
+            $total_tendered += $tendered;
+        }
+        unset($payment);
+
+        $expected_change = max($total_tendered + $non_cash_total - $final_total, 0);
+        $submitted_change = max($this->transactionUtil->num_uf($input['change_return'] ?? 0), 0);
+        if (abs($submitted_change - $expected_change) >= 0.01) {
+            return 'The submitted change amount is inconsistent. Reopen checkout and recalculate the payment.';
         }
 
         return null;
@@ -1330,6 +1588,13 @@ class SellPosController extends Controller
 
         try {
             $input = $request->except('_token');
+
+            $payment_amount_error = $this->validatePaymentAmounts($input);
+            if (! empty($payment_amount_error)) {
+                $output = ['success' => 0, 'msg' => $payment_amount_error];
+
+                return $request->ajax() ? $output : back()->withInput()->with('status', $output);
+            }
 
             //status is send as quotation from edit sales screen.
             $input['is_quotation'] = 0;
@@ -1860,6 +2125,60 @@ class SellPosController extends Controller
     }
 
     /**
+     * Return a paged, location-scoped product snapshot for the browser's
+     * offline catalogue. Row templates are rendered by the normal POS code so
+     * taxes, units, prices, stock controls and enabled modules remain aligned.
+     */
+    public function offlineProductCatalog(Request $request)
+    {
+        $business_id = $request->session()->get('user.business_id');
+        $location_id = (int) $request->input('location_id');
+        if (! $this->userCanAccessLocation(auth()->user(), $location_id)) {
+            abort(403, 'Unauthorized location.');
+        }
+
+        $page = max(1, (int) $request->input('page', 1));
+        $per_page = 25;
+        $price_group = $request->input('price_group');
+        $products = $this->productUtil->filterProduct(
+            $business_id,
+            '',
+            $location_id,
+            0,
+            $price_group,
+            [],
+            ['name', 'sku']
+        );
+        $page_products = $products->slice(($page - 1) * $per_page, $per_page)->values();
+
+        $request->merge([
+            'product_row' => 0,
+            'quantity' => 1,
+            'customer_id' => $request->input('customer_id'),
+            'is_direct_sell' => false,
+            'is_serial_no' => $request->boolean('is_serial_no') ? 'true' : 'false',
+            'is_sales_order' => false,
+            'disable_qty_alert' => $request->boolean('disable_qty_alert'),
+            'is_draft' => false,
+        ]);
+
+        $snapshot = $page_products->map(function ($product) use ($location_id) {
+            $item = $product->toArray();
+            $item['row_data'] = $this->productUtil->getPosProductRow($product->variation_id, $location_id);
+
+            return $item;
+        })->values();
+
+        return response()->json([
+            'products' => $snapshot,
+            'page' => $page,
+            'has_more' => $page * $per_page < $products->count(),
+            'total' => $products->count(),
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
      * Returns the HTML row for a payment in POS
      *
      * @param  \Illuminate\Http\Request  $request
@@ -1956,9 +2275,15 @@ class SellPosController extends Controller
         $register = $this->cashRegisterUtil->getCurrentCashRegister($user_id);
 
         $query = Transaction::where('business_id', $business_id)
-            ->where('transactions.created_by', $user_id)
             ->where('transactions.type', 'sell')
             ->where('is_direct_sale', 0);
+
+        // Managers who can view sales can also synchronize another cashier's
+        // device outbox. Keep Recent Transactions consistent with that access;
+        // regular cashiers continue to see only their own transactions.
+        if (! auth()->user()->can('sell.view')) {
+            $query->where('transactions.created_by', $user_id);
+        }
 
         if ($transaction_status == 'final') {
             //Commented as credit sales not showing

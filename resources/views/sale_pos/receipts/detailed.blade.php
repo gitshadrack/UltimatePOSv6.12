@@ -640,7 +640,7 @@
                                     <tr>
                                         <td>{{ $payment['method'] }}</td>
                                         <td>{{ $payment['amount'] }}</td>
-                                        <td>{{ $payment['date'] }}</td>
+                                        @if(empty($receipt_details->hide_payment_date))<td>{{ $payment['date'] }}</td>@endif
                                     </tr>
                                 @endforeach
                             @endif

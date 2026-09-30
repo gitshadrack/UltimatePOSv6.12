@@ -861,6 +861,7 @@
             <div class="checkbox">
               <label>
                 {!! Form::checkbox('show_payments', 1, true, ['class' => 'input-icheck']); !!} @lang('invoice.show_payments')</label>
+                <label>{!! Form::checkbox('common_settings[hide_payment_date]', 1, false, ['class' => 'input-icheck']); !!} @lang('upgrade.hide_payment_date')</label>
               </div>
           </div>
         </div>

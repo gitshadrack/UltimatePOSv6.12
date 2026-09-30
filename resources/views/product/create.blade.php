@@ -129,6 +129,13 @@
                 'placeholder' => __('product.alert_quantity'), 'min' => '0']); !!}
             </div>
         </div>
+        <div class="col-sm-4 @if(!empty($duplicate_product) && $duplicate_product->enable_stock == 0) hide @endif" id="offline_safety_stock_div">
+            <div class="form-group">
+                {!! Form::label('offline_safety_stock', 'Offline safety stock:') !!}
+                {!! Form::text('offline_safety_stock', !empty($duplicate_product->offline_safety_stock) ? @format_quantity($duplicate_product->offline_safety_stock) : 0, ['class' => 'form-control input_number', 'placeholder' => 'Maximum quantity available for offline sales', 'min' => '0']) !!}
+                <p class="help-block">Offline cashiers cannot sell into this reserved quantity.</p>
+            </div>
+        </div>
         @if(!empty($common_settings['enable_product_warranty']))
         <div class="col-sm-4">
             <div class="form-group">

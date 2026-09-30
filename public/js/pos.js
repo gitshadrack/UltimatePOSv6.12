@@ -1,6 +1,18 @@
 var global_brand_id = null;
 var global_p_category_id = null;
 var global_is_clear_local_storage = false;
+
+function pos_app_url(path) {
+    var formAction = $('form#add_pos_sell_form').attr('action') || $('form#edit_pos_sell_form').attr('action') || '';
+    try {
+        var actionUrl = new URL(formAction, window.location.href);
+        var basePath = actionUrl.pathname.replace(/\/pos\/?$/, '');
+        return actionUrl.origin + basePath + '/' + String(path || '').replace(/^\//, '');
+    } catch (error) {
+        return path;
+    }
+}
+
 $(document).ready(function() {
     customer_set = false;
     //Prevent enter key function except texarea
@@ -164,9 +176,10 @@ $(document).ready(function() {
 
     if ($('#search_product').length) {
         //Add Product
+        var productSearchRequest = null;
         $('#search_product')
             .autocomplete({
-                delay: 1000,
+                delay: 250,
                 source: function(request, response) {
                     var price_group = '';
                     var search_fields = [];
@@ -214,15 +227,25 @@ $(document).ready(function() {
                         $('input[name="is_serial_no"]').val() == 1) {
                         is_serial_no = true;
                     }
+
+                    if (!window.navigator.onLine || !posServerOnline) {
+                        search_offline_products(request.term, search_fields).then(response);
+                        return;
+                    }
                     
-                    $.getJSON(
-                        '/products/list',
+                    if (productSearchRequest) {
+                        productSearchRequest.abort();
+                    }
+
+                    productSearchRequest = $.getJSON(
+                        pos_app_url('/products/list'),
                         {
                             price_group: price_group,
                             location_id: $('input#location_id').val(),
                             term: request.term,
                             not_for_selling: 0,
                             search_fields: search_fields,
+                            limit: 20,
                             auto_add_single: true,
                             product_row: $('input#product_row_count').val(),
                             customer_id: customer_id,
@@ -250,6 +273,18 @@ $(document).ready(function() {
                             }
                         }
                     );
+                    productSearchRequest.fail(function(xhr, textStatus) {
+                        if (textStatus === 'abort') {
+                            return;
+                        }
+
+                        if (xhr.status === 0) {
+                            posServerOnline = false;
+                            search_offline_products(request.term, search_fields).then(response);
+                        } else {
+                            response([]);
+                        }
+                    });
                 },
                 minLength: 2,
                 response: function(event, ui) {
@@ -270,7 +305,7 @@ $(document).ready(function() {
                             for_so = true;
                         }
 
-                        if ((ui.item.enable_stock == 1 && ui.item.qty_available > 0) || 
+                        if ((ui.item.enable_stock == 1 && offline_product_has_sellable_stock(ui.item)) ||
                                 (ui.item.enable_stock == 0) || is_overselling_allowed || for_so) {
                             $(this)
                                 .data('ui-autocomplete')
@@ -306,7 +341,7 @@ $(document).ready(function() {
                         var is_draft=true;
                     }
 
-                    if (ui.item.enable_stock != 1 || ui.item.qty_available > 0 || is_overselling_allowed || for_so || is_draft) {
+                    if (ui.item.enable_stock != 1 || offline_product_has_sellable_stock(ui.item) || is_overselling_allowed || for_so || is_draft) {
                         $(this).val(null);
 
                         //Pre select lot number only if the searched term is same as the lot number
@@ -720,15 +755,51 @@ $(document).ready(function() {
         $('#modal_payment').modal('show');
     });
 
-    $('#modal_payment').one('shown.bs.modal', function() {
-        $('#modal_payment')
-            .find('input')
-            .filter(':visible:first')
-            .focus()
-            .select();
+    $('#modal_payment').on('shown.bs.modal', function() {
         if ($('form#edit_pos_sell_form').length == 0) {
             $(this).find('#method_0').change();
         }
+
+        var cash_tendered = $(this).find('#payment_rows_div .payment_row').filter(function() {
+            return $(this).find('.payment_types_dropdown').first().val() === 'cash';
+        }).first().find('.cash-tendered:visible');
+        if (cash_tendered.length && __read_number(cash_tendered) <= 0) {
+            __write_number(
+                cash_tendered,
+                __read_number(cash_tendered.closest('.payment_row').find('.payment-amount').first())
+            );
+            calculate_balance_due();
+        }
+        var focus_target = cash_tendered.length
+            ? cash_tendered
+            : $(this).find('input:visible').first();
+
+        focus_target.focus().select();
+        calculate_balance_due();
+    });
+
+    $(document).on('click', '.unified-pay-remaining', function() {
+        var row = $(this).closest('.payment_row');
+        var current = Math.max(__read_number(row.find('.payment-amount').first()) || 0, 0);
+        var remaining = Math.max(__read_number($('#in_balance_due')) || 0, 0);
+        var amount = current + remaining;
+        __write_number(row.find('.payment-amount').first(), amount);
+        if (row.find('.payment_types_dropdown').first().val() === 'cash') {
+            __write_number(row.find('.cash-tendered').first(), amount);
+        }
+        row.find('.payment-amount').first().trigger('change').focus().select();
+    });
+
+    $(document).on('click', '.unified-cash-exact', function() {
+        $(this).closest('.payment_row').find('.unified-pay-remaining').trigger('click');
+    });
+
+    $(document).on('click', '.unified-cash-add', function() {
+        var row = $(this).closest('.payment_row');
+        var amount = Math.max(__read_number(row.find('.payment-amount').first()) || 0, 0);
+        var tendered = Math.max(__read_number(row.find('.cash-tendered').first()) || amount, amount);
+        __write_number(row.find('.cash-tendered').first(), tendered + Number($(this).data('amount') || 0));
+        row.find('.cash-tendered').first().trigger('change').focus().select();
     });
 
     //Finalize without showing payment options
@@ -752,6 +823,11 @@ $(document).ready(function() {
 
         //If pay method is credit sale submit form
         if (pay_method == 'credit_sale') {
+            if (!pos_has_named_customer()) {
+                highlight_pos_underpayment();
+                swal({title: 'Select a customer', text: 'Walk-in customers must pay in full. Select a named customer before creating a credit sale.', icon: 'error'});
+                return false;
+            }
             $('#is_credit_sale').val(1);
             pos_form_obj.submit();
             return true;
@@ -794,6 +870,16 @@ $(document).ready(function() {
             $('div#card_details_modal').modal('show');
         } else if (pay_method == 'suspend') {
             $('div#confirmSuspendModal').modal('show');
+        } else if (pay_method == 'cash') {
+            // Cash uses a separate tendered amount so the payment row remains
+            // limited to the amount actually applied to the sale.
+            $('#modal_payment').modal('show');
+            window.setTimeout(function() {
+                var payment_row = $('#payment_rows_div .payment_row').first();
+                var tendered = payment_row.find('.cash-tendered');
+                __write_number(tendered, __read_number(payment_row.find('.payment-amount')));
+                tendered.focus().select();
+            }, 200);
         } else {
             pos_form_obj.submit();
         }
@@ -1165,14 +1251,41 @@ $(document).ready(function() {
 
     function show_mpesa_stk_status(message, type) {
         var status = $('#mpesa_stk_status');
-        if (!status.length) {
-            return;
-        }
-
         status
             .removeClass('hide alert-success alert-danger alert-warning alert-info')
             .addClass('alert-' + (type || 'info'))
             .text(message);
+        $('.unified-mpesa-status')
+            .removeClass('alert-success alert-danger alert-warning alert-info')
+            .addClass('alert-' + (type || 'info'))
+            .text(message);
+    }
+
+    function poll_mpesa_confirmation(provider, payment_row, attempts_left) {
+        if (!attempts_left || !payment_row.length || !$('#modal_payment').hasClass('in')) return;
+        var search_url = $('#' + provider + '_pos_search_url').val();
+        var phone = $.trim(payment_row.find('.unified-mpesa-phone').val());
+        var amount = __read_number(payment_row.find('.payment-amount').first());
+        if (!search_url) return;
+
+        window.setTimeout(function() {
+            $.getJSON(search_url, {phone_number: phone, amount: amount, location_id: $('input#location_id').val()})
+                .done(function(result) {
+                    var matches = (result.payments || []).filter(function(payment) {
+                        var candidatePhone = String(payment.phone_number || '').replace(/\D/g, '');
+                        var requestedPhone = String(phone || '').replace(/\D/g, '');
+                        return Math.abs(Number(payment.amount) - amount) < 0.01 && candidatePhone.slice(-9) === requestedPhone.slice(-9);
+                    });
+                    if (matches.length === 1 && matches[0].transaction_code) {
+                        set_mpesa_payment_row(payment_row, matches[0].transaction_code, Number(matches[0].amount));
+                        show_mpesa_stk_status(LANG.mpesa_payment_confirmed || 'Payment confirmed', 'success');
+                        return;
+                    }
+                    show_mpesa_stk_status(LANG.mpesa_waiting_for_customer || 'Waiting for customer confirmation...', 'warning');
+                    poll_mpesa_confirmation(provider, payment_row, attempts_left - 1);
+                })
+                .fail(function() { poll_mpesa_confirmation(provider, payment_row, attempts_left - 1); });
+        }, 3000);
     }
 
     function mpesa_ajax_error_message(xhr) {
@@ -1306,8 +1419,9 @@ $(document).ready(function() {
         var button = $(this);
         var provider = button.data('provider');
         var stk_url = $('#' + provider + '_stk_push_url').val();
-        var phone_number = $.trim($('#intasend_stk_phone_number').val());
-        var amount = __read_number($('#intasend_stk_amount'));
+        var payment_row = button.closest('.payment_row');
+        var phone_number = payment_row.length ? $.trim(payment_row.find('.unified-mpesa-phone').val()) : $.trim($('#intasend_stk_phone_number').val());
+        var amount = payment_row.length ? __read_number(payment_row.find('.payment-amount').first()) : __read_number($('#intasend_stk_amount'));
 
         if (button.data('requesting')) {
             return false;
@@ -1345,6 +1459,9 @@ $(document).ready(function() {
                     setTimeout(function() {
                         search_intasend_pos_collections(provider);
                     }, 3000);
+                    if (payment_row.length) {
+                        poll_mpesa_confirmation(provider, payment_row, 20);
+                    }
                 } else {
                     var failure_message = result.msg || LANG.something_went_wrong;
                     show_mpesa_stk_status(failure_message, 'danger');
@@ -1532,20 +1649,59 @@ $(document).ready(function() {
 
     pos_form_validator = pos_form_obj.validate({
         submitHandler: function(form) {
-            // var total_payble = __read_number($('input#final_total_input'));
-            // var total_paying = __read_number($('input#total_paying_input'));
-            var cnf = true;
+            calculate_balance_due();
+            var partialPaymentConfirmed = $(form).data('partial-payment-confirmed') === true;
+            $(form).removeData('partial-payment-confirmed');
 
-            //Ignore if the difference is less than 0.5
-            if ($('input#in_balance_due').val() >= 0.5) {
-                cnf = confirm(LANG.paid_amount_is_less_than_payable);
-                // if( total_payble > total_paying ){
-                // 	cnf = confirm( LANG.paid_amount_is_less_than_payable );
-                // } else if(total_payble < total_paying) {
-                // 	alert( LANG.paid_amount_is_more_than_payable );
-                // 	cnf = false;
-                // }
+            var paymentAmountsValid = true;
+            $('#payment_rows_div .payment-amount:visible').each(function() {
+                var amount = __read_number($(this));
+                if (!isFinite(amount) || amount < 0) {
+                    toastr.error('Payment amounts must be valid, non-negative numbers.');
+                    $(this).closest('.form-group').addClass('has-error');
+                    $(this).focus();
+                    paymentAmountsValid = false;
+                    return false;
+                }
+            });
+            if (!paymentAmountsValid || !validate_cash_tendering() || !validate_pos_cash_denominations()) {
+                return false;
             }
+
+            // Keep the cashier in the POS instead of opening a browser-native
+            // localhost confirmation. The sale can still be saved on credit.
+            if (__read_number($('input#in_balance_due')) >= 0.01 && !pos_has_named_customer()) {
+                highlight_pos_underpayment();
+                swal({
+                    title: 'Full payment required',
+                    text: 'Walk-in customers cannot have a balance. Add payment for the full amount or select a named customer.',
+                    icon: 'error',
+                }).then(function() {
+                    $('#modal_payment').modal('show');
+                    $('#payment_rows_div .payment-amount:visible').first().focus().select();
+                });
+                return false;
+            }
+            if (__read_number($('input#in_balance_due')) >= 0.5 && !partialPaymentConfirmed) {
+                highlight_pos_underpayment();
+                swal({
+                    title: LANG.paid_amount_is_less_than_payable,
+                    text: 'Check the highlighted payment entries or continue with the remaining balance.',
+                    icon: 'warning',
+                    buttons: ['Edit payment', 'Continue with balance'],
+                    dangerMode: true,
+                }).then(function(continueWithBalance) {
+                    if (continueWithBalance) {
+                        $(form).data('partial-payment-confirmed', true);
+                        $(form).submit();
+                    } else {
+                        $('#modal_payment').modal('show');
+                        $('#payment_rows_div .payment-amount:visible').first().focus().select();
+                    }
+                });
+                return false;
+            }
+            clear_pos_underpayment_highlight();
 
             var total_advance_payments = 0;
             $('#payment_rows_div').find('select.payment_types_dropdown').each( function(){
@@ -1563,12 +1719,26 @@ $(document).ready(function() {
                 return false;
             }
 
-            if (cnf) {
-                disable_pos_form_actions();
+            if (!validate_manual_mpesa_reference()) {
+                return false;
+            }
 
+            {
+                var offlineUuid = ensure_offline_transaction_uuid();
                 var data = $(form).serialize();
                 data = data + '&status=final';
                 var url = $(form).attr('action');
+
+                if (!window.navigator.onLine) {
+                    queue_offline_pos_sale(offlineUuid, url, data).then(function() {
+                        complete_offline_pos_sale();
+                    }).catch(function(error) {
+                        toastr.error(error.message || 'Unable to save this sale on the device. Do not clear or close the sale.');
+                    });
+                    return false;
+                }
+
+                disable_pos_form_actions();
                 $.ajax({
                     method: 'POST',
                     url: url,
@@ -1594,6 +1764,22 @@ $(document).ready(function() {
 
                         enable_pos_form_actions();
                     },
+                    error: function(xhr) {
+                        if (xhr.status === 0) {
+                            queue_offline_pos_sale(offlineUuid, url, data).then(function() {
+                                complete_offline_pos_sale();
+                            }).catch(function(error) {
+                                toastr.error(error.message || 'Connection lost and the sale could not be saved on this device.');
+                                enable_pos_form_actions();
+                            });
+                        } else {
+                            var message = xhr.responseJSON && xhr.responseJSON.msg
+                                ? xhr.responseJSON.msg
+                                : 'The sale was not accepted by the server.';
+                            toastr.error(message);
+                            enable_pos_form_actions();
+                        }
+                    },
                 });
             }
             return false;
@@ -1601,6 +1787,17 @@ $(document).ready(function() {
     });
 
     $(document).on('change', '.payment-amount', function() {
+        var payment_row = $(this).closest('.payment_row');
+        if (payment_row.find('.payment_types_dropdown').first().val() === 'cash') {
+            var tendered_input = payment_row.find('.cash-tendered').first();
+            if (tendered_input.length) {
+                __write_number(tendered_input, __read_number($(this)));
+            }
+        }
+        calculate_balance_due();
+    });
+
+    $(document).on('input change', '.cash-tendered', function() {
         calculate_balance_due();
     });
 
@@ -1891,27 +2088,9 @@ $(document).ready(function() {
             }
         }
 
-        if ($('.enable_cash_denomination_for_payment_methods').length) {
-            var payment_row = $('.enable_cash_denomination_for_payment_methods').closest('.payment_row');
-            var is_valid = true;
-            var payment_type = payment_row.find('.payment_types_dropdown').val();
-            var denomination_for_payment_types = JSON.parse($('.enable_cash_denomination_for_payment_methods').val());
-            if (denomination_for_payment_types.includes(payment_type) && payment_row.find('.is_strict').length && payment_row.find('.is_strict').val() === '1' ) {
-                var payment_amount = __read_number(payment_row.find('.payment-amount'));
-                var total_denomination = payment_row.find('input.denomination_total_amount').val();
-                if (payment_amount != total_denomination ) {
-                    is_valid = false;
-                }
-            }
-
-            if (!is_valid) {
-                payment_row.find('.cash_denomination_error').removeClass('hide');
-                toastr.error(payment_row.find('.cash_denomination_error').text());
-                e.preventDefault();
-                return false;
-            } else {
-                payment_row.find('.cash_denomination_error').addClass('hide');
-            }
+        if (!validate_cash_tendering() || !validate_pos_cash_denominations()) {
+            e.preventDefault();
+            return false;
         }
 
         if (sell_form.valid()) {
@@ -2315,6 +2494,15 @@ function set_payment_type_dropdown() {
     toggle_mpesa_button(enabled_payment_types.indexOf('custom_pay_1') !== -1);
 
     if (enabled_payment_types.length) {
+        $('.unified-payment-column').each(function() {
+            var method = String($(this).data('payment-method') || '');
+            var disabled = method !== 'advance' && enabled_payment_types.indexOf(method) === -1;
+            $(this).toggleClass('hide', disabled);
+            if (disabled) {
+                __write_number($(this).find('.payment-amount'), 0);
+                __write_number($(this).find('.cash-tendered'), 0);
+            }
+        });
         $(".payment_types_dropdown > option").each(function() {
             //skip if advance
             if ($(this).val() && $(this).val() != 'advance') {
@@ -2401,15 +2589,26 @@ function get_recent_transactions(status, element_obj) {
         return false;
     }
     var transaction_sub_type = $("#transaction_sub_type").val();
+    var recentTransactionsUrl = $('#pos_sync_status').data('recent-transactions-url') || '/sells/pos/get-recent-transactions';
+    if (status === 'final') {
+        render_offline_recent_transactions(element_obj, '');
+    }
     $.ajax({
         method: 'GET',
-        url: '/sells/pos/get-recent-transactions',
+        url: recentTransactionsUrl,
         data: { status: status , transaction_sub_type: transaction_sub_type},
         dataType: 'html',
         success: function(result) {
-            element_obj.html(result);
-            __currency_convert_recursively(element_obj);
+            if (status === 'final') {
+                render_offline_recent_transactions(element_obj, result);
+            } else {
+                element_obj.html(result);
+                __currency_convert_recursively(element_obj);
+            }
         },
+        error: function() {
+            if (status === 'final') render_offline_recent_transactions(element_obj, '');
+        }
     });
 }
 
@@ -2484,7 +2683,7 @@ function pos_insert_product_row(result) {
         $('table#pos_table tbody')
             .find('tr')
             .last()
-            .find('td:first')
+            .children('td:not(.serial_no)').first()
             .append(result.html_modifier);
     }
 
@@ -2606,10 +2805,14 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
         is_serial_no = true;
     }
 
+    if ((!window.navigator.onLine || !posServerOnline) && variation_id !== null) {
+        add_offline_product_row(variation_id, quantity);
+        return;
+    }
+
     $.ajax({
         method: 'GET',
-        url: '/sells/pos/get_product_row/' + variation_id + '/' + location_id,
-        async: false,
+        url: pos_app_url('/sells/pos/get_product_row/' + variation_id + '/' + location_id),
         data: {
             product_row: product_row,
             customer_id: customer_id,
@@ -2626,7 +2829,14 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
         dataType: 'json',
         success: function(result) {
             result.variation_id = variation_id;
+            cache_online_product_row(variation_id, result);
             pos_add_product_row_from_data(result);
+        },
+        error: function(xhr) {
+            if (xhr.status === 0 && variation_id !== null) {
+                posServerOnline = false;
+                add_offline_product_row(variation_id, quantity);
+            }
         },
     });
 }
@@ -2846,29 +3056,50 @@ function pos_order_tax(price_total, discount) {
 
 function calculate_balance_due() {
     var total_payable = __read_number($('#final_total_input'));
-    var total_paying = 0;
-    $('#payment_rows_div')
-        .find('.payment-amount')
-        .each(function() {
-            if (parseFloat($(this).val())) {
-                total_paying += __read_number($(this));
-            }
-        });
-    var bal_due = total_payable - total_paying;
-    var change_return = 0;
+    var non_cash_total = 0;
+    var cash_rows = [];
+    var total_cash_tendered = 0;
 
-    //change_return
-    if (bal_due < 0 || Math.abs(bal_due) < 0.05) {
-        __write_number($('input#change_return'), bal_due * -1);
-        $('span.change_return_span').text(__currency_trans_from_en(bal_due * -1, true));
-        change_return = bal_due * -1;
-        bal_due = 0;
-    } else {
-        __write_number($('input#change_return'), 0);
-        $('span.change_return_span').text(__currency_trans_from_en(0, true));
-        change_return = 0;
-        
-    }
+    $('#payment_rows_div .payment_row').each(function() {
+        var payment_row = $(this);
+        var amount_input = payment_row.find('.payment-amount').first();
+        if (!amount_input.length) return;
+
+        if (payment_row.find('.payment_types_dropdown').first().val() === 'cash' && payment_row.find('.cash-tendered').length) {
+            cash_rows.push(payment_row);
+        } else {
+            non_cash_total += Math.max(__read_number(amount_input) || 0, 0);
+        }
+    });
+
+    var remaining_payable = Math.max(total_payable - non_cash_total, 0);
+    var total_cash_applied = 0;
+    $.each(cash_rows, function(index, payment_row) {
+        var amount_input = payment_row.find('.payment-amount').first();
+        var tendered_input = payment_row.find('.cash-tendered').first();
+        var tendered = tendered_input.val() === '' ? Math.max(__read_number(amount_input) || 0, 0) : __read_number(tendered_input);
+        tendered = isFinite(tendered) ? Math.max(tendered, 0) : 0;
+        var applied = Math.min(tendered, remaining_payable);
+
+        // Show the amount actually applied to this sale. Tendered cash may
+        // exceed it, but that difference belongs in Change, not Payment.
+        if (Math.abs((__read_number(amount_input) || 0) - applied) >= 0.01) {
+            __write_number(amount_input, applied);
+        }
+
+        total_cash_tendered += tendered;
+        total_cash_applied += applied;
+        remaining_payable -= applied;
+    });
+
+    var total_paying = non_cash_total + total_cash_applied;
+    var bal_due = Math.max(total_payable - total_paying, 0);
+    var change_return = Math.max(total_cash_tendered + non_cash_total - total_payable, 0);
+    if (bal_due < 0.01) bal_due = 0;
+    if (change_return < 0.01) change_return = 0;
+
+    __write_number($('input#change_return'), change_return);
+    $('span.change_return_span').text(__currency_trans_from_en(change_return, true));
 
     if (change_return !== 0) {
         $('#change_return_payment_data').removeClass('hide');
@@ -2886,8 +3117,67 @@ function calculate_balance_due() {
 
     __highlight(bal_due * -1, $('span.balance_due'));
     __highlight(change_return * -1, $('span.change_return_span'));
-    // store payment details
+    if (bal_due < 0.5) clear_pos_underpayment_highlight();
     saveFormDataToLocalStorage();
+}
+
+function highlight_pos_underpayment() {
+    $('#modal_payment').modal('show');
+    $('#payment_rows_div .payment-amount:visible, #payment_rows_div .cash-tendered:visible')
+        .closest('.form-group').addClass('has-error');
+    $('#modal_payment .balance_due').addClass('text-danger').closest('.col-md-12').addClass('has-error');
+}
+
+function pos_has_named_customer() {
+    var customerId = String($('select#customer_id').val() || '');
+    return customerId !== '' && customerId !== String($('#default_customer_id').val() || '');
+}
+
+function clear_pos_underpayment_highlight() {
+    $('#modal_payment .payment-amount, #modal_payment .cash-tendered')
+        .closest('.form-group').removeClass('has-error');
+    $('#modal_payment .balance_due').removeClass('text-danger').closest('.col-md-12').removeClass('has-error');
+}
+
+function validate_cash_tendering() {
+    var is_valid = true;
+    $('#payment_rows_div .payment_row').each(function() {
+        var row = $(this);
+        if (row.find('.payment_types_dropdown').first().val() !== 'cash') return;
+
+        var tendered_input = row.find('.cash-tendered').first();
+        var tendered = __read_number(tendered_input);
+        if (tendered_input.val() === '' || !isFinite(tendered) || tendered < 0) {
+            toastr.error('Enter a valid non-negative amount tendered for every cash payment.');
+            tendered_input.focus();
+            is_valid = false;
+            return false;
+        }
+    });
+    return is_valid;
+}
+
+function validate_pos_cash_denominations() {
+    var is_valid = true;
+    $('.enable_cash_denomination_for_payment_methods').each(function() {
+        var settings = $(this);
+        var payment_row = settings.closest('.payment_row');
+        var payment_type = payment_row.find('.payment_types_dropdown').first().val();
+        var denomination_for_payment_types = JSON.parse(settings.val());
+        var expected_amount = payment_type === 'cash' && payment_row.find('.cash-tendered').length
+            ? __read_number(payment_row.find('.cash-tendered').first())
+            : __read_number(payment_row.find('.payment-amount').first());
+        var denomination_total = __read_number(payment_row.find('input.denomination_total_amount').first());
+
+        if (denomination_for_payment_types.includes(payment_type) && payment_row.find('.is_strict').val() === '1' && Math.abs(expected_amount - denomination_total) >= 0.01) {
+            payment_row.find('.cash_denomination_error').removeClass('hide');
+            toastr.error(payment_row.find('.cash_denomination_error').text());
+            is_valid = false;
+            return false;
+        }
+        payment_row.find('.cash_denomination_error').addClass('hide');
+    });
+    return is_valid;
 }
 
 function update_mpesa_excess_credit_option(change_return) {
@@ -2946,6 +3236,7 @@ function isValidPosForm() {
 }
 
 function reset_pos_form(){
+	clear_pos_underpayment_highlight();
 
 	//If on edit page then redirect to Add POS page
 	if($('form#edit_pos_sell_form').length > 0){
@@ -2990,6 +3281,12 @@ function reset_pos_form(){
 	__write_number($('input#tax_calculation_amount'), $('input#tax_calculation_amount').data('default'));
 
 	$('select.payment_types_dropdown').val('cash').trigger('change');
+	$('#payment_rows_div .cash-tendered').each(function() {
+		__write_number($(this), 0);
+	});
+	$('#change_return_payment_data').addClass('hide');
+	__write_number($('input#change_return'), 0);
+	$('span.change_return_span').text(__currency_trans_from_en(0, true));
 	$('#price_group').trigger('change');
 
 	//Reset shipping
@@ -3528,6 +3825,11 @@ $(document).on('change', '.payment_types_dropdown', function(e) {
                 .data('default_payment_accounts') : $('#location_id').data('default_payment_accounts');
     var payment_type = $(this).val();
     var payment_row = $(this).closest('.payment_row');
+    var cash_tendered_container = payment_row.find('.cash-tendered-container');
+    cash_tendered_container.toggleClass('hide', payment_type !== 'cash');
+    if (payment_type === 'cash' && __read_number(payment_row.find('.cash-tendered')) <= 0) {
+        __write_number(payment_row.find('.cash-tendered'), __read_number(payment_row.find('.payment-amount')));
+    }
     if (payment_type && payment_type != 'advance') {
         var default_account = default_accounts && default_accounts[payment_type]['account'] ? 
             default_accounts[payment_type]['account'] : '';
@@ -3563,6 +3865,7 @@ $(document).on('change', '.payment_types_dropdown', function(e) {
             account_dropdown.closest('.form-group').removeClass('hide');
         }    
     }
+    calculate_balance_due();
 });
 
 $(document).on('show.bs.modal', '#recent_transactions_modal', function () {
@@ -3582,12 +3885,14 @@ function disable_pos_form_actions(){
 
     $('div.pos-processing').show();
     $('#pos-save').attr('disabled', 'true');
+    $('#pos-save span').text($('#pos-save').data('processing-text') || 'Processing...');
     $('div.pos-form-actions').find('button').attr('disabled', 'true');
 }
 
 function enable_pos_form_actions(){
     $('div.pos-processing').hide();
     $('#pos-save').removeAttr('disabled');
+    $('#pos-save span').text($('#pos-save').data('default-text') || 'Complete Sale');
     $('div.pos-form-actions').find('button').removeAttr('disabled');
 }
 
@@ -4265,3 +4570,1006 @@ function saveFormDataToLocalStorage() {
 
     // console.log("Form data successfully saved to LocalStorage.");
 }
+
+/*
+ * Offline POS outbox. IndexedDB is used because a queued sale must survive a
+ * reload and must not be confused with the single-cart LocalStorage snapshot.
+ */
+var POS_OFFLINE_DB = 'ultimate_pos_offline';
+var POS_OFFLINE_STORE = 'sales_outbox';
+var POS_OFFLINE_PRODUCT_STORE = 'products';
+var posSyncInProgress = false;
+var posCatalogSyncInProgress = false;
+var posServerOnline = false;
+var posCatalogLastSyncAt = 0;
+var posCatalogLastScope = '';
+var posSyncAuthPaused = false;
+var posHeartbeatInProgress = false;
+var posHeartbeatRetryTimer = null;
+var POS_OFFLINE_CATALOG_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function offline_catalog_is_fresh(products) {
+    if (!products.length) return false;
+    return products.every(function(product) {
+        var cachedAt = Date.parse(product.cached_at || '');
+        return Number.isFinite(cachedAt) && Date.now() - cachedAt <= POS_OFFLINE_CATALOG_MAX_AGE_MS && cachedAt <= Date.now() + 60000;
+    });
+}
+
+function require_fresh_offline_catalog() {
+    return get_offline_products().then(function(products) {
+        if (!offline_catalog_is_fresh(products)) {
+            throw new Error('The offline product catalogue is missing or over 24 hours old. Reconnect and refresh before selling offline.');
+        }
+        return products;
+    });
+}
+
+function remove_sensitive_offline_payment_fields(values) {
+    Array.from(values.keys()).forEach(function(key) {
+        if (/(?:^|\[)(?:card_|bank_account_number|cheque_number)/.test(key)) {
+            values.delete(key);
+        }
+    });
+    return values;
+}
+
+function open_pos_offline_db() {
+    return new Promise(function(resolve, reject) {
+        if (!window.indexedDB) {
+            reject(new Error('IndexedDB is unavailable.'));
+            return;
+        }
+
+        var request = indexedDB.open(POS_OFFLINE_DB, 3);
+        request.onupgradeneeded = function(event) {
+            var db = event.target.result;
+            if (!db.objectStoreNames.contains(POS_OFFLINE_STORE)) {
+                db.createObjectStore(POS_OFFLINE_STORE, { keyPath: 'uuid' });
+            } else if (event.oldVersion < 3) {
+                var outbox = event.target.transaction.objectStore(POS_OFFLINE_STORE);
+                outbox.openCursor().onsuccess = function(cursorEvent) {
+                    var cursor = cursorEvent.target.result;
+                    if (!cursor) {
+                        return;
+                    }
+                    var sale = cursor.value;
+                    sale.data = remove_sensitive_offline_payment_fields(new URLSearchParams(sale.data)).toString();
+                    cursor.update(sale);
+                    cursor.continue();
+                };
+            }
+            if (!db.objectStoreNames.contains(POS_OFFLINE_PRODUCT_STORE)) {
+                db.createObjectStore(POS_OFFLINE_PRODUCT_STORE, { keyPath: 'cache_key' });
+            }
+        };
+        request.onsuccess = function() { resolve(request.result); };
+        request.onerror = function() { reject(request.error); };
+    });
+}
+
+function pos_outbox_request(mode, callback) {
+    return open_pos_offline_db().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var transaction = db.transaction(POS_OFFLINE_STORE, mode);
+            var store = transaction.objectStore(POS_OFFLINE_STORE);
+            var result;
+            try {
+                result = callback(store);
+            } catch (error) {
+                reject(error);
+                return;
+            }
+            transaction.oncomplete = function() { db.close(); resolve(result); };
+            transaction.onerror = function() { db.close(); reject(transaction.error); };
+            transaction.onabort = function() { db.close(); reject(transaction.error); };
+        });
+    });
+}
+
+function create_pos_uuid() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        return window.crypto.randomUUID();
+    }
+
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(character) {
+        var random = Math.random() * 16 | 0;
+        var value = character === 'x' ? random : (random & 0x3 | 0x8);
+        return value.toString(16);
+    });
+}
+
+function ensure_offline_transaction_uuid() {
+    var input = $('#offline_transaction_uuid');
+    var uuid = input.val();
+    if (!uuid) {
+        uuid = create_pos_uuid();
+        input.val(uuid);
+    }
+    return uuid;
+}
+
+function queue_offline_pos_sale(uuid, url, data) {
+    var badge = $('#pos_sync_status');
+    var values = new URLSearchParams(data);
+    var unsafePaymentMethods = [];
+    var paymentAmounts = {};
+
+    values.forEach(function(value, key) {
+        var amountMatch = key.match(/^payment\[([^\]]+)\]\[amount\]$/);
+        if (amountMatch) {
+            paymentAmounts[amountMatch[1]] = __number_uf(value) || 0;
+        }
+    });
+    values.forEach(function(value, key) {
+        var methodMatch = key.match(/^payment\[([^\]]+)\]\[method\]$/);
+        if (methodMatch && (paymentAmounts[methodMatch[1]] || 0) > 0 && ['cash', 'custom_pay_1'].indexOf(value) === -1) {
+            unsafePaymentMethods.push(value);
+        }
+    });
+
+    if (unsafePaymentMethods.length) {
+        return Promise.reject(new Error('Only cash and manually confirmed M-PESA payments can be saved offline.'));
+    }
+
+    // Never persist card or bank credentials, including stale values left in
+    // hidden payment fields after the cashier switches payment method.
+    remove_sensitive_offline_payment_fields(values);
+    var offlineCreatedAt = values.get('offline_created_at') || new Date().toISOString();
+    values.set('offline_created_at', offlineCreatedAt);
+    values.set('offline_origin_user_id', String(badge.data('user-id') || ''));
+    data = values.toString();
+    var offlineReceipt = build_offline_pos_receipt(uuid, values);
+    var sale = {
+        uuid: uuid,
+        business_id: String(badge.data('business-id') || ''),
+        user_id: String(badge.data('user-id') || ''),
+        origin_user_id: String(badge.data('user-id') || ''),
+        origin_user_name: String(badge.data('user-name') || ''),
+        url: url,
+        data: data,
+        created_at: offlineCreatedAt,
+        attempts: 0,
+        last_error: null,
+        status: 'pending',
+        next_retry_at: 0,
+        offline_receipt: offlineReceipt,
+        printed_offline: true
+    };
+    return require_fresh_offline_catalog().then(function() { return pos_outbox_request('readwrite', function(store) {
+        // A new sale must never silently replace an existing queued sale.
+        // Edits remove the original record before saving it again, so add()
+        // is the correct operation here.
+        store.add(sale);
+    }); }).then(function() {
+        pos_print(offlineReceipt);
+        return update_pos_sync_badge();
+    });
+}
+
+function escape_offline_receipt_html(value) {
+    return $('<div>').text(value == null ? '' : String(value)).html();
+}
+
+function build_offline_pos_receipt(uuid, values) {
+    var rows = '';
+    $('#pos_table tbody tr.product_row').each(function() {
+        var row = $(this);
+        var name = row.attr('data-offline-product-name') || row.find('td').first().clone().find('img, input, select, small, .modal, br').remove().end().text().trim() || 'Item';
+        var sku = row.attr('data-offline-product-sku') || '';
+        var quantity = row.find('.pos_quantity').val() || '0';
+        var unitPrice = row.find('.pos_unit_price_inc_tax').val() || '0';
+        var lineTotal = row.find('.pos_line_total').val() || row.find('.pos_line_total_text').text() || '0';
+        rows += '<tr><td>' + escape_offline_receipt_html(name) + (sku ? '<br><small>' + escape_offline_receipt_html(sku) + '</small>' : '') +
+            '</td><td style="text-align:right">' + escape_offline_receipt_html(quantity) + '</td><td style="text-align:right">' +
+            escape_offline_receipt_html(unitPrice) + '</td><td style="text-align:right">' + escape_offline_receipt_html(lineTotal) + '</td></tr>';
+    });
+    var customer = $('#customer_id option:selected').text().trim() || 'Walk-in customer';
+    var total = $('#final_total_input').val() || values.get('final_total') || pos_outbox_total(values);
+    var shortReference = String(uuid).split('-')[0].toUpperCase();
+    var createdAt = values.get('offline_created_at') || new Date().toISOString();
+    var html = '<div style="font-family:Arial,sans-serif;font-size:12px;max-width:360px;margin:0 auto">' +
+        '<h3 style="text-align:center;margin-bottom:4px">OFFLINE SALE RECEIPT</h3>' +
+        '<p style="text-align:center;margin-top:0"><strong>Pending synchronization</strong><br>Local ref: OFF-' + escape_offline_receipt_html(shortReference) + '</p>' +
+        '<p>Date: ' + escape_offline_receipt_html(new Date(createdAt).toLocaleString()) + '<br>Cashier: ' + escape_offline_receipt_html($('#pos_sync_status').data('user-name') || '') +
+        '<br>Customer: ' + escape_offline_receipt_html(customer) + '</p>' +
+        '<table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:1px solid #000"><th style="text-align:left">Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Total</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+        '<h3 style="text-align:right;border-top:1px solid #000;padding-top:6px">Total: ' + escape_offline_receipt_html(total) + '</h3>' +
+        '<p style="text-align:center">This temporary receipt will be confirmed when connectivity returns.</p></div>';
+    return {is_enabled: true, print_type: 'browser', html_content: html, print_title: 'Offline receipt OFF-' + shortReference};
+}
+
+function render_offline_recent_transactions(elementObj, serverHtml) {
+    return get_pos_outbox_sales(false).then(function(sales) {
+        var localHtml = '';
+        if (sales.length) {
+            sales.sort(function(a, b) { return String(b.created_at).localeCompare(String(a.created_at)); });
+            localHtml = '<div class="alert alert-warning" style="margin-bottom:10px"><strong>Pending offline sales</strong></div><table class="table"><tbody>';
+            sales.forEach(function(sale, index) {
+                var values = new URLSearchParams(sale.data);
+                localHtml += '<tr><td>' + (index + 1) + '.</td><td class="col-md-4">OFF-' + escape_offline_receipt_html(String(sale.uuid).split('-')[0].toUpperCase()) +
+                    ' <span class="label label-warning">Pending sync</span><br><small>' + escape_offline_receipt_html(new Date(sale.created_at).toLocaleString()) +
+                    '</small></td><td class="col-md-2">' + escape_offline_receipt_html(pos_outbox_total(values)) +
+                    '</td><td class="col-md-6"><button type="button" class="tw-dw-btn tw-dw-btn-outline tw-dw-btn-success offline-receipt-print" data-offline-uuid="' +
+                    escape_offline_receipt_html(sale.uuid) + '"><i class="fa fa-print"></i> Print</button></td></tr>';
+            });
+            localHtml += '</tbody></table>';
+        }
+        elementObj.html(localHtml + (serverHtml || (!sales.length ? '<p>No recent transactions</p>' : '')));
+        __currency_convert_recursively(elementObj);
+    });
+}
+
+function complete_offline_pos_sale() {
+    $('#modal_payment').modal('hide');
+    toastr.warning('Sale saved offline. It will synchronize automatically when the server is available.');
+    reset_pos_form();
+    // Form reset behavior for hidden fields differs between browsers. Clear
+    // this explicitly so the next sale always receives a new outbox key.
+    $('#offline_transaction_uuid').val('');
+    enable_pos_form_actions();
+    update_pos_sync_badge();
+}
+
+function get_pos_outbox_sales(includeAllBusinessUsers, forStockReservation) {
+    return open_pos_offline_db().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var transaction = db.transaction(POS_OFFLINE_STORE, 'readonly');
+            var request = transaction.objectStore(POS_OFFLINE_STORE).getAll();
+            request.onsuccess = function() {
+                db.close();
+                var badge = $('#pos_sync_status');
+                var businessId = String(badge.data('business-id') || '');
+                var userId = String(badge.data('user-id') || '');
+                var canManage = String(badge.data('can-manage-outbox') || '') === '1';
+                var sales = (request.result || []).filter(function(sale) {
+                    return sale.business_id === businessId &&
+                        (sale.user_id === userId || (includeAllBusinessUsers && (canManage || forStockReservation)));
+                });
+                resolve(sales);
+            };
+            request.onerror = function() { db.close(); reject(request.error); };
+        });
+    });
+}
+
+function get_offline_reserved_quantities(excludeUuid) {
+    var locationId = String($('#location_id').val() || '');
+    return get_pos_outbox_sales(true, true).then(function(sales) {
+        var reserved = {};
+        sales.forEach(function(sale) {
+            if (excludeUuid && sale.uuid === excludeUuid) {
+                return;
+            }
+            var values = new URLSearchParams(sale.data);
+            if (String(values.get('location_id') || '') !== locationId) {
+                return;
+            }
+
+            var lines = {};
+            values.forEach(function(value, key) {
+                var match = key.match(/^products\[([^\]]+)\]\[(variation_id|quantity|base_unit_multiplier)\]$/);
+                if (match) {
+                    lines[match[1]] = lines[match[1]] || {};
+                    lines[match[1]][match[2]] = value;
+                }
+            });
+            Object.keys(lines).forEach(function(index) {
+                var line = lines[index];
+                if (!line.variation_id) {
+                    return;
+                }
+                var quantity = __number_uf(line.quantity || 0);
+                var multiplier = __number_uf(line.base_unit_multiplier || 1);
+                reserved[line.variation_id] = (reserved[line.variation_id] || 0) + quantity * multiplier;
+            });
+        });
+        return reserved;
+    });
+}
+
+function delete_pos_outbox_sale(uuid) {
+    return pos_outbox_request('readwrite', function(store) { store.delete(uuid); });
+}
+
+function update_pos_outbox_error(sale, message) {
+    sale.attempts = (sale.attempts || 0) + 1;
+    sale.last_error = message;
+    sale.status = 'failed';
+    var delays = [15000, 30000, 60000, 300000];
+    sale.next_retry_at = Date.now() + delays[Math.min(sale.attempts - 1, delays.length - 1)];
+    return pos_outbox_request('readwrite', function(store) { store.put(sale); });
+}
+
+function reject_pos_outbox_sale(sale, message) {
+    sale.last_error = message;
+    sale.status = 'rejected';
+    sale.next_retry_at = 0;
+    return pos_outbox_request('readwrite', function(store) { store.put(sale); });
+}
+
+function current_csrf_data(data, sale) {
+    var values = new URLSearchParams(data);
+    values.set('_token', $('meta[name="csrf-token"]').attr('content'));
+    if (!values.get('offline_origin_user_id') && sale) {
+        values.set('offline_origin_user_id', sale.origin_user_id || sale.user_id || '');
+    }
+    return values.toString();
+}
+
+function can_manage_pos_outbox() {
+    return String($('#pos_sync_status').data('can-manage-outbox') || '') === '1';
+}
+
+function refresh_recent_transactions_after_sync() {
+    if ($('#recent_transactions_modal').hasClass('in') || $('#recent_transactions_modal').is(':visible')) {
+        get_recent_transactions('final', $('div#tab_final'));
+    }
+}
+
+function is_pos_auth_response(xhr) {
+    if (!xhr) return false;
+    if (xhr.status === 401 || xhr.status === 419) return true;
+
+    var responseUrl = xhr.responseURL || '';
+    var contentType = xhr.getResponseHeader ? (xhr.getResponseHeader('Content-Type') || '') : '';
+    return xhr.status === 200 && (
+        /\/login(?:[/?#]|$)/i.test(responseUrl) ||
+        contentType.toLowerCase().indexOf('text/html') !== -1
+    );
+}
+
+function pause_pos_sync_for_authentication(sale) {
+    posSyncAuthPaused = true;
+    if (sale) {
+        sale.status = 'failed';
+        sale.last_error = 'Authentication required.';
+    }
+    $('#pos_outbox_auth_notice').removeClass('hide');
+    purge_current_pos_user_cache();
+    window.posOfflineReauthRequired = true;
+    if (window.lockPosScreen) window.lockPosScreen();
+}
+
+function sync_pos_outbox(forceUuid) {
+    if (posSyncInProgress || posSyncAuthPaused || !window.navigator.onLine) {
+        return Promise.resolve();
+    }
+    posSyncInProgress = true;
+
+    // Managers can see other cashiers' records in the device outbox and must
+    // also be able to synchronize them automatically. The server preserves
+    // the originating cashier after checking the manager's permission.
+    return get_pos_outbox_sales(!!forceUuid || can_manage_pos_outbox()).then(function(sales) {
+        sales.sort(function(left, right) {
+            return String(left.created_at).localeCompare(String(right.created_at));
+        });
+        return sales.reduce(function(chain, sale) {
+            return chain.then(function() {
+                // Older builds retained server-committed review sales locally.
+                // Remove those records so they no longer reserve stock twice.
+                if (sale.status === 'manager_review') {
+                    return delete_pos_outbox_sale(sale.uuid);
+                }
+                if ((!forceUuid && (sale.status === 'rejected' || (sale.next_retry_at && sale.next_retry_at > Date.now()))) || (forceUuid && sale.uuid !== forceUuid)) {
+                    return Promise.resolve();
+                }
+                return new Promise(function(resolve) {
+                    sale.status = 'pending';
+                    var currentSaleUrl = $('#add_pos_sell_form').attr('action');
+                    if (currentSaleUrl) {
+                        // Recover records queued by shells rendered with an old or
+                        // incorrect APP_URL. Every outbox record targets this POS
+                        // store action, so using the current form URL is authoritative.
+                        sale.url = currentSaleUrl;
+                    }
+                    $.ajax({
+                        method: 'POST',
+                        url: sale.url,
+                        data: current_csrf_data(sale.data, sale),
+                        dataType: 'json',
+                        timeout: 15000,
+                        success: function(result) {
+                            if (result.success == 1) {
+                                // Offline sales receive their server-rendered receipt only
+                                // after synchronization. Send it through the same browser or
+                                // configured-printer path used by an online POS sale.
+                                if (!sale.printed_offline && result.receipt && result.receipt.is_enabled) {
+                                    pos_print(result.receipt);
+                                }
+                                if (result.offline_sync_status === 'manager_review') {
+                                    toastr.warning(result.msg || 'An offline sale requires manager stock review.');
+                                    // The server committed this sale and owns the review workflow.
+                                    // Keeping it in the outbox would reserve its stock a second time.
+                                    delete_pos_outbox_sale(sale.uuid).then(function() {
+                                        refresh_recent_transactions_after_sync();
+                                        resolve();
+                                    });
+                                    return;
+                                }
+                                delete_pos_outbox_sale(sale.uuid).then(function() {
+                                    refresh_recent_transactions_after_sync();
+                                    resolve();
+                                });
+                            } else {
+                                var rejectionMessage = result.msg || 'Sale rejected.';
+                                toastr.error('Offline sale could not synchronize: ' + rejectionMessage);
+                                reject_pos_outbox_sale(sale, rejectionMessage).then(resolve);
+                            }
+                        },
+                        error: function(xhr) {
+                            if (is_pos_auth_response(xhr)) {
+                                pause_pos_sync_for_authentication(sale);
+                                pos_outbox_request('readwrite', function(store) { store.put(sale); }).then(resolve);
+                                return;
+                            }
+                            var message = xhr.responseJSON && xhr.responseJSON.msg
+                                ? xhr.responseJSON.msg
+                                : 'Server unavailable.';
+                            update_pos_outbox_error(sale, message).then(resolve);
+                        }
+                    });
+                });
+            });
+        }, Promise.resolve());
+    }).finally(function() {
+        posSyncInProgress = false;
+        update_pos_sync_badge();
+        render_pos_outbox();
+    });
+}
+
+function set_pos_sync_badge(online, count) {
+    posServerOnline = online;
+    var badge = $('#pos_sync_status');
+    if (!badge.length) {
+        return;
+    }
+    badge.css('background', online ? '#16a34a' : '#dc2626');
+    $('#pos_sync_label').text(online ? 'Online' : 'Offline');
+    $('#pos_unsynced_count').text(count);
+    badge.attr('title', online
+        ? (count ? count + ' sale(s) waiting to synchronize' : 'Server connected; all sales synchronized')
+        : count + ' sale(s) stored on this device');
+}
+
+function update_pos_sync_badge() {
+    var badge = $('#pos_sync_status');
+    var includeAll = can_manage_pos_outbox();
+    return get_pos_outbox_sales(includeAll).then(function(sales) {
+        set_pos_sync_badge(window.navigator.onLine && posServerOnline, sales.length);
+        return sales.length;
+    }).catch(function() {
+        set_pos_sync_badge(false, '?');
+    });
+}
+
+function ping_pos_server() {
+    var badge = $('#pos_sync_status');
+    if (!badge.length) {
+        return;
+    }
+    if (!window.navigator.onLine) {
+        posServerOnline = false;
+        if (posHeartbeatRetryTimer) {
+            window.clearTimeout(posHeartbeatRetryTimer);
+            posHeartbeatRetryTimer = null;
+        }
+        update_pos_sync_badge();
+        return;
+    }
+    if (posHeartbeatInProgress) {
+        return;
+    }
+    posHeartbeatInProgress = true;
+
+    $.ajax({
+        method: 'GET',
+        url: badge.data('heartbeat-url'),
+        dataType: 'json',
+        cache: false,
+        timeout: 5000,
+        success: function() {
+            posServerOnline = true;
+            if (posHeartbeatRetryTimer) {
+                window.clearTimeout(posHeartbeatRetryTimer);
+                posHeartbeatRetryTimer = null;
+            }
+            get_pos_outbox_sales(can_manage_pos_outbox()).then(function(sales) {
+                set_pos_sync_badge(true, sales.length);
+                if (sales.length) {
+                    sync_pos_outbox();
+                }
+                sync_offline_product_catalog();
+            }).catch(function() {
+                set_pos_sync_badge(true, '?');
+            });
+        },
+        error: function(xhr) {
+            posServerOnline = false;
+            get_pos_outbox_sales(can_manage_pos_outbox()).then(function(sales) {
+                set_pos_sync_badge(false, sales.length);
+                if (sales.length && is_pos_auth_response(xhr)) {
+                    pause_pos_sync_for_authentication();
+                }
+            });
+            if (window.navigator.onLine && !posHeartbeatRetryTimer) {
+                posHeartbeatRetryTimer = window.setTimeout(function() {
+                    posHeartbeatRetryTimer = null;
+                    ping_pos_server();
+                }, 3000);
+            }
+        },
+        complete: function() {
+            posHeartbeatInProgress = false;
+        }
+    });
+}
+
+function mark_pos_offline() {
+    posServerOnline = false;
+    update_pos_sync_badge();
+}
+
+function attempt_pos_reconnection() {
+    if (!window.navigator.onLine) {
+        mark_pos_offline();
+        return;
+    }
+
+    // Do not make durable sales wait on the informational heartbeat. Posting
+    // the outbox is itself the authoritative connectivity/authentication test.
+    sync_pos_outbox();
+    ping_pos_server();
+}
+
+function pos_product_scope() {
+    var badge = $('#pos_sync_status');
+    return {
+        business_id: String(badge.data('business-id') || ''),
+        user_id: String(badge.data('user-id') || ''),
+        location_id: String($('#location_id').val() || ''),
+        price_group: String(pos_get_effective_price_group() || ''),
+        customer_id: String($('select#customer_id').val() || '')
+    };
+}
+
+function pos_product_cache_key(scope, variationId) {
+    return [scope.business_id, scope.user_id, scope.location_id, scope.price_group, scope.customer_id, variationId].join('|');
+}
+
+function save_offline_products(products, replaceSnapshot, suppliedScope) {
+    var scope = suppliedScope || pos_product_scope();
+    return open_pos_offline_db().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var transaction = db.transaction(POS_OFFLINE_PRODUCT_STORE, 'readwrite');
+            var store = transaction.objectStore(POS_OFFLINE_PRODUCT_STORE);
+            if (replaceSnapshot) {
+                var allRequest = store.getAll();
+                allRequest.onsuccess = function() {
+                    (allRequest.result || []).forEach(function(item) {
+                        if (item.business_id === scope.business_id &&
+                            item.user_id === scope.user_id &&
+                            item.location_id === scope.location_id &&
+                            item.price_group === scope.price_group &&
+                            item.customer_id === scope.customer_id) {
+                            store.delete(item.cache_key);
+                        }
+                    });
+                    putProducts();
+                };
+            } else {
+                putProducts();
+            }
+
+            function putProducts() {
+                products.forEach(function(product) {
+                    product.business_id = scope.business_id;
+                    product.user_id = scope.user_id;
+                    product.location_id = scope.location_id;
+                    product.price_group = scope.price_group;
+                    product.customer_id = scope.customer_id;
+                    product.cache_key = pos_product_cache_key(scope, product.variation_id);
+                    product.cached_at = new Date().toISOString();
+                    store.put(product);
+                });
+            }
+
+            transaction.oncomplete = function() { db.close(); resolve(); };
+            transaction.onerror = function() { db.close(); reject(transaction.error); };
+            transaction.onabort = function() { db.close(); reject(transaction.error); };
+        });
+    });
+}
+
+function get_offline_products() {
+    var scope = pos_product_scope();
+    return open_pos_offline_db().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var transaction = db.transaction(POS_OFFLINE_PRODUCT_STORE, 'readonly');
+            var request = transaction.objectStore(POS_OFFLINE_PRODUCT_STORE).getAll();
+            request.onsuccess = function() {
+                db.close();
+                resolve((request.result || []).filter(function(item) {
+                    return item.business_id === scope.business_id &&
+                        item.user_id === scope.user_id &&
+                        item.location_id === scope.location_id &&
+                        item.price_group === scope.price_group &&
+                        item.customer_id === scope.customer_id;
+                }));
+            };
+            request.onerror = function() { db.close(); reject(request.error); };
+        });
+    });
+}
+
+function search_offline_products(term, searchFields) {
+    var needle = $.trim(term || '').toLowerCase();
+    var fields = searchFields && searchFields.length ? searchFields : ['name', 'sku'];
+    return require_fresh_offline_catalog().then(function(products) {
+        var matches = products.filter(function(product) {
+            var values = [];
+            if (fields.indexOf('name') !== -1) {
+                values.push(product.name, product.variation);
+            }
+            if (fields.indexOf('sku') !== -1 || fields.indexOf('sub_sku') !== -1) {
+                values.push(product.sku, product.sub_sku);
+            }
+            ['product_custom_field1', 'product_custom_field2', 'product_custom_field3', 'product_custom_field4'].forEach(function(field) {
+                if (fields.indexOf(field) !== -1) {
+                    values.push(product[field]);
+                }
+            });
+            return values.some(function(value) {
+                return String(value || '').toLowerCase().indexOf(needle) !== -1;
+            });
+        }).slice(0, 50);
+
+        if (!matches.length) {
+            toastr.error('No matching product exists in this device\'s offline catalogue.');
+        }
+        return matches;
+    }).catch(function(error) {
+        toastr.error(error.message || 'The offline product catalogue is unavailable.');
+        return [];
+    });
+}
+
+function offline_product_has_sellable_stock(product) {
+    var available = parseFloat(product.qty_available || 0);
+    if (!posServerOnline || !window.navigator.onLine) {
+        var offlineAllocation = parseFloat(product.offline_safety_stock || 0);
+        return Math.min(available, offlineAllocation) > 0;
+    }
+    return available > 0;
+}
+
+function reindex_offline_row_html(html, targetIndex) {
+    var wrapper = $('<div>').html(html || '');
+    wrapper.find('[name]').each(function() {
+        $(this).attr('name', ($(this).attr('name') || '').replace(/products\[1\]/g, 'products[' + targetIndex + ']'));
+    });
+    wrapper.find('[id]').each(function() {
+        $(this).attr('id', ($(this).attr('id') || '').replace(/_1(?=($|_))/g, '_' + targetIndex));
+    });
+    wrapper.find('label[for]').each(function() {
+        $(this).attr('for', ($(this).attr('for') || '').replace(/_1(?=($|_))/g, '_' + targetIndex));
+    });
+    return wrapper.html();
+}
+
+function add_offline_product_row(variationId, quantity, options) {
+    options = options || {};
+    return Promise.all([require_fresh_offline_catalog(), get_offline_reserved_quantities(options.excludeOutboxUuid)]).then(function(results) {
+        var products = results[0];
+        var reservedQuantities = results[1];
+        var product = products.find(function(item) {
+            return String(item.variation_id) === String(variationId);
+        });
+        if (!product || !product.row_data || !product.row_data.success) {
+            var unavailableMessage = 'This product has not finished caching for offline use. Reconnect and refresh the catalogue.';
+            toastr.error(unavailableMessage);
+            if (options.rejectOnFailure) {
+                throw new Error(unavailableMessage);
+            }
+            return;
+        }
+
+        if (parseInt(product.enable_stock, 10) === 1 && !$('input#is_overselling_allowed').length) {
+            var alreadyInCart = 0;
+            $('#pos_table tbody tr.product_row').each(function() {
+                if (String($(this).find('.row_variation_id').val()) === String(variationId)) {
+                    var rowMultiplier = __read_number($(this).find('.base_unit_multiplier')) || 1;
+                    alreadyInCart += __read_number($(this).find('.pos_quantity')) * rowMultiplier;
+                }
+            });
+            var queuedQuantity = parseFloat(reservedQuantities[variationId] || 0);
+            var availableForOfflineSale = Math.min(
+                parseFloat(product.qty_available || 0),
+                parseFloat(product.offline_safety_stock || 0)
+            ) - queuedQuantity;
+            if (alreadyInCart + parseFloat(quantity || 1) > availableForOfflineSale) {
+                var stockMessage = 'Offline stock allocation reached. Reconnect or ask a manager before selling this item.';
+                toastr.error(stockMessage);
+                if (options.rejectOnFailure) {
+                    throw new Error(stockMessage);
+                }
+                return;
+            }
+        }
+
+        var targetIndex = parseInt($('input#product_row_count').val(), 10) + 1;
+        var result = $.extend(true, {}, product.row_data);
+        result.html_content = reindex_offline_row_html(result.html_content, targetIndex);
+        if (result.html_modifier) {
+            result.html_modifier = reindex_offline_row_html(result.html_modifier, targetIndex);
+        }
+        result.variation_id = variationId;
+        pos_add_product_row_from_data(result);
+        if (quantity && quantity !== 1) {
+            var row = $('table#pos_table tbody tr.product_row').last();
+            __write_number(row.find('.pos_quantity'), quantity);
+            row.find('.pos_quantity').trigger('change');
+        }
+        $('#search_product').val('').focus();
+    });
+}
+
+function cache_online_product_row(variationId, rowData) {
+    get_offline_products().then(function(products) {
+        var product = products.find(function(item) {
+            return String(item.variation_id) === String(variationId);
+        });
+        if (!product) {
+            return;
+        }
+        product.row_data = rowData;
+        save_offline_products([product], false);
+    });
+}
+
+function sync_offline_product_catalog(page, accumulated, syncScope) {
+    if (!posServerOnline || posCatalogSyncInProgress && !page) {
+        return;
+    }
+    page = page || 1;
+    accumulated = accumulated || [];
+    syncScope = syncScope || pos_product_scope();
+    if (page === 1) {
+        var scopeKey = JSON.stringify(syncScope);
+        if (scopeKey === posCatalogLastScope && Date.now() - posCatalogLastSyncAt < 300000) {
+            return;
+        }
+        posCatalogSyncInProgress = true;
+    }
+
+    var badge = $('#pos_sync_status');
+    $.ajax({
+        method: 'GET',
+        url: badge.data('catalog-url'),
+        dataType: 'json',
+        timeout: 30000,
+        data: {
+            location_id: syncScope.location_id,
+            price_group: syncScope.price_group,
+            customer_id: syncScope.customer_id,
+            is_serial_no: $('input[name="is_serial_no"]').val() == 1 ? 1 : 0,
+            disable_qty_alert: $('#disable_qty_alert').length ? 1 : 0,
+            page: page
+        },
+        success: function(result) {
+            accumulated = accumulated.concat(result.products || []);
+            if (result.has_more) {
+                window.setTimeout(function() {
+                    sync_offline_product_catalog(page + 1, accumulated, syncScope);
+                }, 100);
+            } else {
+                save_offline_products(accumulated, true, syncScope).then(function() {
+                    posCatalogSyncInProgress = false;
+                    posCatalogLastScope = JSON.stringify(syncScope);
+                    posCatalogLastSyncAt = Date.now();
+                    $('#pos_sync_status').attr('title', 'Online; ' + accumulated.length + ' products available offline');
+                }).catch(function() {
+                    posCatalogSyncInProgress = false;
+                });
+            }
+        },
+        error: function() {
+            posCatalogSyncInProgress = false;
+        }
+    });
+}
+
+function validate_manual_mpesa_reference() {
+    var valid = true;
+    $('#payment_rows_div .payment_row').each(function() {
+        var row = $(this);
+        var method = row.find('.payment_types_dropdown').val();
+        var amount = __read_number(row.find('.payment-amount'));
+        if (method !== 'custom_pay_1' || amount <= 0) {
+            return;
+        }
+
+        var reference = $.trim(row.find('input[name$="[transaction_no_1]"]').val() || '').toUpperCase();
+        if (!/^[A-Z0-9]{8,20}$/.test(reference)) {
+            toastr.error('Confirm the receipt SMS on the store phone and enter its M-PESA transaction code.');
+            row.find('input[name$="[transaction_no_1]"]').focus();
+            valid = false;
+            return false;
+        }
+        row.find('input[name$="[transaction_no_1]"]').val(reference);
+    });
+    return valid;
+}
+
+function purge_current_pos_user_cache() {
+    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+    var badge = $('#pos_sync_status');
+    navigator.serviceWorker.controller.postMessage({
+        type: 'PURGE_POS_USER_CACHE',
+        businessId: String(badge.data('business-id') || ''),
+        userId: String(badge.data('user-id') || '')
+    });
+}
+
+function pos_outbox_total(values) {
+    var total = values.get('final_total');
+    if (total !== null && total !== '') return total;
+    var amount = 0;
+    values.forEach(function(value, key) {
+        if (/^payment\[[^\]]+\]\[amount\]$/.test(key)) amount += __number_uf(value) || 0;
+    });
+    return __number_f(amount, false, false, __currency_precision);
+}
+
+function render_pos_outbox() {
+    var rows = $('#pos_outbox_rows');
+    if (!rows.length) return Promise.resolve();
+    return get_pos_outbox_sales(true).then(function(sales) {
+        rows.empty();
+        if (!sales.length) {
+            rows.append($('<tr>').append($('<td colspan="6" class="text-center text-muted">').text('No offline sales are waiting.')));
+            return;
+        }
+        sales.sort(function(a, b) { return String(a.created_at).localeCompare(String(b.created_at)); });
+        sales.forEach(function(sale) {
+            var values = new URLSearchParams(sale.data);
+            var labels = {pending: 'Pending', failed: 'Connection failed; retrying', rejected: 'Rejected; action required', manager_review: 'Manager Review Needed'};
+            var row = $('<tr>').attr('data-outbox-uuid', sale.uuid);
+            row.append($('<td>').text(sale.origin_user_name || ('User #' + (sale.origin_user_id || sale.user_id))));
+            row.append($('<td>').text(new Date(sale.created_at).toLocaleString()));
+            row.append($('<td>').text(pos_outbox_total(values)));
+            row.append($('<td>').text(labels[sale.status] || labels.pending));
+            row.append($('<td>').text(sale.last_error || ''));
+            var actions = $('<td>');
+            if (sale.status !== 'manager_review') {
+                if (sale.status === 'rejected') {
+                    actions.append($('<span class="text-danger">').text('Review before retrying.')).append(' ');
+                }
+                actions.append($('<button type="button" class="btn btn-xs btn-primary pos-outbox-retry">').text(sale.user_id === String($('#pos_sync_status').data('user-id')) ? 'Retry' : 'Force Sync')).append(' ');
+                actions.append($('<button type="button" class="btn btn-xs btn-default pos-outbox-edit">').text('Edit')).append(' ');
+                if (sale.user_id !== String($('#pos_sync_status').data('user-id'))) {
+                    actions.append($('<button type="button" class="btn btn-xs btn-warning pos-outbox-reassign">').text('Assign to me')).append(' ');
+                }
+            }
+            actions.append($('<button type="button" class="btn btn-xs btn-danger pos-outbox-discard">').text('Discard'));
+            row.append(actions);
+            rows.append(row);
+        });
+    });
+}
+
+function find_pos_outbox_sale(uuid, includeAllBusinessUsers) {
+    return get_pos_outbox_sales(includeAllBusinessUsers).then(function(sales) {
+        return sales.find(function(sale) { return sale.uuid === uuid; });
+    });
+}
+
+function edit_pos_outbox_sale(sale) {
+    var values = new URLSearchParams(sale.data);
+    var products = {};
+    values.forEach(function(value, key) {
+        var match = key.match(/^products\[([^\]]+)\]\[(variation_id|quantity)\]$/);
+        if (match) {
+            products[match[1]] = products[match[1]] || {};
+            products[match[1]][match[2]] = value;
+        }
+    });
+
+    var productIndexes = Object.keys(products);
+    if (!productIndexes.length) {
+        toastr.error('This offline sale has no recoverable product lines and was left in the outbox.');
+        return Promise.resolve();
+    }
+
+    reset_pos_form();
+    return productIndexes.reduce(function(chain, index) {
+        return chain.then(function() {
+            var product = products[index];
+            return add_offline_product_row(
+                product.variation_id,
+                __number_uf(product.quantity || 1),
+                {excludeOutboxUuid: sale.uuid, rejectOnFailure: true}
+            );
+        });
+    }, Promise.resolve()).then(function() {
+        return delete_pos_outbox_sale(sale.uuid);
+    }).then(function() {
+        values.forEach(function(value, name) {
+            if (name === '_token' || name === 'offline_created_at' || name.indexOf('products[') === 0) return;
+            $('#add_pos_sell_form [name]').filter(function() { return this.name === name; }).each(function() {
+                if (this.type === 'checkbox' || this.type === 'radio') this.checked = this.value === value;
+                else $(this).val(value).trigger('change');
+            });
+        });
+        $('#offline_transaction_uuid').val(sale.uuid);
+        $('#pos_outbox_modal').modal('hide');
+        update_pos_sync_badge();
+        toastr.info('Offline sale loaded for editing. Save it again when ready.');
+    }).catch(function(error) {
+        // The durable outbox record was not removed unless every product row
+        // was reconstructed. Clear any partially rebuilt cart before returning.
+        reset_pos_form();
+        toastr.error(error.message || 'Unable to load the offline sale for editing.');
+    });
+}
+
+$(function() {
+    update_pos_sync_badge();
+    attempt_pos_reconnection();
+    window.addEventListener('online', attempt_pos_reconnection);
+    window.addEventListener('offline', mark_pos_offline);
+    window.addEventListener('focus', attempt_pos_reconnection);
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) attempt_pos_reconnection();
+    });
+    $('#pos_sync_status').on('click', attempt_pos_reconnection);
+    $('#pos_outbox_open').on('click', function() {
+        render_pos_outbox();
+        $('#pos_outbox_modal').modal('show');
+    });
+    $('#pos_outbox_rows').on('click', '.pos-outbox-retry', function() {
+        var uuid = $(this).closest('tr').data('outbox-uuid');
+        find_pos_outbox_sale(uuid, true).then(function(sale) {
+            if (!sale) return;
+            if (sale.status === 'rejected' && !window.confirm('The server rejected this sale: ' + (sale.last_error || 'unknown reason') + '\n\nRetry only after resolving the issue. Continue?')) return;
+            sale.next_retry_at = 0;
+            sale.status = 'pending';
+            return pos_outbox_request('readwrite', function(store) { store.put(sale); }).then(function() {
+                return sync_pos_outbox(uuid);
+            });
+        });
+    });
+    $('#pos_outbox_rows').on('click', '.pos-outbox-edit', function() {
+        var uuid = $(this).closest('tr').data('outbox-uuid');
+        find_pos_outbox_sale(uuid, true).then(function(sale) { if (sale) edit_pos_outbox_sale(sale); });
+    });
+    $('#pos_outbox_rows').on('click', '.pos-outbox-reassign', function() {
+        var uuid = $(this).closest('tr').data('outbox-uuid');
+        find_pos_outbox_sale(uuid, true).then(function(sale) {
+            if (!sale) return;
+            sale.user_id = String($('#pos_sync_status').data('user-id'));
+            sale.reassigned_by_user_id = sale.user_id;
+            sale.status = 'pending';
+            sale.next_retry_at = 0;
+            return pos_outbox_request('readwrite', function(store) { store.put(sale); }).then(render_pos_outbox);
+        });
+    });
+    $('#pos_outbox_rows').on('click', '.pos-outbox-discard', function() {
+        var uuid = $(this).closest('tr').data('outbox-uuid');
+        if (!window.confirm('Discard this local offline-sale record? This cannot be undone.')) return;
+        delete_pos_outbox_sale(uuid).then(function() { render_pos_outbox(); update_pos_sync_badge(); });
+    });
+    $(document).on('click', '.offline-receipt-print', function() {
+        var uuid = $(this).data('offline-uuid');
+        find_pos_outbox_sale(uuid, true).then(function(sale) {
+            if (sale && sale.offline_receipt) pos_print(sale.offline_receipt);
+        });
+    });
+    window.addEventListener('pos:reauthenticated', function() {
+        posSyncAuthPaused = false;
+        $('#pos_outbox_auth_notice').addClass('hide');
+        sync_pos_outbox();
+    });
+    window.setInterval(attempt_pos_reconnection, 15000);
+});

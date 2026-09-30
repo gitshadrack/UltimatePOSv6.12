@@ -21,5 +21,6 @@ class VerifyCsrfToken extends BaseVerifier
         '/intasend/webhook',
         'intasend/webhook',
         '*/intasend/webhook',
+        '/pos/offline-reauthenticate',
     ];
 }

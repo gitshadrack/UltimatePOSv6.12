@@ -100,7 +100,13 @@
                     $('#stock_history_table').DataTable({
                         searching: false,
                         fixedHeader:false,
-                        ordering: false
+                        ordering: false,
+                        buttons: $.extend(true, [], $.fn.dataTable.defaults.buttons).map(function(button) {
+                            if (typeof button === 'object' && /^(csv|excel)/.test(button.extend)) {
+                                button.filename = 'Product_History_' + variation_id + '_Location_' + location_id + '_' + moment().format('YYYY-MM-DD');
+                            }
+                            return button;
+                        })
                     });
                 },
             });

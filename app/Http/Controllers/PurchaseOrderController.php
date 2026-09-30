@@ -282,9 +282,10 @@ class PurchaseOrderController extends Controller
         $users = config('constants.enable_contact_assign') ? User::forDropdown($business_id, false, false, false, true) : [];
 
         $common_settings = ! empty(session('business.common_settings')) ? session('business.common_settings') : [];
+        $stock_alert_lpo_prefill = request()->session()->pull('stock_alert_lpo_prefill');
 
         return view('purchase_order.create')
-            ->with(compact('taxes', 'business_locations', 'currency_details', 'customer_groups', 'types', 'shortcuts', 'bl_attributes', 'shipping_statuses', 'users', 'common_settings'));
+            ->with(compact('taxes', 'business_locations', 'currency_details', 'customer_groups', 'types', 'shortcuts', 'bl_attributes', 'shipping_statuses', 'users', 'common_settings', 'stock_alert_lpo_prefill'));
     }
 
     /**
