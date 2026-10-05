@@ -24,12 +24,40 @@
 			});
 		@endif
 
-		//shortcut for draft pay & checkout
+		//shortcut for finalize & pay
 		@if(!empty($shortcuts["pos"]["pay_n_ckeckout"]) && ($pos_settings['disable_pay_checkout'] == 0))
-			Mousetrap.bind('{{$shortcuts["pos"]["pay_n_ckeckout"]}}', function(e) {
+			var finalize_and_pay_shortcut = @json(strtolower($shortcuts["pos"]["pay_n_ckeckout"]));
+			var finalize_and_pay = function(e) {
 				e.preventDefault();
-				$('#pos-finalize').trigger('click');
-			});
+				e.stopPropagation();
+				$('button#pos-finalize:visible').first().trigger('click');
+			};
+
+			// Capture the shortcut before product search/autocomplete handles the keydown.
+			// Unlike Mousetrap's document binding, this also works inside ordinary inputs.
+			document.addEventListener('keydown', function(e) {
+				if (e.repeat) {
+					return;
+				}
+
+				var keys = finalize_and_pay_shortcut.split('+').map(function(key) {
+					return key.trim();
+				});
+				var pressed_key = (e.key || '').toLowerCase();
+				var main_key = keys.filter(function(key) {
+					return ['shift', 'ctrl', 'control', 'alt', 'meta', 'command'].indexOf(key) === -1;
+				}).pop();
+
+				var is_match = main_key === pressed_key
+					&& keys.includes('shift') === e.shiftKey
+					&& (keys.includes('ctrl') || keys.includes('control')) === e.ctrlKey
+					&& keys.includes('alt') === e.altKey
+					&& (keys.includes('meta') || keys.includes('command')) === e.metaKey;
+
+				if (is_match) {
+					finalize_and_pay(e);
+				}
+			}, true);
 		@endif
 
 		//shortcut for edit discount

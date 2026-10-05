@@ -65,6 +65,8 @@ class TransactionUtil extends Util
             'status' => $input['status'],
             'sub_status' => ! empty($input['sub_status']) ? $input['sub_status'] : null,
             'contact_id' => $input['contact_id'],
+            'kra_customer_name' => $input['kra_customer_name'] ?? null,
+            'kra_pin' => $input['kra_pin'] ?? null,
             'customer_group_id' => ! empty($input['customer_group_id']) ? $input['customer_group_id'] : null,
             'invoice_no' => $invoice_no,
             'offline_transaction_uuid' => ! empty($input['offline_transaction_uuid']) ? $input['offline_transaction_uuid'] : null,
@@ -195,6 +197,8 @@ class TransactionUtil extends Util
             'status' => $input['status'],
             'invoice_no' => ! empty($input['invoice_no']) ? $input['invoice_no'] : $invoice_no,
             'contact_id' => $input['contact_id'],
+            'kra_customer_name' => $input['kra_customer_name'] ?? null,
+            'kra_pin' => $input['kra_pin'] ?? null,
             'customer_group_id' => $input['customer_group_id'],
             'total_before_tax' => $invoice_total['total_before_tax'],
             'tax_id' => $input['tax_rate_id'],
@@ -1188,14 +1192,18 @@ class TransactionUtil extends Util
         $customer = Contact::find($transaction->contact_id);
 
         $output['contact_id'] = $customer->contact_id;
-        $output['contact_name'] = $customer->name;
+        $output['contact_name'] = ! empty($transaction->kra_customer_name)
+            ? $transaction->kra_customer_name
+            : $customer->name;
         $output['customer_info'] = '';
         $output['customer_tax_number'] = '';
         $output['customer_tax_label'] = '';
         $output['customer_custom_fields'] = '';
         if ($il->show_customer == 1) {
             $output['customer_label'] = ! empty($il->customer_label) ? $il->customer_label : '';
-            $output['customer_name'] = ! empty($customer->name) ? $customer->name : $customer->supplier_business_name;
+            $output['customer_name'] = ! empty($transaction->kra_customer_name)
+                ? $transaction->kra_customer_name
+                : (! empty($customer->name) ? $customer->name : $customer->supplier_business_name);
             $output['customer_mobile'] = $customer->mobile;
 
             if ($receipt_printer_type != 'printer') {
@@ -1209,8 +1217,10 @@ class TransactionUtil extends Util
                 }
             }
 
-            $output['customer_tax_number'] = $customer->tax_number;
-            $output['customer_tax_label'] = ! empty($il->client_tax_label) ? $il->client_tax_label : '';
+            $output['customer_tax_number'] = ! empty($transaction->kra_pin) ? $transaction->kra_pin : $customer->tax_number;
+            $output['customer_tax_label'] = ! empty($transaction->kra_pin)
+                ? __('lang_v1.kra_pin')
+                : (! empty($il->client_tax_label) ? $il->client_tax_label : '');
 
             $temp = [];
             $customer_custom_fields_settings = ! empty($il->contact_custom_fields) ? $il->contact_custom_fields : [];

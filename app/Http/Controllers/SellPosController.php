@@ -433,6 +433,11 @@ class SellPosController extends Controller
             if (!empty($input['products'])) {
                 $business_id = $request->session()->get('user.business_id');
 
+                $kra_details_error = $this->prepareKraCustomerDetails($input, $request);
+                if (! empty($kra_details_error)) {
+                    return ['success' => 0, 'msg' => $kra_details_error];
+                }
+
                 $offline_uuid = trim((string) ($input['offline_transaction_uuid'] ?? ''));
                 if ($offline_uuid !== '' && ! preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $offline_uuid)) {
                     return ['success' => 0, 'msg' => 'The offline transaction identifier is invalid.'];
@@ -473,7 +478,7 @@ class SellPosController extends Controller
                     return ['success' => 0, 'msg' => $cash_tender_error];
                 }
 
-                $walk_in_payment_error = $this->validateWalkInPaymentTotal($input, $business_id);
+                $walk_in_payment_error = $this->validateWalkInPaymentTotal($input, $business_id, ! $is_direct_sale);
                 if (! empty($walk_in_payment_error)) {
                     $output = ['success' => 0, 'msg' => $walk_in_payment_error];
 
@@ -999,10 +1004,10 @@ class SellPosController extends Controller
     }
 
     /**
-     * Walk-in customers cannot carry a balance. Multiple payment rows are
-     * allowed, but their combined amount must cover the finalized sale.
+     * Walk-in customers cannot carry a balance. Completing a POS sale also
+     * requires full payment unless a named customer's Credit Sale was chosen.
      */
-    private function validateWalkInPaymentTotal(array $input, $business_id)
+    private function validateWalkInPaymentTotal(array $input, $business_id, $require_full_pos_payment = false)
     {
         if (($input['status'] ?? null) !== 'final' || ! empty($input['is_suspend'])) {
             return null;
@@ -1013,11 +1018,15 @@ class SellPosController extends Controller
             ->first();
         $is_walk_in = empty($customer) || (int) $customer->is_default === 1;
 
-        if (! $is_walk_in) {
+        if (! $is_walk_in && ! $require_full_pos_payment) {
             return null;
         }
 
         if (! empty($input['is_credit_sale'])) {
+            if (! $is_walk_in) {
+                return null;
+            }
+
             return __('lang_v1.walk_in_customer_payment_must_be_full', [
                 'paid' => $this->transactionUtil->num_f(0, true),
                 'total' => $this->transactionUtil->num_f($this->transactionUtil->num_uf($input['final_total'] ?? 0), true),
@@ -1049,9 +1058,14 @@ class SellPosController extends Controller
         $total_paid = collect($input['payment'] ?? [])->sum(function ($payment) {
             return $this->transactionUtil->num_uf($payment['amount'] ?? 0);
         });
+        $total_paid -= $this->transactionUtil->num_uf($input['change_return'] ?? 0);
         $final_total = $this->transactionUtil->num_uf($input['final_total'] ?? 0);
 
         if ($total_paid + 0.01 < $final_total) {
+            if (! $is_walk_in) {
+                return 'Complete Sale requires full payment. Use Credit Sale for a named customer if payment is due.';
+            }
+
             return __('lang_v1.walk_in_customer_payment_must_be_full', [
                 'paid' => $this->transactionUtil->num_f($total_paid, true),
                 'total' => $this->transactionUtil->num_f($final_total, true),
@@ -1102,9 +1116,9 @@ class SellPosController extends Controller
             }
 
             $expected_amount = min($tendered, $remaining);
-            // The visible amount remains the amount expected from the cashier.
-            // Persist only the portion of the tender that is actually applied.
-            $payment['amount'] = $this->transactionUtil->num_f($expected_amount);
+            // Payment status subtracts the separate change-return row. Persist
+            // the full tender here so change is not deducted a second time.
+            $payment['amount'] = $this->transactionUtil->num_f($tendered);
             $remaining -= $expected_amount;
             $total_tendered += $tendered;
         }
@@ -1166,6 +1180,36 @@ class SellPosController extends Controller
      * @param  string  $printer_type = null
      * @return array
      */
+    /**
+     * Normalize optional per-sale KRA customer details and reject partial/invalid input.
+     */
+    private function prepareKraCustomerDetails(array &$input, Request $request): ?string
+    {
+        $pos_settings = json_decode((string) $request->session()->get('business.pos_settings'), true) ?: [];
+
+        if (empty($pos_settings['enable_kra_customer_details'])) {
+            unset($input['kra_customer_name'], $input['kra_pin']);
+
+            return null;
+        }
+
+        $customer_name = trim((string) ($input['kra_customer_name'] ?? ''));
+        $kra_pin = strtoupper(trim((string) ($input['kra_pin'] ?? '')));
+
+        if (($customer_name === '') !== ($kra_pin === '')) {
+            return __('lang_v1.kra_customer_details_incomplete');
+        }
+
+        if ($kra_pin !== '' && ! preg_match('/^[A-Z][0-9]{9}[A-Z]$/', $kra_pin)) {
+            return __('lang_v1.invalid_kra_pin');
+        }
+
+        $input['kra_customer_name'] = $customer_name !== '' ? mb_substr($customer_name, 0, 191) : null;
+        $input['kra_pin'] = $kra_pin !== '' ? $kra_pin : null;
+
+        return null;
+    }
+
     private function receiptContent(
         $business_id,
         $location_id,
@@ -1665,6 +1709,12 @@ class SellPosController extends Controller
 
                 $business_id = $request->session()->get('user.business_id');
                 $user_id = $request->session()->get('user.id');
+
+                $kra_details_error = $this->prepareKraCustomerDetails($input, $request);
+                if (! empty($kra_details_error)) {
+                    return ['success' => 0, 'msg' => $kra_details_error];
+                }
+
                 $commsn_agnt_setting = $request->session()->get('business.sales_cmsn_agnt');
 
                 $cost_price_error = $this->validateProductsAboveCostPrice($input['products'], $business_id);
@@ -1790,6 +1840,27 @@ class SellPosController extends Controller
                     $output = ['success' => 1, 'msg' => $msg, 'receipt' => $receipt];
 
                     return $output;
+                }
+
+                if (! $is_direct_sale) {
+                    foreach ([
+                        $this->validatePaymentAmounts($input),
+                        $this->validateManualMpesaReferences($input, $business_id),
+                    ] as $payment_error) {
+                        if (! empty($payment_error)) {
+                            return ['success' => 0, 'msg' => $payment_error];
+                        }
+                    }
+
+                    $cash_tender_error = $this->validateCashTendering($input);
+                    if (! empty($cash_tender_error)) {
+                        return ['success' => 0, 'msg' => $cash_tender_error];
+                    }
+
+                    $payment_total_error = $this->validateWalkInPaymentTotal($input, $business_id, true);
+                    if (! empty($payment_total_error)) {
+                        return ['success' => 0, 'msg' => $payment_total_error];
+                    }
                 }
 
                 //Begin transaction

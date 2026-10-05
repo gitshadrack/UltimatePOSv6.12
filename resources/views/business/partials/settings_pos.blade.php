@@ -20,7 +20,7 @@
                     </td>
                 </tr>
                 <tr>
-                    <td>@lang('sale.finalize'):</td>
+                    <td>{{ (!empty($pos_settings['enable_unified_payment_modal']) || !array_key_exists('enable_unified_payment_modal', $pos_settings)) ? __('lang_v1.finalize_and_pay') : __('sale.finalize') }}:</td>
                     <td>
                         {!! Form::text('shortcuts[pos][pay_n_ckeckout]', !empty($shortcuts["pos"]["pay_n_ckeckout"]) ? $shortcuts["pos"]["pay_n_ckeckout"] : null, ['class' => 'form-control']); !!}
                     </td>
@@ -107,6 +107,16 @@
                     [ 'class' => 'input-icheck']); !!} {{ __('lang_v1.enable_unified_payment_modal') }}
                   </label>
                   @show_tooltip(__('lang_v1.enable_unified_payment_modal_help'))
+                </div>
+
+                <div class="checkbox">
+                  <label>
+                    {!! Form::hidden('pos_settings[enable_kra_customer_details]', 0) !!}
+                    {!! Form::checkbox('pos_settings[enable_kra_customer_details]', 1,
+                        !empty($pos_settings['enable_kra_customer_details']),
+                    ['class' => 'input-icheck']); !!} {{ __('lang_v1.enable_kra_customer_details') }}
+                  </label>
+                  @show_tooltip(__('lang_v1.enable_kra_customer_details_help'))
                 </div>
             </div>
         </div>

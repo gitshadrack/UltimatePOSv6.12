@@ -738,6 +738,7 @@ $(document).ready(function() {
 
     //Finalize invoice, open payment modal
     $('button#pos-finalize').click(function() {
+        $('#is_credit_sale').val(0);
         //Check if product is present or not.
         if ($('table#pos_table tbody').find('.product_row').length <= 0) {
             toastr.warning(LANG.no_products_added);
@@ -1650,8 +1651,6 @@ $(document).ready(function() {
     pos_form_validator = pos_form_obj.validate({
         submitHandler: function(form) {
             calculate_balance_due();
-            var partialPaymentConfirmed = $(form).data('partial-payment-confirmed') === true;
-            $(form).removeData('partial-payment-confirmed');
 
             var paymentAmountsValid = true;
             $('#payment_rows_div .payment-amount:visible').each(function() {
@@ -1668,36 +1667,19 @@ $(document).ready(function() {
                 return false;
             }
 
-            // Keep the cashier in the POS instead of opening a browser-native
-            // localhost confirmation. The sale can still be saved on credit.
-            if (__read_number($('input#in_balance_due')) >= 0.01 && !pos_has_named_customer()) {
+            // Complete Sale must collect the full amount. Credit Sale is a
+            // separate, explicit action for a named customer.
+            if ($('#is_credit_sale').val() !== '1' && __read_number($('input#in_balance_due')) >= 0.01) {
                 highlight_pos_underpayment();
                 swal({
                     title: 'Full payment required',
-                    text: 'Walk-in customers cannot have a balance. Add payment for the full amount or select a named customer.',
+                    text: pos_has_named_customer()
+                        ? 'Add payment for the full amount or use Credit Sale for this customer.'
+                        : 'Walk-in customers cannot have a balance. Add payment for the full amount.',
                     icon: 'error',
                 }).then(function() {
                     $('#modal_payment').modal('show');
                     $('#payment_rows_div .payment-amount:visible').first().focus().select();
-                });
-                return false;
-            }
-            if (__read_number($('input#in_balance_due')) >= 0.5 && !partialPaymentConfirmed) {
-                highlight_pos_underpayment();
-                swal({
-                    title: LANG.paid_amount_is_less_than_payable,
-                    text: 'Check the highlighted payment entries or continue with the remaining balance.',
-                    icon: 'warning',
-                    buttons: ['Edit payment', 'Continue with balance'],
-                    dangerMode: true,
-                }).then(function(continueWithBalance) {
-                    if (continueWithBalance) {
-                        $(form).data('partial-payment-confirmed', true);
-                        $(form).submit();
-                    } else {
-                        $('#modal_payment').modal('show');
-                        $('#payment_rows_div .payment-amount:visible').first().focus().select();
-                    }
                 });
                 return false;
             }
@@ -3018,7 +3000,15 @@ function calculate_billing_details(price_total) {
 
     //Check if edit form then don't update price.
     if ($('form#edit_pos_sell_form').length == 0 && $('form#edit_sell_form').length == 0) {
-        __write_number($('.payment-amount').first(), total_payable_rounded);
+        var first_payment_row = $('#payment_rows_div .payment_row').first();
+        __write_number(first_payment_row.find('.payment-amount').first(), total_payable_rounded);
+
+        // Keep the default cash row in sync before calculate_balance_due() runs.
+        // Otherwise its initial zero tendered value resets the payment amount to
+        // zero and Complete Sale incorrectly reports an unpaid balance.
+        if (first_payment_row.find('.payment_types_dropdown').first().val() === 'cash') {
+            __write_number(first_payment_row.find('.cash-tendered').first(), total_payable_rounded);
+        }
     }
 
     $(document).trigger('invoice_total_calculated');

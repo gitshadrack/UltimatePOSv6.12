@@ -167,6 +167,38 @@
                                 </div>
                             </div>
                         </div>
+                        @if (!empty($pos_settings['enable_kra_customer_details']))
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="box box-solid box-info">
+                                    <div class="box-header with-border">
+                                        <h3 class="box-title"><i class="fas fa-id-card"></i> @lang('lang_v1.kra_customer_details')</h3>
+                                    </div>
+                                    <div class="box-body">
+                                        <p class="help-block">@lang('lang_v1.kra_customer_details_help')</p>
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                {!! Form::label('kra_customer_name', __('lang_v1.kra_customer_name') . ':') !!}
+                                                {!! Form::text('kra_customer_name', !empty($transaction) ? $transaction->kra_customer_name : null, [
+                                                    'class' => 'form-control', 'id' => 'kra_customer_name', 'maxlength' => 191, 'autocomplete' => 'name',
+                                                ]) !!}
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                {!! Form::label('kra_pin', __('lang_v1.kra_pin') . ':') !!}
+                                                {!! Form::text('kra_pin', !empty($transaction) ? $transaction->kra_pin : null, [
+                                                    'class' => 'form-control text-uppercase', 'id' => 'kra_pin', 'maxlength' => 11,
+                                                    'placeholder' => 'A123456789B', 'pattern' => '[A-Za-z][0-9]{9}[A-Za-z]',
+                                                    'title' => __('lang_v1.kra_pin_format_help'), 'autocomplete' => 'off',
+                                                ]) !!}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group">
