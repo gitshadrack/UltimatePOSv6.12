@@ -36,6 +36,44 @@ foreach ($requiredFile in @(
     }
 }
 
+
+# Keep the cashier installation unelevated; only the machine-wide runtime needs UAC.
+$phpProbe = Join-Path $runtimePayload 'php.exe'
+$savedPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    $probeOutput = & $phpProbe -v 2>&1 | Out-String
+    $probeExitCode = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $savedPreference
+}
+if ($probeExitCode -ne 0 -or $probeOutput -notmatch '(?m)^PHP \d+\.') {
+    $redistributable = Join-Path $PackageRoot 'prerequisites\vc_redist.x64.exe'
+    if (-not (Test-Path -LiteralPath $redistributable -PathType Leaf)) {
+        throw 'The bundled Visual C++ x64 Redistributable is missing.'
+    }
+    $signature = Get-AuthenticodeSignature -LiteralPath $redistributable
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+        throw 'The Visual C++ Redistributable does not have a valid Microsoft signature.'
+    }
+    Write-Host 'Installing Microsoft Visual C++ x64 runtime. Approve the Windows administrator prompt.'
+    $runtimeInstall = Start-Process -FilePath $redistributable -ArgumentList @('/install', '/quiet', '/norestart') -Verb RunAs -WindowStyle Hidden -Wait -PassThru
+    if ($runtimeInstall.ExitCode -notin @(0, 1638, 3010)) {
+        throw "Visual C++ runtime installation failed with exit code $($runtimeInstall.ExitCode)."
+    }
+    $savedPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $probeOutput = & $phpProbe -v 2>&1 | Out-String
+        $probeExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $savedPreference
+    }
+    if ($probeExitCode -ne 0 -or $probeOutput -notmatch '(?m)^PHP \d+\.') {
+        throw "PHP still cannot start after installing Visual C++. Restart Windows and rerun setup. $probeOutput"
+    }
+}
+
 $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 if ($existingTask) {
     Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
@@ -102,11 +140,15 @@ $uninstallShortcut.WorkingDirectory = $InstallDirectory
 $uninstallShortcut.Save()
 
 Start-ScheduledTask -TaskName $taskName
-Start-Sleep -Seconds 3
 
 $installedTester = Join-Path $InstallDirectory 'Test-PrintServer.ps1'
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installedTester -Quiet
-$testExitCode = $LASTEXITCODE
+$testExitCode = 1
+for ($attempt = 0; $attempt -lt 10; $attempt++) {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installedTester -Quiet
+    $testExitCode = $LASTEXITCODE
+    if ($testExitCode -eq 0) { break }
+    Start-Sleep -Seconds 3
+}
 if ($testExitCode -ne 0) {
     Write-Warning "Installation completed, but the server did not answer on port 6441. Check $InstallDirectory\logs."
     exit 2

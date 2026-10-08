@@ -10,6 +10,9 @@ return [
     | The following language lines are used in home page.
     |
     */
+    'hide_amounts' => 'Hide amounts',
+    'show_amounts' => 'Show amounts',
+    'chart_hidden_for_privacy' => 'Sales chart hidden for privacy',
     'home' => 'Home',
     'welcome_message' => 'Welcome :name, 👋',
     'total_sell' => 'Total Sales',

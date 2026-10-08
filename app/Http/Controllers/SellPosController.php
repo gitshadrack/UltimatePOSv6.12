@@ -2543,9 +2543,9 @@ class SellPosController extends Controller
                 'variations.sub_sku',
                 'u.short_name as unit'
             )
-                ->with(['media', 'group_prices'])
+                ->with(!empty($pos_settings['show_pricing_on_product_sugesstion']) ? ['media', 'group_prices'] : ['media'])
                 ->orderBy('p.name', 'asc')
-                ->paginate(50);
+                ->simplePaginate(50);
 
             $price_groups = SellingPriceGroup::where('business_id', $business_id)->active()->pluck('name', 'id');
 

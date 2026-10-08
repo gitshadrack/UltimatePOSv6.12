@@ -18,6 +18,7 @@
             <h3 class="box-title"><i class="fas {{ $icon }}" aria-hidden="true"></i> {{ $payment_label }}</h3>
         </div>
         <div class="box-body">
+            <input type="hidden" class="payment_row_index" value="{{ $row_index }}">
             @if (!empty($payment_line['id']))
                 {!! Form::hidden("payment[$row_index][payment_id]", $payment_line['id']) !!}
             @endif

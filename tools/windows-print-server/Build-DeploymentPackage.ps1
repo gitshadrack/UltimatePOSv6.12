@@ -40,6 +40,17 @@ if (Test-Path -LiteralPath $zipPath) {
 New-Item -ItemType Directory -Path $packageDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $packageDirectory 'payload') -Force | Out-Null
 
+# Bundle the official signed runtime so cashier PCs can install offline.
+$prerequisiteDirectory = Join-Path $packageDirectory 'prerequisites'
+New-Item -ItemType Directory -Path $prerequisiteDirectory -Force | Out-Null
+$redistributable = Join-Path $prerequisiteDirectory 'vc_redist.x64.exe'
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile $redistributable -UseBasicParsing
+$signature = Get-AuthenticodeSignature -LiteralPath $redistributable
+if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+    throw 'Downloaded Visual C++ Redistributable does not have a valid Microsoft signature.'
+}
+
 Copy-Item -LiteralPath $printServerSource -Destination (Join-Path $packageDirectory 'payload\pos_print_server') -Recurse
 Copy-Item -LiteralPath $phpRuntimeDirectory -Destination (Join-Path $packageDirectory 'runtime') -Recurse
 

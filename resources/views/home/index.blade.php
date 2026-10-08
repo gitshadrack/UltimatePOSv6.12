@@ -3,6 +3,11 @@
 
 @section('content')
 
+    <script>
+        document.documentElement.classList.add('dashboard-privacy-on');
+    </script>
+
+
     <div class="tw-pb-6 tw-bg-gradient-to-r tw-from-@if(!empty(session('business.theme_color'))){{session('business.theme_color')}}@else{{'primary'}}@endif-800 tw-to-@if(!empty(session('business.theme_color'))){{session('business.theme_color')}}@else{{'primary'}}@endif-900 xl:tw-pb-0 ">
         <div class="tw-px-5 tw-pt-3">
             {{-- <div class="sm:tw-flex sm:tw-items-center sm:tw-justify-between sm:tw-gap-12">
@@ -18,6 +23,12 @@
                             </h1>
                         </div>
     
+
+                            <button type="button" id="dashboard_privacy_toggle" class="btn btn-default tw-mt-2"
+                                aria-pressed="false" data-hide-label="{{ __('home.hide_amounts') }}" data-show-label="{{ __('home.show_amounts') }}">
+                                <i class="fas fa-eye-slash" aria-hidden="true"></i>
+                                <span>{{ __('home.hide_amounts') }}</span>
+                            </button>
                         @if (auth()->user()->can('dashboard.data'))
                             @if ($is_admin)
                                 <div class="tw-mt-2 sm:tw-w-1/3 md:tw-w-1/4 ">
@@ -92,7 +103,7 @@
                                                     {{ __('home.monthly_total_sell') }}
                                                 </p>
                                                 <p
-                                                    class="monthly_total_sell tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
+                                                    class="dashboard-private-amount monthly_total_sell tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
                                                     <span class="display_currency" data-currency_symbol="true">{{ $monthly_total_sell ?? 0 }}</span>
                                                 </p>
                                             </div>
@@ -123,7 +134,7 @@
                                                     {{ __('home.total_sell') }}
                                                 </p>
                                                 <p
-                                                    class="total_sell tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
+                                                    class="dashboard-private-amount total_sell tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
                                                 </p>
                                             </div>
                                         </div>
@@ -153,7 +164,7 @@
                                                     {{ __('home.mpesa_payment') }}
                                                 </p>
                                                 <p
-                                                    class="custom_pay_1_total tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
+                                                    class="dashboard-private-amount custom_pay_1_total tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
                                                     <span class="display_currency" data-currency_symbol="true">{{ $custom_pay_1_total ?? 0 }}</span>
                                                 </p>
                                             </div>
@@ -183,7 +194,7 @@
                                                     {{ __('home.cash_payment') }}
                                                 </p>
                                                 <p
-                                                    class="cash_payment_total tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
+                                                    class="dashboard-private-amount cash_payment_total tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
                                                     <span class="display_currency" data-currency_symbol="true">{{ $cash_payment_total ?? 0 }}</span>
                                                 </p>
                                             </div>
@@ -218,7 +229,7 @@
                                                     {{ __('home.bank_balance') }}
                                                 </p>
                                                 <p
-                                                    class="bank_balance tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
+                                                    class="dashboard-private-amount bank_balance tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
                                                     <span class="display_currency" data-currency_symbol="true">{{ $bank_balance ?? 0 }}</span>
                                                 </p>
                                             </div>
@@ -253,7 +264,7 @@
                                                     {{ __('lang_v1.net') }} @show_tooltip(__('lang_v1.net_home_tooltip'))
                                                 </p>
                                                 <p
-                                                    class="net tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
+                                                    class="dashboard-private-amount net tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
                                                 </p>
                                             </div>
                                         </div>
@@ -286,7 +297,7 @@
                                                     {{ __('home.invoice_due') }}
                                                 </p>
                                                 <p
-                                                    class="invoice_due tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
+                                                    class="dashboard-private-amount invoice_due tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
                                                 </p>
                                             </div>
                                         </div>
@@ -321,7 +332,7 @@
                                                     data-content="" data-html="true" data-trigger="hover"></i>
                                                 </p>
                                                 <p
-                                                    class="total_sell_return tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
+                                                    class="dashboard-private-amount total_sell_return tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
                                                 </p>
                                                 {{-- <p class="mb-0 text-muted fs-10 mt-5">{{ __('lang_v1.total_sell_return') }}: <span
                                                         class="total_sr"></span><br>
@@ -370,7 +381,7 @@
                                                 {{ __('home.total_purchase') }}
                                             </p>
                                             <p
-                                                class="total_purchase tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
+                                                class="dashboard-private-amount total_purchase tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
                                             </p>
                                         </div>
                                     </div>
@@ -399,7 +410,7 @@
                                                 {{ __('home.purchase_due') }}
                                             </p>
                                             <p
-                                                class="purchase_due tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
+                                                class="dashboard-private-amount purchase_due tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
 
                                             </p>
                                         </div>
@@ -434,7 +445,7 @@
                                                 data-content="" data-html="true" data-trigger="hover"></i>
                                             </p>
                                             <p
-                                                class="total_purchase_return tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
+                                                class="dashboard-private-amount total_purchase_return tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
                                             </p>
                                             {{-- <p class="mb-0 text-muted fs-10 mt-5">
                                                 {{ __('lang_v1.total_purchase_return') }}: <span
@@ -474,7 +485,7 @@
                                                 {{ __('lang_v1.expense') }}
                                             </p>
                                             <p
-                                                class="total_expense tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
+                                                class="dashboard-private-amount total_expense tw-mt-0.5 tw-text-gray-900 tw-text-xl tw-truncate tw-font-semibold tw-tracking-tight tw-font-mono">
 
                                             </p>
                                         </div>
@@ -523,7 +534,7 @@
                                     <div
                                         class="tw-grid tw-w-full tw-h-100 tw-border tw-border-gray-200 tw-border-dashed tw-rounded-xl tw-bg-gray-50 ">
                                         <p class="tw-text-sm tw-italic tw-font-normal tw-text-gray-400">
-                                            {!! $sells_chart_1->container() !!}
+                                            <div class="dashboard-private-chart"><div class="dashboard-chart-content">{!! $sells_chart_1->container() !!}</div><p class="dashboard-chart-hidden" role="status">{{ __('home.chart_hidden_for_privacy') }}</p></div>
                                         </p>
                                     </div>
                                 </div>
@@ -562,7 +573,7 @@
                                     <div
                                         class="tw-grid tw-w-full tw-h-100 tw-border tw-border-gray-200 tw-border-dashed tw-rounded-xl tw-bg-gray-50 ">
                                         <p class="tw-text-sm tw-italic tw-font-normal tw-text-gray-400">
-                                            {!! $sells_chart_2->container() !!}
+                                            <div class="dashboard-private-chart"><div class="dashboard-chart-content">{!! $sells_chart_2->container() !!}</div><p class="dashboard-chart-hidden" role="status">{{ __('home.chart_hidden_for_privacy') }}</p></div>
                                         </p>
                                     </div>
                                 </div>
@@ -1149,6 +1160,43 @@
 
 @section('css')
     <style>
+        html.dashboard-privacy-on .dashboard-private-amount,
+        html.dashboard-privacy-on .content .display_currency,
+        html.dashboard-privacy-on .content .footer_total_credit,
+        html.dashboard-privacy-on #sales_payment_dues_table tbody td:nth-child(3),
+        html.dashboard-privacy-on #purchase_payment_dues_table tbody td:nth-child(3),
+        html.dashboard-privacy-on #cash_flow_table tbody td:nth-child(n+6) {
+            visibility: hidden !important;
+            position: relative;
+        }
+        html.dashboard-privacy-on .dashboard-private-amount::after,
+        html.dashboard-privacy-on .content .display_currency::after,
+        html.dashboard-privacy-on .content .footer_total_credit::after,
+        html.dashboard-privacy-on #sales_payment_dues_table tbody td:nth-child(3)::after,
+        html.dashboard-privacy-on #purchase_payment_dues_table tbody td:nth-child(3)::after,
+        html.dashboard-privacy-on #cash_flow_table tbody td:nth-child(n+6)::after {
+            content: '\2022\2022\2022\2022';
+            visibility: visible;
+            position: absolute;
+            left: 0;
+            top: 0;
+            color: #64748b;
+        }
+        html.dashboard-privacy-on .dashboard-private-amount *,
+        html.dashboard-privacy-on .content .display_currency *,
+        html.dashboard-privacy-on #sales_payment_dues_table tbody td:nth-child(3) *,
+        html.dashboard-privacy-on #purchase_payment_dues_table tbody td:nth-child(3) *,
+        html.dashboard-privacy-on #cash_flow_table tbody td:nth-child(n+6) * {
+            visibility: hidden !important;
+        }
+        .dashboard-private-chart { position: relative; }
+        .dashboard-chart-hidden { display: none; }
+        html.dashboard-privacy-on .dashboard-chart-content { visibility: hidden; pointer-events: none; }
+        html.dashboard-privacy-on .dashboard-chart-hidden { display: block; position: absolute; top: 40%; width: 100%; text-align: center; }
+        html.dashboard-privacy-on .popover,
+        html.dashboard-privacy-on #total_srp,
+        html.dashboard-privacy-on #total_prp { display: none !important; }
+
         .select2-container {
             width: 100% !important;
         }

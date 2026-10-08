@@ -1,3 +1,24 @@
+(function() {
+    function updatePrivacyButton() {
+        var button = document.getElementById('dashboard_privacy_toggle');
+        if (!button) return;
+        var hidden = document.documentElement.classList.contains('dashboard-privacy-on');
+        button.setAttribute('aria-pressed', String(hidden));
+        button.querySelector('span').textContent = button.getAttribute(hidden ? 'data-show-label' : 'data-hide-label');
+        button.querySelector('i').className = hidden ? 'fas fa-eye' : 'fas fa-eye-slash';
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        updatePrivacyButton();
+        var button = document.getElementById('dashboard_privacy_toggle');
+        if (!button) return;
+        button.addEventListener('click', function() {
+            document.documentElement.classList.toggle('dashboard-privacy-on');
+            $('#total_srp, #total_prp').popover('hide');
+            updatePrivacyButton();
+        });
+    });
+})();
+
 $(document).ready(function() {
     if ($('#dashboard_date_filter').length == 1) {
         dateRangeSettings.startDate = moment();

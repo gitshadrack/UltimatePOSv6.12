@@ -79,6 +79,30 @@ $(document).ready(function() {
         }
     });
 
+    // Start the product request and payment visibility before initializing other controls.
+    set_payment_type_dropdown();
+    //REPAIR MODULE:check if repair module field is present send data to filter product
+    var is_enabled_stock = null;
+    if ($("#is_enabled_stock").length) {
+        is_enabled_stock = $("#is_enabled_stock").val();
+    }
+
+    var device_model_id = null;
+    if ($("#repair_model_id").length) {
+        device_model_id = $("#repair_model_id").val();
+    }
+
+    //Show product list.
+    get_product_suggestion_list(
+        global_p_category_id,
+        global_brand_id,
+        $('input#location_id').val(),
+        null,
+        is_enabled_stock,
+        device_model_id
+    );
+    
+
     //get customer
     $('select#customer_id').select2({
         ajax: {
@@ -758,7 +782,7 @@ $(document).ready(function() {
 
     $('#modal_payment').on('shown.bs.modal', function() {
         if ($('form#edit_pos_sell_form').length == 0) {
-            $(this).find('#method_0').change();
+            $(this).find('#payment_rows_div .payment_types_dropdown').trigger('change');
         }
 
         var cash_tendered = $(this).find('#payment_rows_div .payment_row').filter(function() {
@@ -2082,27 +2106,6 @@ $(document).ready(function() {
         }
     });
 
-    //REPAIR MODULE:check if repair module field is present send data to filter product
-    var is_enabled_stock = null;
-    if ($("#is_enabled_stock").length) {
-        is_enabled_stock = $("#is_enabled_stock").val();
-    }
-
-    var device_model_id = null;
-    if ($("#repair_model_id").length) {
-        device_model_id = $("#repair_model_id").val();
-    }
-
-    //Show product list.
-    get_product_suggestion_list(
-        global_p_category_id,
-        global_brand_id,
-        $('input#location_id').val(),
-        null,
-        is_enabled_stock,
-        device_model_id
-    );
-    
     $('select#select_location_id').on('change', function(e) {
         $('input#suggestion_page').val(1);
         var location_id = $('input#location_id').val();
@@ -2442,7 +2445,6 @@ $(document).ready(function() {
         }
     });
     validate_discount_field();
-    set_payment_type_dropdown();
     if ($('#__is_mobile').length) {
         $('.pos_form_totals').css('margin-bottom', $('.pos-form-actions').height() - 30);
     }
@@ -2537,13 +2539,13 @@ function get_product_suggestion_list(category_id, brand_id, location_id, url = n
     if (url == null) {
         url = '/sells/pos/get-product-suggestion';
     }
-    $('#suggestion_page_loader').fadeIn(700);
+    $('#suggestion_page_loader').stop(true, true).show();
     var page = $('input#suggestion_page').val();
     if (page == 1) {
         $('div#product_list_body').html('');
     }
     if ($('div#product_list_body').find('input#no_products_found').length > 0) {
-        $('#suggestion_page_loader').fadeOut(700);
+        $('#suggestion_page_loader').stop(true, true).hide();
         return false;
     }
     $.ajax({
@@ -2560,7 +2562,7 @@ function get_product_suggestion_list(category_id, brand_id, location_id, url = n
         dataType: 'html',
         success: function(result) {
             $('div#product_list_body').append(result);
-            $('#suggestion_page_loader').fadeOut(700);
+            $('#suggestion_page_loader').stop(true, true).hide();
         },
     });
 }
@@ -3270,7 +3272,9 @@ function reset_pos_form(){
 	$('input#tax_rate_id').val($('input#tax_rate_id').data('default'));
 	__write_number($('input#tax_calculation_amount'), $('input#tax_calculation_amount').data('default'));
 
-	$('select.payment_types_dropdown').val('cash').trigger('change');
+	// Fixed unified columns must retain their own payment method after a sale.
+	$('select.payment_types_dropdown').not('.unified-payment-method').val('cash').trigger('change');
+	$('#payment_rows_div .unified-payment-method').trigger('change');
 	$('#payment_rows_div .cash-tendered').each(function() {
 		__write_number($(this), 0);
 	});
@@ -3821,7 +3825,7 @@ $(document).on('change', '.payment_types_dropdown', function(e) {
         __write_number(payment_row.find('.cash-tendered'), __read_number(payment_row.find('.payment-amount')));
     }
     if (payment_type && payment_type != 'advance') {
-        var default_account = default_accounts && default_accounts[payment_type]['account'] ? 
+        var default_account = default_accounts && default_accounts[payment_type] && default_accounts[payment_type]['account'] ? 
             default_accounts[payment_type]['account'] : '';
         var row_index = payment_row.find('.payment_row_index').val();
 

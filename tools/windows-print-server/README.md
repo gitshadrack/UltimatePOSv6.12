@@ -157,6 +157,12 @@ A healthy result is:
 UltimatePOS Print Server is READY on ws://127.0.0.1:6441.
 ```
 
+The installer bundles the official Microsoft Visual C++ x64 Redistributable.
+If bundled PHP cannot start, setup installs the runtime first and Windows asks
+for administrator approval (or administrator credentials). No internet is
+needed on the cashier PC. The Print Server still installs for the signed-in
+cashier account. If Windows requires a restart, restart and rerun setup.
+
 The installer:
 
 - installs under `%LOCALAPPDATA%\UltimatePOS\PrintServer`;

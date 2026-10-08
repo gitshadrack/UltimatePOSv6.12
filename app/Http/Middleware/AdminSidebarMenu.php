@@ -832,16 +832,16 @@ class AdminSidebarMenu
                             );
                         }
 
-                        if (auth()->user()->can('tax_report.view') && !empty(config('constants.enable_gst_report_india'))) {
+                        if (auth()->user()->can('tax_report.view')) {
                             $sub->url(
                                 action([\App\Http\Controllers\ReportController::class, 'gstSalesReport']),
-                                __('lang_v1.gst_sales_report'),
+                                __('kenya_vat.sales_report'),
                                 ['icon' => '', 'active' => request()->segment(2) == 'gst-sales-report']
                             );
 
                             $sub->url(
                                 action([\App\Http\Controllers\ReportController::class, 'gstPurchaseReport']),
-                                __('lang_v1.gst_purchase_report'),
+                                __('kenya_vat.purchase_report'),
                                 ['icon' => '', 'active' => request()->segment(2) == 'gst-purchase-report']
                             );
                         }

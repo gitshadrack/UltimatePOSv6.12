@@ -4491,7 +4491,7 @@ class ReportController extends Controller
 
     public function gstSalesReport(Request $request)
     {
-        if (! auth()->user()->can('tax_report.view') || empty(config('constants.enable_gst_report_india'))) {
+        if (! auth()->user()->can('tax_report.view')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -4522,8 +4522,11 @@ class ReportController extends Controller
                     'c.name as customer',
                     'c.supplier_business_name',
                     'c.contact_id',
-                    'c.tax_number',
-                    'cat.short_code',
+                    DB::raw("COALESCE(NULLIF(t.kra_pin, ''), NULLIF(t.buyer_pin, ''), c.tax_number) as tax_number"),
+                    't.kra_customer_name',
+                    'p.name as product_name',
+                    'tr.name as tax_name',
+                    't.etims_invoice_no',
                     't.id as transaction_id',
                     't.invoice_no',
                     't.transaction_date as transaction_date',
@@ -4566,33 +4569,12 @@ class ReportController extends Controller
 
             $datatable = Datatables::of($query);
 
-            $raw_cols = ['invoice_no', 'taxable_value', 'discount_amount', 'unit_price', 'tax', 'customer', 'line_total'];
-            $group_taxes_array = TaxRate::groupTaxes($business_id);
-            $group_taxes = [];
-            foreach ($group_taxes_array as $group_tax) {
-                foreach ($group_tax['sub_taxes'] as $sub_tax) {
-                    $group_taxes[$group_tax->id]['sub_taxes'][$sub_tax->id] = $sub_tax;
-                }
-            }
-            foreach ($taxes as $tax) {
-                $col = 'tax_'.$tax['id'];
-                $raw_cols[] = $col;
-                $datatable->addColumn($col, function ($row) use ($tax, $col, $group_taxes) {
-                    $sub_tax_share = 0;
-                    if ($row->is_tax_group == 1 && array_key_exists($tax['id'], $group_taxes[$row->tax_id]['sub_taxes'])) {
-                        $sub_tax_share = $this->transactionUtil->calc_percentage($row->unit_price_after_discount, $group_taxes[$row->tax_id]['sub_taxes'][$tax['id']]->amount) * $row->sell_qty;
-                    }
+            $raw_cols = ['invoice_no', 'taxable_value', 'discount_amount', 'unit_price', 'customer', 'line_total', 'vat_amount'];
+            $datatable->addColumn('vat_amount', function ($row) {
+                $vat_amount = $row->item_tax * $row->sell_qty;
 
-                    if ($sub_tax_share > 0) {
-                        //ignore child sell line of combo product
-                        $class = is_null($row->parent_sell_line_id) ? $col : '';
-
-                        return '<span class="'.$class.'" data-orig-value="'.$sub_tax_share.'">'.$this->transactionUtil->num_f($sub_tax_share).'</span>';
-                    } else {
-                        return '';
-                    }
-                });
-            }
+                return '<span data-orig-value="'.$vat_amount.'">'.$this->transactionUtil->num_f($vat_amount).'</span>';
+            });
 
             return $datatable->addColumn('taxable_value', function ($row) {
                 $taxable_value = $row->unit_price_after_discount * $row->sell_qty;
@@ -4627,9 +4609,10 @@ class ReportController extends Controller
                         return $this->transactionUtil->num_f($discount);
                     }
                 )
-                ->editColumn('tax_percent', '@if(!empty($tax_percent)){{@num_format($tax_percent)}}% @endif
-                    ')
-                ->editColumn('customer', '@if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$customer}}')
+                ->editColumn('tax_percent', function ($row) {
+                    return $row->tax_id === null ? __('kenya_vat.no_tax_assigned') : $this->transactionUtil->num_f($row->tax_percent).'% ('.$row->tax_name.')';
+                })
+                ->editColumn('customer', '@if(!empty($kra_customer_name)) {{$kra_customer_name}} @else @if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$customer}} @endif')
                 ->rawColumns($raw_cols)
                 ->make(true);
         }
@@ -4641,7 +4624,7 @@ class ReportController extends Controller
 
     public function gstPurchaseReport(Request $request)
     {
-        if (! auth()->user()->can('tax_report.view') || empty(config('constants.enable_gst_report_india'))) {
+        if (! auth()->user()->can('tax_report.view')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -4672,7 +4655,9 @@ class ReportController extends Controller
                     'c.supplier_business_name',
                     'c.contact_id',
                     'c.tax_number',
-                    'cat.short_code',
+                    'p.name as product_name',
+                    'tr.name as tax_name',
+                    't.etims_invoice_no',
                     't.id as transaction_id',
                     't.ref_no',
                     't.transaction_date as transaction_date',
@@ -4692,8 +4677,8 @@ class ReportController extends Controller
             $start_date = $request->get('start_date');
             $end_date = $request->get('end_date');
             if (! empty($start_date) && ! empty($end_date)) {
-                $query->where('t.transaction_date', '>=', $start_date)
-                    ->where('t.transaction_date', '<=', $end_date);
+                $query->whereDate('t.transaction_date', '>=', $start_date)
+                    ->whereDate('t.transaction_date', '<=', $end_date);
             }
 
             $permitted_locations = auth()->user()->permitted_locations();
@@ -4713,30 +4698,12 @@ class ReportController extends Controller
 
             $datatable = Datatables::of($query);
 
-            $raw_cols = ['ref_no', 'taxable_value', 'discount_amount', 'unit_price', 'tax', 'supplier', 'line_total'];
-            $group_taxes_array = TaxRate::groupTaxes($business_id);
-            $group_taxes = [];
-            foreach ($group_taxes_array as $group_tax) {
-                foreach ($group_tax['sub_taxes'] as $sub_tax) {
-                    $group_taxes[$group_tax->id]['sub_taxes'][$sub_tax->id] = $sub_tax;
-                }
-            }
-            foreach ($taxes as $tax) {
-                $col = 'tax_'.$tax['id'];
-                $raw_cols[] = $col;
-                $datatable->addColumn($col, function ($row) use ($tax, $group_taxes) {
-                    $sub_tax_share = 0;
-                    if ($row->is_tax_group == 1 && array_key_exists($tax['id'], $group_taxes[$row->tax_id]['sub_taxes'])) {
-                        $sub_tax_share = $this->transactionUtil->calc_percentage($row->unit_price_after_discount, $group_taxes[$row->tax_id]['sub_taxes'][$tax['id']]->amount) * $row->purchase_qty;
-                    }
+            $raw_cols = ['ref_no', 'taxable_value', 'discount_amount', 'unit_price', 'supplier', 'line_total', 'vat_amount'];
+            $datatable->addColumn('vat_amount', function ($row) {
+                $vat_amount = $row->item_tax * $row->purchase_qty;
 
-                    if ($sub_tax_share > 0) {
-                        return '<span data-orig-value="'.$sub_tax_share.'">'.$this->transactionUtil->num_f($sub_tax_share).'</span>';
-                    } else {
-                        return '';
-                    }
-                });
-            }
+                return '<span data-orig-value="'.$vat_amount.'">'.$this->transactionUtil->num_f($vat_amount).'</span>';
+            });
 
             return $datatable->addColumn('taxable_value', function ($row) {
                 $taxable_value = $row->unit_price_after_discount * $row->purchase_qty;
@@ -4769,8 +4736,9 @@ class ReportController extends Controller
                         return $this->transactionUtil->num_f($discount);
                     }
                 )
-                ->editColumn('tax_percent', '@if(!empty($tax_percent)){{@num_format($tax_percent)}}% @endif
-                    ')
+                ->editColumn('tax_percent', function ($row) {
+                    return $row->tax_id === null ? __('kenya_vat.no_tax_assigned') : $this->transactionUtil->num_f($row->tax_percent).'% ('.$row->tax_name.')';
+                })
                 ->editColumn('supplier', '@if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$supplier}}')
                 ->rawColumns($raw_cols)
                 ->make(true);
