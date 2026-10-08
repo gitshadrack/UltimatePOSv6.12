@@ -3,7 +3,7 @@
 [Setup]
 AppId=UltimatePOS.PrintServer.Bootstrapper
 AppName=UltimatePOS Print Server
-AppVersion=1.2.0
+AppVersion=1.2.1
 AppPublisher=Sysnettechs Solutions
 DefaultDirName={localappdata}\UltimatePOS\PrintServer
 DisableDirPage=yes

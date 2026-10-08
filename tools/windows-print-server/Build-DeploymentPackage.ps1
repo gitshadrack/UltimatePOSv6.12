@@ -106,6 +106,9 @@ $formatterSource = $formatterSource.Replace($legacyLineImplodeCall, $compatibleL
     [Text.UTF8Encoding]::new($false)
 )
 
+# Use the receipt formatter that tolerates an unavailable optional logo.
+Copy-Item -LiteralPath (Join-Path $payloadOverrides 'lib\Escpos.php') -Destination $escposFormatter -Force
+
 foreach ($fileName in @(
     'Install.cmd',
     'Uninstall.cmd',
